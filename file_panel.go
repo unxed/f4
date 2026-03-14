@@ -118,12 +118,30 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Handle directory navigation
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
+		if len(fp.entries) == 0 || fp.table.SelectPos < 0 || fp.table.SelectPos >= len(fp.entries) {
+			return false
+		}
 		selected := fp.entries[fp.table.SelectPos]
 		if selected.isDir {
+			oldPath := fp.path
 			newPath := filepath.Join(fp.path, selected.name)
 			fp.path = filepath.Clean(newPath)
 			fp.Refresh()
+
+			if selected.name == ".." {
+				// We went up. Find the directory we came from.
+				dirToSelect := filepath.Base(oldPath)
+				for i, entry := range fp.entries {
+					if entry.name == dirToSelect {
+						fp.table.SelectPos = i
+						fp.table.EnsureVisible()
+						return true
+					}
+				}
+			}
+
 			fp.table.SelectPos = 0
+			fp.table.EnsureVisible()
 			return true
 		}
 	}
@@ -141,7 +159,7 @@ func (fp *FileSystemPanel) GetSelectedName() string {
 	}
 	entry := fp.entries[fp.table.SelectPos]
 	if entry.name == ".." {
-		return ""
+		return filepath.Dir(fp.path)
 	}
 	return entry.name
 }
