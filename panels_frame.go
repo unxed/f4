@@ -86,20 +86,21 @@ func (pf *PanelsFrame) initPTY() {
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
-	// Reserved rows: 1 for CommandLine, +1 for KeyBar if shown
 	reservedBottom := 1
+	if pf.showKeyBar { reservedBottom++ }
 
 	pf.menuBar.SetPosition(0, 0, w-1, 0)
-	if pf.showKeyBar {
-		reservedBottom++
+
+	// In terminal mode, terminal view takes all space minus KeyBar
+	termH := h
+	if pf.showKeyBar { termH-- }
+	if pf.pty != nil {
+		pf.pty.SetSize(w, termH)
+		pf.termView.SetPosition(0, 0, w-1, termH-1)
+		pf.termView.Resize(w, termH)
 	}
 
 	panelH := h - reservedBottom
-	if pf.pty != nil {
-		pf.pty.SetSize(w, panelH)
-		pf.termView.SetPosition(0, 0, w-1, panelH-1)
-		pf.termView.Resize(w, panelH)
-	}
 	leftW := w / 2
 	rightW := w - leftW
 
@@ -129,6 +130,7 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if pf.showPanels {
+		pf.termView.SetVisible(false)
 		if pf.activeIdx == 0 {
 			pf.left.SetFocus(true)
 			pf.right.SetFocus(false)
@@ -136,15 +138,22 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 			pf.left.SetFocus(false)
 			pf.right.SetFocus(true)
 		}
-
 		pf.left.Show(scr)
 		pf.right.Show(scr)
-	}
-	if !pf.showPanels {
+
+		// Regular command line position
+		reserved := 1
+		if pf.showKeyBar { reserved++ }
+		pf.cmdLine.SetPrompt(Msg("Panels.Prompt"))
+		pf.cmdLine.SetPosition(0, pf.lastH-reserved, pf.lastW-1, pf.lastH-reserved)
+	} else {
 		pf.termView.SetVisible(true)
 		pf.termView.Show(scr)
-	} else {
-		pf.termView.SetVisible(false)
+
+		// Terminal command line position: follow the shell prompt
+		pf.cmdLine.SetPrompt("")
+		tx, ty := pf.termView.CursorX, pf.termView.CursorY
+		pf.cmdLine.SetPosition(tx, ty, pf.lastW-1, ty)
 	}
 
 	pf.cmdLine.Show(scr)

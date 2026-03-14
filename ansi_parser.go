@@ -51,6 +51,7 @@ func (p *AnsiParser) Process(data []byte) {
 					p.term.PutChar(r, p.Attr)
 					p.runeBuf = p.runeBuf[:0]
 				} else if len(p.runeBuf) >= 4 {
+					// Invalid sequence or too long, flush as is
 					p.term.PutChar(rune(p.runeBuf[0]), p.Attr)
 					p.runeBuf = p.runeBuf[1:]
 				}

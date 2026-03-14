@@ -32,6 +32,12 @@ func (cl *CommandLine) SetFocus(f bool) {
 	cl.ScreenObject.SetFocus(f)
 	cl.Edit.SetFocus(f)
 }
+func (cl *CommandLine) SetPrompt(prompt string) {
+	if cl.Prompt == prompt { return }
+	cl.Prompt = prompt
+	// Trigger reposition of Edit control
+	cl.SetPosition(cl.X1, cl.Y1, cl.X2, cl.Y2)
+}
 
 func (cl *CommandLine) Show(scr *vtui.ScreenBuf) {
 	cl.ScreenObject.Show(scr)

@@ -45,8 +45,9 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	}
 	tv.Width, tv.Height = w, h
 	tv.CursorX = 0
-	tv.CursorY = h - 1 // Start output at the bottom
+	tv.CursorY = h - 1 // Start at the bottom for Far-like feel
 }
+
 
 func (tv *TerminalView) PutChar(r rune, attr uint64) {
 	tv.mu.Lock()
