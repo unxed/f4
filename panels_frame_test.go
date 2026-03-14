@@ -10,22 +10,27 @@ func TestPanelsFrame_Layout(t *testing.T) {
 	// Simulate 80x25 terminal
 	pf.ResizeConsole(80, 25)
 
+	// Calculate expected positions for 80x25 with KeyBar
+	expectedKeyBarY := 24
+	expectedCmdLineY := 23 // Always 1 line above KeyBar if KeyBar is present
+
 	// 1. Check reserved rows with KeyBar visible
-	// KeyBar at 24, CommandLine at 23, Panels at 0-22
-	if pf.keyBar.Y1 != 24 {
-		t.Errorf("KeyBar position error: %d", pf.keyBar.Y1)
+	if pf.keyBar.Y1 != expectedKeyBarY {
+		t.Errorf("KeyBar position error: expected %d, got %d", expectedKeyBarY, pf.keyBar.Y1)
 	}
-	if pf.cmdLine.Y1 != 23 {
-		t.Errorf("CommandLine position error: %d", pf.cmdLine.Y1)
+	if pf.cmdLine.Y1 != expectedCmdLineY {
+		t.Errorf("CommandLine position error: expected %d, got %d", expectedCmdLineY, pf.cmdLine.Y1)
 	}
 
 	// 2. Check layout after hiding KeyBar
 	pf.showKeyBar = false
 	pf.ResizeConsole(80, 25)
 
-	// CommandLine should move to the bottom row
-	if pf.cmdLine.Y1 != 24 {
-		t.Errorf("CommandLine should be at 24 when KeyBar hidden, got %d", pf.cmdLine.Y1)
+	// After hiding KeyBar, CommandLine should move to the bottom row
+	expectedKeyBarY = 24 // Still the last line, but invisible
+	expectedCmdLineY = 24
+	if pf.cmdLine.Y1 != expectedCmdLineY {
+		t.Errorf("CommandLine should be at %d when KeyBar hidden, got %d", expectedCmdLineY, pf.cmdLine.Y1)
 	}
 	if pf.keyBar.IsVisible() {
 		t.Error("KeyBar should be invisible")

@@ -129,13 +129,18 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Resize(rightW, panelH) }
 	}
 
+	cmdLineY := h - 1
 	if pf.showKeyBar {
 		// KeyBar on the last line
 		pf.keyBar.SetPosition(0, h-1, w-1, h-1)
 		pf.keyBar.SetVisible(true)
+		cmdLineY = h - 2 // CommandLine is above KeyBar
 	} else {
 		pf.keyBar.SetVisible(false)
+		// CommandLine takes the last line
 	}
+	// Set CommandLine's base position. Show() will override if in terminal prompt mode.
+	pf.cmdLine.SetPosition(0, cmdLineY, w-1, cmdLineY)
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
@@ -160,25 +165,24 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.cmdLine.SetVisible(false)
 	} else {
 		pf.cmdLine.SetVisible(true)
+		cmdLineY := pf.lastH - 1
+		if pf.showKeyBar {
+			cmdLineY = pf.lastH - 2
+		}
 		if pf.showPanels {
-			// Regular command line position
-			y := pf.lastH - 1
-			if pf.showKeyBar {
-				y--
-			}
 			pf.cmdLine.SetPrompt(Msg("Panels.Prompt"))
-			pf.cmdLine.SetPosition(0, y, pf.lastW-1, y)
+			// Explicitly set X to 0 and Y to the calculated position
+			pf.cmdLine.SetPosition(0, cmdLineY, pf.lastW-1, cmdLineY)
 		} else {
-			// Terminal command line position
 			pf.cmdLine.SetPrompt("")
 			tx, ty := pf.termView.CursorX, pf.termView.CursorY
 			// Adjust for terminal's own coordinates
 			_, termY1, _, _ := pf.termView.GetPosition()
-			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, termY1+ty)
+			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, ty)
 		}
-	}
-	if pf.cmdLine.IsVisible() {
-		pf.cmdLine.Show(scr)
+		if pf.cmdLine.IsVisible() {
+			pf.cmdLine.Show(scr)
+		}
 	}
 
 	// KeyBar is always at the bottom
