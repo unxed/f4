@@ -22,6 +22,11 @@ type PanelsFrame struct {
 	lastW      int
 	lastH      int
 
+	// Integrated Terminal
+	pty      *PTY
+	termView *TerminalView
+	parser   *AnsiParser
+
 	done      bool
 }
 
@@ -49,7 +54,33 @@ func NewPanelsFrame() *PanelsFrame {
 		"", "", "", "", "", "", "", "",
 	}
 
+	pf.termView = NewTerminalView(80, 24)
+	pf.parser = NewAnsiParser(pf.termView)
+	pf.initPTY()
+
 	return pf
+}
+
+func (pf *PanelsFrame) initPTY() {
+	p, err := NewPTY()
+	if err != nil {
+		return
+	}
+	pf.pty = p
+	shell := GetSystemShell()
+	pf.pty.Run(shell)
+
+	// Read loop
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := pf.pty.Master.Read(buf)
+			if err != nil {
+				return
+			}
+			pf.parser.Process(buf[:n])
+		}
+	}()
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
@@ -103,6 +134,12 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.left.Show(scr)
 		pf.right.Show(scr)
 	}
+	if !pf.showPanels {
+		pf.termView.SetVisible(true)
+		pf.termView.Show(scr)
+	} else {
+		pf.termView.SetVisible(false)
+	}
 
 	pf.cmdLine.Show(scr)
 
@@ -125,6 +162,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
 	// Orchestration: who gets the input?
+	// If panels are hidden, all input goes to PTY
+	if !pf.showPanels && !pf.menuActive {
+		if e.VirtualKeyCode == vtinput.VK_O && ctrl {
+			pf.showPanels = true
+			return true
+		}
+		// Convert input event back to ANSI for shell
+		pf.pty.Master.Write([]byte(pf.translateInput(e)))
+		return true
+	}
 
 	// F1 invokes help (global)
 	if e.VirtualKeyCode == vtinput.VK_F1 {
@@ -274,3 +321,19 @@ func (pf *PanelsFrame) openSubMenu(index int) {
 	vtui.FrameManager.Push(menu)
 }
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
+func (pf *PanelsFrame) translateInput(e *vtinput.InputEvent) string {
+	if e.Char != 0 {
+		return string(e.Char)
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_RETURN: return "\r"
+	case vtinput.VK_UP:     return "\x1b[A"
+	case vtinput.VK_DOWN:   return "\x1b[B"
+	case vtinput.VK_RIGHT:  return "\x1b[C"
+	case vtinput.VK_LEFT:   return "\x1b[D"
+	case vtinput.VK_BACK:   return "\x7f"
+	case vtinput.VK_TAB:    return "\t"
+	case vtinput.VK_ESCAPE: return "\x1b"
+	}
+	return ""
+}
