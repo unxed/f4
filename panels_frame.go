@@ -32,7 +32,7 @@ type PanelsFrame struct {
 }
 
 func NewPanelsFrame() *PanelsFrame {
-	pf := &PanelsFrame{activeIdx: 0}
+	pf := &PanelsFrame{activeIdx: 1}
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
 	pf.showPanels = true

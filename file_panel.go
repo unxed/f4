@@ -38,27 +38,33 @@ func (f *fileEntry) GetCellText(col int) string {
 type FileSystemPanel struct {
 	vtui.ScreenObject
 	table  *vtui.Table
+	frame  *vtui.BorderedFrame
 	path   string
 	entries []*fileEntry
 }
 
 func NewFileSystemPanel(x, y, w, h int, path string) *FileSystemPanel {
 	absPath, _ := filepath.Abs(path)
+	// Initial column widths (will be adjusted by Resize)
 	cols := []vtui.TableColumn{
-		{Title: Msg("Panel.Column.Name"), Width: w - 15},
+		{Title: Msg("Panel.Column.Name"), Width: w - 15 - 2},
 		{Title: Msg("Panel.Column.Size"), Width: 12, Alignment: vtui.AlignRight},
 	}
 
 	fp := &FileSystemPanel{
 		path:  absPath,
-		table: vtui.NewTable(x, y, w, h, cols),
+		frame: vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.SingleBox, absPath),
+		table: vtui.NewTable(x+1, y+1, w-2, h-2, cols),
 	}
+	fp.frame.ColorBoxIdx = vtui.ColPanelBox
+	fp.frame.ColorTitleIdx = vtui.ColPanelTitle
 	fp.SetCanFocus(true)
 	fp.Refresh()
 	return fp
 }
 
 func (fp *FileSystemPanel) Refresh() {
+	fp.frame.SetTitle(fp.path)
 	files, err := os.ReadDir(fp.path)
 	if err != nil {
 		return
@@ -95,21 +101,25 @@ func (fp *FileSystemPanel) Refresh() {
 }
 
 func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
+	fp.frame.Show(scr)
 	fp.table.SetFocus(fp.IsFocused())
 	fp.table.Show(scr)
 }
 
 func (fp *FileSystemPanel) SetPosition(x1, y1, x2, y2 int) {
 	fp.ScreenObject.SetPosition(x1, y1, x2, y2)
-	fp.table.SetPosition(x1, y1, x2, y2)
+	fp.frame.SetPosition(x1, y1, x2, y2)
+	// Table stays inside the frame
+	fp.table.SetPosition(x1+1, y1+1, x2-1, y2-1)
 }
 
 func (fp *FileSystemPanel) Resize(w, h int) {
-	// Resize the table itself
-	fp.table.SetPosition(fp.X1, fp.Y1, fp.X1+w-1, fp.Y1+h-1)
-	// Adapt columns: "Name" takes all available space
-	nameW := w - 15
-	if nameW < 5 { nameW = 5 } // Minimum safety width
+	fp.SetPosition(fp.X1, fp.Y1, fp.X1+w-1, fp.Y1+h-1)
+	// Adapt columns: "Name" takes all available space minus borders and size column
+	nameW := w - 15 - 2
+	if nameW < 5 {
+		nameW = 5
+	}
 	fp.table.Columns[0].Width = nameW
 }
 
