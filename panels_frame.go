@@ -58,6 +58,12 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
+	// F1 вызывает справку
+	if e.VirtualKeyCode == vtinput.VK_F1 {
+		pf.ShowHelp()
+		return true
+	}
+
 	// Tab переключает панели
 	if e.VirtualKeyCode == vtinput.VK_TAB {
 		pf.activeIdx = 1 - pf.activeIdx
