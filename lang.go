@@ -11,6 +11,13 @@ var Lng = map[string]string{
 	"Panels.Prompt":     "> ",
 	"Desktop.Welcome":   " f4 project | Ctrl+Q to exit ",
 
+	// Top Menu
+	"Menu.Left":     "Left",
+	"Menu.Files":    "Files",
+	"Menu.Commands": "Commands",
+	"Menu.Options":  "Options",
+	"Menu.Right":    "Right",
+
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",
 	"KeyBar.F2":  "Menu",

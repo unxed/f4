@@ -12,10 +12,12 @@ type PanelsFrame struct {
 	right     Panel
 	activeIdx int // 0 for left, 1 for right
 
+	menuBar   *vtui.MenuBar
 	cmdLine   *CommandLine
 	keyBar    *vtui.KeyBar
 
 	showKeyBar bool
+	menuActive  bool
 	showPanels bool
 	lastW      int
 	lastH      int
@@ -29,6 +31,10 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.showKeyBar = true
 	pf.showPanels = true
 
+	pf.menuBar = vtui.NewMenuBar([]string{
+		Msg("Menu.Left"), Msg("Menu.Files"), Msg("Menu.Commands"),
+		Msg("Menu.Options"), Msg("Menu.Right"),
+	})
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
 
@@ -50,6 +56,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
 	// Reserved rows: 1 for CommandLine, +1 for KeyBar if shown
 	reservedBottom := 1
+
+	pf.menuBar.SetPosition(0, 0, w-1, 0)
 	if pf.showKeyBar {
 		reservedBottom++
 	}
@@ -97,8 +105,13 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	}
 
 	pf.cmdLine.Show(scr)
-	if pf.showKeyBar {
-		pf.keyBar.Show(scr)
+
+	// Menu must be drawn LAST to appear on top of panels
+	if pf.menuActive {
+		pf.menuBar.SetVisible(true)
+		pf.menuBar.Show(scr)
+	} else {
+		pf.menuBar.SetVisible(false)
 	}
 }
 
@@ -123,6 +136,23 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if e.VirtualKeyCode == vtinput.VK_F10 {
 		pf.SetExitCode(0)
 		return true
+	}
+
+	// F9 toggles MenuBar
+	if e.VirtualKeyCode == vtinput.VK_F9 {
+		pf.menuActive = !pf.menuActive
+		pf.menuBar.Active = pf.menuActive
+		return true
+	}
+
+	// If menu is active, it takes all input
+	if pf.menuActive {
+		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
+			pf.menuActive = false
+			pf.menuBar.Active = false
+			return true
+		}
+		return pf.menuBar.ProcessKey(e)
 	}
 
 	// Ctrl+O toggles panels visibility
