@@ -46,52 +46,85 @@ func (p *AnsiParser) Process(data []byte) {
 				p.State = StateCSI
 				p.Params = nil
 				p.CurParam.Reset()
+			} else if b == ']' {
+				p.State = StateOSC
 			} else {
 				p.State = StateGround
 			}
 		case StateCSI:
-			if b >= '0' && b <= '9' {
+			if b >= 0x30 && b <= 0x39 { // '0'-'9'
 				p.CurParam.WriteByte(b)
 			} else if b == ';' {
 				p.Params = append(p.Params, p.CurParam.String())
 				p.CurParam.Reset()
-			} else {
+			} else if b >= 0x3C && b <= 0x3F { // < = > ?
+				p.CurParam.WriteByte(b)
+			} else if b >= 0x20 && b <= 0x2F {
+				// Intermediate bytes - ignore
+			} else if b >= 0x40 && b <= 0x7E {
 				p.Params = append(p.Params, p.CurParam.String())
 				p.handleCSI(b)
 				p.State = StateGround
+			}
+		case StateOSC:
+			if b == 0x07 { // BEL
+				p.State = StateGround
+			} else if b == 0x1b { // ESC
+				// Could be ST (\x1b\\), we just fall back to Esc state
+				p.State = StateEsc
 			}
 		}
 	}
 }
 
 func (p *AnsiParser) handleCSI(cmd byte) {
+	args := make([]int, len(p.Params))
+	for i, s := range p.Params {
+		s = strings.TrimLeft(s, "?<=>")
+		val, _ := strconv.Atoi(s)
+		args[i] = val
+	}
+
 	switch cmd {
-	case 'm': // SGR
-		for _, s := range p.Params {
-			val, _ := strconv.Atoi(s)
-			p.handleSGR(val)
-		}
-	case 'H', 'f': // Cursor position
+	case 'm':
+		for _, n := range args { p.handleSGR(n) }
+	case 'H', 'f':
 		row, col := 1, 1
-		if len(p.Params) > 0 && p.Params[0] != "" {
-			row, _ = strconv.Atoi(p.Params[0])
-		}
-		if len(p.Params) > 1 && p.Params[1] != "" {
-			col, _ = strconv.Atoi(p.Params[1])
-		}
+		if len(args) > 0 && args[0] != 0 { row = args[0] }
+		if len(args) > 1 && args[1] != 0 { col = args[1] }
 		p.term.SetCursor(col-1, row-1)
-	case 'J': // Erase in Display
+	case 'J':
 		mode := 0
-		if len(p.Params) > 0 && p.Params[0] != "" {
-			mode, _ = strconv.Atoi(p.Params[0])
-		}
+		if len(args) > 0 { mode = args[0] }
 		p.term.EraseDisplay(mode, p.Attr)
-	case 'K': // Erase in Line
+	case 'K':
 		mode := 0
-		if len(p.Params) > 0 && p.Params[0] != "" {
-			mode, _ = strconv.Atoi(p.Params[0])
-		}
+		if len(args) > 0 { mode = args[0] }
 		p.term.EraseLine(mode, p.Attr)
+	case 'A':
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.SetCursor(p.term.CursorX, p.term.CursorY-n)
+	case 'B':
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.SetCursor(p.term.CursorX, p.term.CursorY+n)
+	case 'C':
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.SetCursor(p.term.CursorX+n, p.term.CursorY)
+	case 'D':
+		n := 1
+		if len(args) > 0 && args[0] != 0 { n = args[0] }
+		p.term.SetCursor(p.term.CursorX-n, p.term.CursorY)
+	case 'G', '`':
+		col := 1
+		if len(args) > 0 && args[0] != 0 { col = args[0] }
+		p.term.SetCursor(col-1, p.term.CursorY)
+	case 'd':
+		row := 1
+		if len(args) > 0 && args[0] != 0 { row = args[0] }
+		p.term.SetCursor(p.term.CursorX, row-1)
 	}
 }
 
@@ -100,14 +133,17 @@ func (p *AnsiParser) handleSGR(n int) {
 		p.Attr = vtui.Palette[vtui.ColCommandLineUserScreen]
 		return
 	}
-	// Basic 16 colors mapping (simplified)
-	if n >= 30 && n <= 37 { // FG
+	if n >= 30 && n <= 37 {
 		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[n-30])
-	} else if n >= 40 && n <= 47 { // BG
+	} else if n >= 40 && n <= 47 {
 		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[n-40])
-	} else if n >= 90 && n <= 97 { // FG high intensity
+	} else if n >= 90 && n <= 97 {
 		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[n-82])
-	} else if n >= 100 && n <= 107 { // BG high intensity
+	} else if n >= 100 && n <= 107 {
 		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[n-92])
+	} else if n == 39 {
+		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[vtui.ColCommandLineUserScreen]))
+	} else if n == 49 {
+		p.Attr = vtui.SetRGBBack(p.Attr, vtui.GetRGBBack(vtui.Palette[vtui.ColCommandLineUserScreen]))
 	}
 }

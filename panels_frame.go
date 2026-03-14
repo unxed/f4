@@ -79,6 +79,7 @@ func (pf *PanelsFrame) initPTY() {
 				return
 			}
 			pf.parser.Process(buf[:n])
+			vtui.FrameManager.Redraw()
 		}
 	}()
 }
@@ -162,16 +163,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
 	// Orchestration: who gets the input?
-	// If panels are hidden, all input goes to PTY
-	if !pf.showPanels && !pf.menuActive {
-		if e.VirtualKeyCode == vtinput.VK_O && ctrl {
-			pf.showPanels = true
-			return true
-		}
-		// Convert input event back to ANSI for shell
-		pf.pty.Write([]byte(pf.translateInput(e)))
-		return true
-	}
 
 	// F1 invokes help (global)
 	if e.VirtualKeyCode == vtinput.VK_F1 {
@@ -210,6 +201,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+O toggles panels visibility
 	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
 		pf.showPanels = !pf.showPanels
+		return true
+	}
+	// Terminal input routing
+	if !pf.showPanels {
+		pf.pty.Write([]byte(pf.translateInput(e)))
 		return true
 	}
 
