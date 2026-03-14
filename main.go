@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/unxed/vtinput"
+	"path/filepath"
+
 	"github.com/unxed/vtui"
 	"golang.org/x/term"
 )
@@ -28,6 +30,14 @@ func main() {
 
 	// 3. Настраиваем FrameManager
 	vtui.FrameManager.Init(scr)
+
+	// Применяем пользовательскую палитру из системной папки конфигов
+	configDir, err := os.UserConfigDir()
+	if err == nil {
+		configPath := filepath.Join(configDir, "f4", "farcolors.ini")
+		ini := LoadIni(configPath)
+		InitColors(ini)
+	}
 
 	// Слой 0: Рабочий стол (фон)
 	vtui.FrameManager.Push(vtui.NewDesktop())
