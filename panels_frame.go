@@ -16,6 +16,7 @@ type PanelsFrame struct {
 	keyBar    *vtui.KeyBar
 
 	showKeyBar bool
+	showPanels bool
 	lastW      int
 	lastH      int
 
@@ -26,6 +27,7 @@ func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 0}
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
+	pf.showPanels = true
 
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
@@ -81,16 +83,18 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
-	if pf.activeIdx == 0 {
-		pf.left.SetFocus(true)
-		pf.right.SetFocus(false)
-	} else {
-		pf.left.SetFocus(false)
-		pf.right.SetFocus(true)
-	}
+	if pf.showPanels {
+		if pf.activeIdx == 0 {
+			pf.left.SetFocus(true)
+			pf.right.SetFocus(false)
+		} else {
+			pf.left.SetFocus(false)
+			pf.right.SetFocus(true)
+		}
 
-	pf.left.Show(scr)
-	pf.right.Show(scr)
+		pf.left.Show(scr)
+		pf.right.Show(scr)
+	}
 
 	pf.cmdLine.Show(scr)
 	if pf.showKeyBar {
@@ -109,10 +113,33 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Orchestration: who gets the input?
 
-	// 1. F1 invokes help (global)
+	// F1 invokes help (global)
 	if e.VirtualKeyCode == vtinput.VK_F1 {
 		pf.ShowHelp()
 		return true
+	}
+
+	// F10 exits the application
+	if e.VirtualKeyCode == vtinput.VK_F10 {
+		pf.SetExitCode(0)
+		return true
+	}
+
+	// Ctrl+O toggles panels visibility
+	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
+		pf.showPanels = !pf.showPanels
+		return true
+	}
+
+	// Enter handling
+	if e.VirtualKeyCode == vtinput.VK_RETURN {
+		if !pf.cmdLine.IsEmpty() {
+			// Placeholder for actual command execution
+			vtui.DebugLog("EXECUTE COMMAND: %s", pf.cmdLine.Edit.GetText())
+			pf.cmdLine.Clear()
+			return true
+		}
+		// If command line is empty, Enter is passed to panels (to enter dir)
 	}
 
 	// 2. Try global hotkeys handled by PanelsFrame

@@ -55,3 +55,12 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 func (cl *CommandLine) ProcessMouse(e *vtinput.InputEvent) bool {
 	return cl.Edit.ProcessMouse(e)
 }
+// Clear empties the command line text.
+func (cl *CommandLine) Clear() {
+	cl.Edit.SetText("")
+}
+
+// IsEmpty returns true if there is no text in the command line.
+func (cl *CommandLine) IsEmpty() bool {
+	return cl.Edit.GetText() == ""
+}
