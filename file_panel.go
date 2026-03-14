@@ -104,6 +104,13 @@ func (fp *FileSystemPanel) SetPosition(x1, y1, x2, y2 int) {
 	fp.table.SetPosition(x1, y1, x2, y2)
 }
 
+func (fp *FileSystemPanel) Resize(w, h int) {
+	// Ресайзим саму таблицу
+	fp.table.SetPosition(fp.X1, fp.Y1, fp.X1+w-1, fp.Y1+h-1)
+	// Адаптируем колонки: "Name" забирает всё свободное место
+	fp.table.Columns[0].Width = w - 15
+}
+
 func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 

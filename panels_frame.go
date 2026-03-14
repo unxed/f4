@@ -17,20 +17,25 @@ type PanelsFrame struct {
 
 func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 0}
-	pf.ResizeConsole()
 	return pf
 }
 
-func (pf *PanelsFrame) ResizeConsole() {
-	// Временное решение: берем стандартные 80x24 если терминал еще не инициализирован
-	w, h := 80, 24
-	// В реальности эти данные придут из ResizeConsole() через FrameManager
+func (pf *PanelsFrame) ResizeConsole(w, h int) {
+	panelH := h - 2 // Оставляем место под командную строку и статус
+	leftW := w / 2
+	rightW := w - leftW
 
-	// Разделяем экран пополам
-	pf.left = NewFileSystemPanel(0, 0, w/2, h-2, ".")
-	pf.right = NewFileSystemPanel(w/2, 0, w-w/2, h-2, ".")
+	if pf.left == nil {
+		pf.left = NewFileSystemPanel(0, 0, leftW, panelH, ".")
+		pf.right = NewFileSystemPanel(leftW, 0, rightW, panelH, ".")
+	} else {
+		pf.left.SetPosition(0, 0, leftW-1, panelH-1)
+		pf.right.SetPosition(leftW, 0, w-1, panelH-1)
 
-	pf.left.SetFocus(true)
+		// Специальные методы для адаптации колонок (если это FileSystemPanel)
+		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Resize(leftW, panelH) }
+		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Resize(rightW, panelH) }
+	}
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {

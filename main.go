@@ -34,6 +34,7 @@ func main() {
 
 	// Слой 1: Панели (ядро f4)
 	panels := NewPanelsFrame()
+	panels.ResizeConsole(width, height) // Инициализируем размеры панелей перед пушем
 	vtui.FrameManager.Push(panels)
 
 	// 4. Запуск!
