@@ -17,6 +17,7 @@ type PanelsFrame struct {
 
 func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 0}
+	pf.SetHelp("Panels")
 	return pf
 }
 
