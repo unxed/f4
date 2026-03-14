@@ -12,7 +12,7 @@ type PanelsFrame struct {
 	right     Panel
 	activeIdx int // 0 for left, 1 for right
 
-	cmdLine   *vtui.CommandLine
+	cmdLine   *CommandLine
 	keyBar    *vtui.KeyBar
 
 	done      bool
@@ -22,7 +22,7 @@ func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 0}
 	pf.SetHelp("Panels")
 
-	pf.cmdLine = vtui.NewCommandLine(Msg("Panels.Prompt"))
+	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
 
 	// Initialize KeyBar labels
@@ -85,7 +85,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	if !e.KeyDown { return false }
 
-	// F1 invokes help
+	// Orchestration: who gets the input?
+	// 1. Text input always goes to CommandLine (if no Alt/Ctrl modifiers that panels use)
+	if e.Char != 0 && !alt && !ctrl {
+		pf.cmdLine.SetFocus(true)
+		return pf.cmdLine.ProcessKey(e)
+	}
+
+	// 2. F1 invokes help
 	if e.VirtualKeyCode == vtinput.VK_F1 {
 		pf.ShowHelp()
 		return true
