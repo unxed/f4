@@ -17,6 +17,7 @@ var Lng = map[string]string{
 	"Menu.Commands": "Commands",
 	"Menu.Options":  "Options",
 	"Menu.Right":    "Right",
+	"Menu.Exit":     "Exit",
 
 	// KeyBar Normal
 	"KeyBar.F1":  "Help",

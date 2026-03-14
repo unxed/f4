@@ -17,8 +17,8 @@ type PanelsFrame struct {
 	keyBar    *vtui.KeyBar
 
 	showKeyBar bool
-	menuActive  bool
 	showPanels bool
+	menuActive bool
 	lastW      int
 	lastH      int
 
@@ -134,7 +134,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// F10 exits the application
 	if e.VirtualKeyCode == vtinput.VK_F10 {
-		pf.SetExitCode(0)
+		vtui.FrameManager.Shutdown()
 		return true
 	}
 
@@ -150,6 +150,11 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
 			pf.menuActive = false
 			pf.menuBar.Active = false
+			return true
+		}
+		// Enter or Down opens the submenu
+		if e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_DOWN {
+			pf.openSubMenu(pf.menuBar.SelectPos)
 			return true
 		}
 		return pf.menuBar.ProcessKey(e)
@@ -229,4 +234,28 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypePanels }
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.done = true }
+func (pf *PanelsFrame) openSubMenu(index int) {
+	menu := vtui.NewVMenu(pf.menuBar.Items[index].Label)
+	menu.AddItem(Msg("Menu.Exit"))
+
+	x := pf.menuBar.GetItemX(index)
+	menu.SetPosition(x, 1, x+15, 3)
+
+	// Keep pf.menuActive = true so MenuBar stays visible under the VMenu.
+	// But set Active = false for visual state (selection doesn't move while submenu is open).
+	pf.menuBar.Active = false
+
+	menu.OnSelect = func(selected int) {
+		if selected == 0 { // "Exit"
+			vtui.FrameManager.Shutdown()
+		}
+	}
+
+	// If we close the menu with Esc, we return focus to the MenuBar
+	menu.OnClose = func() {
+		pf.menuBar.Active = true
+	}
+
+	vtui.FrameManager.Push(menu)
+}
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
