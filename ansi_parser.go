@@ -9,12 +9,14 @@ import (
 )
 
 type ParserState int
+var DefaultTermAttr = vtui.SetRGBBoth(0, 0xC0C0C0, 0x000000) // Light Gray on Black
 
 const (
 	StateGround ParserState = iota
 	StateEsc
 	StateCSI
 	StateOSC
+	StateAPC
 )
 
 // AnsiParser converts a stream of bytes into ScreenBuf operations.
@@ -24,13 +26,16 @@ type AnsiParser struct {
 	CurParam  strings.Builder
 	Attr      uint64
 	term      *TerminalView
+	pty       PtyBackend
 	runeBuf   []byte
+	lastRune  rune
 }
 
-func NewAnsiParser(t *TerminalView) *AnsiParser {
+func NewAnsiParser(t *TerminalView, p PtyBackend) *AnsiParser {
 	return &AnsiParser{
 		term: t,
-		Attr: vtui.Palette[vtui.ColCommandLineUserScreen],
+		pty:  p,
+		Attr: DefaultTermAttr,
 	}
 }
 
@@ -42,13 +47,16 @@ func (p *AnsiParser) Process(data []byte) {
 				p.State = StateEsc
 				p.runeBuf = p.runeBuf[:0]
 			} else if b < 0x80 {
-				p.term.PutChar(rune(b), p.Attr)
+				r := rune(b)
+				p.term.PutChar(r, p.Attr)
+				p.lastRune = r
 				p.runeBuf = p.runeBuf[:0]
 			} else {
 				p.runeBuf = append(p.runeBuf, b)
 				if utf8.FullRune(p.runeBuf) {
 					r, _ := utf8.DecodeRune(p.runeBuf)
 					p.term.PutChar(r, p.Attr)
+					p.lastRune = r
 					p.runeBuf = p.runeBuf[:0]
 				} else if len(p.runeBuf) >= 4 {
 					// Invalid sequence or too long, flush as is
@@ -63,6 +71,8 @@ func (p *AnsiParser) Process(data []byte) {
 				p.CurParam.Reset()
 			} else if b == ']' {
 				p.State = StateOSC
+			} else if b == '_' {
+				p.State = StateAPC
 			} else {
 				p.State = StateGround
 			}
@@ -85,7 +95,12 @@ func (p *AnsiParser) Process(data []byte) {
 			if b == 0x07 { // BEL
 				p.State = StateGround
 			} else if b == 0x1b { // ESC
-				// Could be ST (\x1b\\), we just fall back to Esc state
+				p.State = StateEsc
+			}
+		case StateAPC:
+			if b == 0x07 { // BEL
+				p.State = StateGround
+			} else if b == 0x1b { // ESC
 				p.State = StateEsc
 			}
 		}
@@ -116,6 +131,23 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		mode := 0
 		if len(args) > 0 { mode = args[0] }
 		p.term.EraseLine(mode, p.Attr)
+	case 'r': // DECSTBM - Set Top and Bottom Margins
+		top, bottom := 1, p.term.Height
+		if len(args) > 0 && args[0] != 0 { top = args[0] }
+		if len(args) > 1 && args[1] != 0 { bottom = args[1] }
+		p.term.ScrollTop = top - 1
+		p.term.ScrollBottom = bottom - 1
+		p.term.SetCursor(0, 0)
+	case 'h', 'l': // DECSET / DECRST
+		isSet := cmd == 'h'
+		for _, s := range p.Params {
+			if s == "?1049" {
+				p.term.SetAltScreen(isSet)
+				if isSet {
+					p.term.EraseDisplay(2, p.Attr)
+				}
+			}
+		}
 	case 'A':
 		n := 1
 		if len(args) > 0 && args[0] != 0 { n = args[0] }
@@ -138,24 +170,46 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		p.term.SetCursor(col-1, p.term.CursorY)
 	case 'd':
 		row := 1
-		if len(args) > 0 && args[0] != 0 { row = args[0] }
+		if len(args) > 0 && args[0] != 0 {
+			row = args[0]
+		}
 		p.term.SetCursor(p.term.CursorX, row-1)
+	case 'n': // DSR - Device Status Report
+		if len(args) > 0 && args[0] == 5 {
+			if p.pty != nil {
+				p.pty.Write([]byte("\x1b[0n"))
+			}
+		}
+	case 'b': // REP - Repeat last character
+		n := 1
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
+		p.term.RepeatLastChar(n, p.lastRune, p.Attr)
+	case 'X': // ECH - Erase Character
+		n := 1
+		if len(args) > 0 && args[0] != 0 {
+			n = args[0]
+		}
+		p.term.EraseCharacter(n, p.Attr)
 	}
 }
 
+var ansiToFar = []int{0, 4, 2, 6, 1, 5, 3, 7}
+
 func (p *AnsiParser) handleSGR(n int) {
 	if n == 0 {
-		p.Attr = vtui.Palette[vtui.ColCommandLineUserScreen]
+		p.Attr = DefaultTermAttr
 		return
 	}
 	if n >= 30 && n <= 37 {
-		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[n-30])
+		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[ansiToFar[n-30]])
 	} else if n >= 40 && n <= 47 {
-		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[n-40])
+		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[ansiToFar[n-40]])
 	} else if n >= 90 && n <= 97 {
-		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[n-82])
+		p.Attr = vtui.SetRGBFore(p.Attr, far2lPalette[ansiToFar[n-90]+8])
 	} else if n >= 100 && n <= 107 {
-		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[n-92])
+		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[ansiToFar[n-100]+8])
 	} else if n == 39 {
 		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[vtui.ColCommandLineUserScreen]))
 	} else if n == 49 {

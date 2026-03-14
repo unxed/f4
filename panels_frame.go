@@ -56,7 +56,7 @@ func NewPanelsFrame() *PanelsFrame {
 	}
 
 	pf.termView = NewTerminalView(80, 24)
-	pf.parser = NewAnsiParser(pf.termView)
+	// Parser will be fully initialized in initPTY once pty is ready
 	pf.initPTY()
 
 	return pf
@@ -68,6 +68,7 @@ func (pf *PanelsFrame) initPTY() {
 		return
 	}
 	pf.pty = p
+	pf.parser = NewAnsiParser(pf.termView, pf.pty)
 	shell := GetSystemShell()
 	pf.pty.Run(shell)
 
@@ -87,30 +88,38 @@ func (pf *PanelsFrame) initPTY() {
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.lastW, pf.lastH = w, h
-	reservedBottom := 1
-	if pf.showKeyBar { reservedBottom++ }
 
 	pf.menuBar.SetPosition(0, 0, w-1, 0)
 
-	// In terminal mode, terminal view takes all space minus KeyBar
-	termH := h
-	if pf.showKeyBar { termH-- }
-	if pf.pty != nil {
-		pf.pty.SetSize(w, termH)
-		pf.termView.SetPosition(0, 0, w-1, termH-1)
-		pf.termView.Resize(w, termH)
+	// Calculate content area (panels or terminal)
+	contentY1 := 0
+	contentY2 := h - 2 // One line for CommandLine, the rest for content
+	if pf.showKeyBar {
+		contentY2 = h - 3 // One for CommandLine, one for KeyBar
+	}
+	contentH := contentY2 - contentY1 + 1
+	if contentH < 0 {
+		contentH = 0
 	}
 
-	panelH := h - reservedBottom
+	// Resize PTY and TerminalView
+	if pf.pty != nil {
+		pf.pty.SetSize(w, contentH)
+		pf.termView.SetPosition(0, contentY1, w-1, contentY2)
+		pf.termView.Resize(w, contentH)
+	}
+
+	// Resize Panels
+	panelH := contentH
 	leftW := w / 2
 	rightW := w - leftW
 
 	if pf.left == nil {
-		pf.left = NewFileSystemPanel(0, 0, leftW, panelH, ".")
-		pf.right = NewFileSystemPanel(leftW, 0, rightW, panelH, ".")
+		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, ".")
+		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, ".")
 	} else {
-		pf.left.SetPosition(0, 0, leftW-1, panelH-1)
-		pf.right.SetPosition(leftW, 0, w-1, panelH-1)
+		pf.left.SetPosition(0, contentY1, leftW-1, contentY2)
+		pf.right.SetPosition(leftW, contentY1, w-1, contentY2)
 
 		// Special methods for column adaptation (if it's FileSystemPanel)
 		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Resize(leftW, panelH) }
@@ -141,23 +150,41 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		}
 		pf.left.Show(scr)
 		pf.right.Show(scr)
-
-		// Regular command line position
-		reserved := 1
-		if pf.showKeyBar { reserved++ }
-		pf.cmdLine.SetPrompt(Msg("Panels.Prompt"))
-		pf.cmdLine.SetPosition(0, pf.lastH-reserved, pf.lastW-1, pf.lastH-reserved)
 	} else {
 		pf.termView.SetVisible(true)
 		pf.termView.Show(scr)
-
-		// Terminal command line position: follow the shell prompt
-		pf.cmdLine.SetPrompt("")
-		tx, ty := pf.termView.CursorX, pf.termView.CursorY
-		pf.cmdLine.SetPosition(tx, ty, pf.lastW-1, ty)
 	}
 
-	pf.cmdLine.Show(scr)
+	// Command line logic depends on terminal state
+	if !pf.showPanels && pf.termView.UseAltScreen {
+		pf.cmdLine.SetVisible(false)
+	} else {
+		pf.cmdLine.SetVisible(true)
+		if pf.showPanels {
+			// Regular command line position
+			y := pf.lastH - 1
+			if pf.showKeyBar {
+				y--
+			}
+			pf.cmdLine.SetPrompt(Msg("Panels.Prompt"))
+			pf.cmdLine.SetPosition(0, y, pf.lastW-1, y)
+		} else {
+			// Terminal command line position
+			pf.cmdLine.SetPrompt("")
+			tx, ty := pf.termView.CursorX, pf.termView.CursorY
+			// Adjust for terminal's own coordinates
+			_, termY1, _, _ := pf.termView.GetPosition()
+			pf.cmdLine.SetPosition(tx, termY1+ty, pf.lastW-1, termY1+ty)
+		}
+	}
+	if pf.cmdLine.IsVisible() {
+		pf.cmdLine.Show(scr)
+	}
+
+	// KeyBar is always at the bottom
+	if pf.showKeyBar {
+		pf.keyBar.Show(scr)
+	}
 
 	// Menu must be drawn LAST to appear on top of panels
 	if pf.menuActive {
@@ -169,25 +196,33 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	// Update KeyBar modifier state regardless of KeyDown (to catch holding Shift/Alt)
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	pf.keyBar.SetModifiers(shift, ctrl, alt)
 
-	if !e.KeyDown { return false }
+	if !e.KeyDown {
+		return false
+	}
 
-	// Orchestration: who gets the input?
+	// Raw input mode for interactive terminal apps (like far2l inside f4)
+	if !pf.showPanels && pf.termView.UseAltScreen {
+		// Guest app is interactive (Alt Screen). Forward all keys including Ctrl+O.
+		if pf.pty != nil {
+			pf.pty.Write([]byte(TranslateInput(e)))
+		}
+		return true
+	}
+
+	// F10 exits the application (global, but can be overridden by terminal raw mode)
+	if e.VirtualKeyCode == vtinput.VK_F10 {
+		vtui.FrameManager.Shutdown()
+		return true
+	}
 
 	// F1 invokes help (global)
 	if e.VirtualKeyCode == vtinput.VK_F1 {
 		pf.ShowHelp()
-		return true
-	}
-
-	// F10 exits the application
-	if e.VirtualKeyCode == vtinput.VK_F10 {
-		vtui.FrameManager.Shutdown()
 		return true
 	}
 
