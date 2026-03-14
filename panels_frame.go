@@ -12,17 +12,35 @@ type PanelsFrame struct {
 	right     Panel
 	activeIdx int // 0 for left, 1 for right
 
+	cmdLine   *vtui.CommandLine
+	keyBar    *vtui.KeyBar
+
 	done      bool
 }
 
 func NewPanelsFrame() *PanelsFrame {
 	pf := &PanelsFrame{activeIdx: 0}
 	pf.SetHelp("Panels")
+
+	pf.cmdLine = vtui.NewCommandLine(Msg("Panels.Prompt"))
+	pf.keyBar = vtui.NewKeyBar()
+
+	// Initialize KeyBar labels
+	pf.keyBar.Normal = vtui.KeyBarLabels{
+		Msg("KeyBar.F1"), Msg("KeyBar.F2"), Msg("KeyBar.F3"), Msg("KeyBar.F4"),
+		Msg("KeyBar.F5"), Msg("KeyBar.F6"), Msg("KeyBar.F7"), Msg("KeyBar.F8"),
+		Msg("KeyBar.F9"), Msg("KeyBar.F10"), Msg("KeyBar.F11"), Msg("KeyBar.F12"),
+	}
+	pf.keyBar.Alt = vtui.KeyBarLabels{
+		Msg("KeyBar.AltF1"), Msg("KeyBar.AltF2"), "", "",
+		"", "", "", "", "", "", "", "",
+	}
+
 	return pf
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
-	panelH := h - 2 // Leave space for command line and status
+	panelH := h - 2 // Leave space for command line and keybar
 	leftW := w / 2
 	rightW := w - leftW
 
@@ -37,10 +55,12 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 		if fsp, ok := pf.left.(*FileSystemPanel); ok { fsp.Resize(leftW, panelH) }
 		if fsp, ok := pf.right.(*FileSystemPanel); ok { fsp.Resize(rightW, panelH) }
 	}
+
+	pf.cmdLine.SetPosition(0, h-2, w-1, h-2)
+	pf.keyBar.SetPosition(0, h-1, w-1, h-1)
 }
 
 func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
-	// Coordinates will need to be updated on resize
 	if pf.activeIdx == 0 {
 		pf.left.SetFocus(true)
 		pf.right.SetFocus(false)
@@ -52,11 +72,17 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	pf.left.Show(scr)
 	pf.right.Show(scr)
 
-	// Command line (stub)
-	scr.Write(0, scr.Height()-1, vtui.StringToCharInfo(Msg("Panels.Prompt"), vtui.SetRGBFore(0, 0xFFFFFF)))
+	pf.cmdLine.Show(scr)
+	pf.keyBar.Show(scr)
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	// Update KeyBar modifier state regardless of KeyDown (to catch holding Shift/Alt)
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	pf.keyBar.SetModifiers(shift, ctrl, alt)
+
 	if !e.KeyDown { return false }
 
 	// F1 invokes help

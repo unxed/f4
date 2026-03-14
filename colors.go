@@ -30,6 +30,10 @@ var colorMap = map[string]int{
 	"Panel.Box":                  vtui.ColPanelBox,
 	"Dialog.Edit.Selected":       vtui.ColDialogEditSelected,
 	"Panel.Scrollbar":            vtui.ColPanelScrollbar,
+	"KeyBar.Numbers":             vtui.ColKeyBarNum,
+	"KeyBar.Labels":              vtui.ColKeyBarText,
+	"CommandLine.Prompt":         vtui.ColCommandLinePrompt,
+	"CommandLine.Text":           vtui.ColCommandLineText,
 }
 
 // InitColors parses the farcolors section and applies it to the vtui.Palette
