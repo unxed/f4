@@ -51,7 +51,7 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 		for i := range b {
 			b[i] = make([]vtui.CharInfo, w)
 			for j := range b[i] {
-				b[i][j] = vtui.CharInfo{Char: ' ', Attributes: vtui.Palette[vtui.ColCommandLineUserScreen]}
+				b[i][j] = vtui.CharInfo{Char: ' ', Attributes: vtui.Palette[ColCommandLineUserScreen]}
 			}
 		}
 		return b
@@ -166,7 +166,7 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 		// Clear the last line of the region
 		buf[bottom] = make([]vtui.CharInfo, tv.Width)
 		for j := range buf[bottom] {
-			buf[bottom][j] = vtui.CharInfo{Char: ' ', Attributes: vtui.Palette[vtui.ColCommandLineUserScreen]}
+			buf[bottom][j] = vtui.CharInfo{Char: ' ', Attributes: vtui.Palette[ColCommandLineUserScreen]}
 		}
 	}
 }

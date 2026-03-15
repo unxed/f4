@@ -56,8 +56,12 @@ func NewFileSystemPanel(x, y, w, h int, path string) *FileSystemPanel {
 		frame: vtui.NewBorderedFrame(x, y, x+w-1, y+h-1, vtui.SingleBox, absPath),
 		table: vtui.NewTable(x+1, y+1, w-2, h-2, cols),
 	}
-	fp.frame.ColorBoxIdx = vtui.ColPanelBox
-	fp.frame.ColorTitleIdx = vtui.ColPanelTitle
+	fp.frame.ColorBoxIdx = ColPanelBox
+	fp.frame.ColorTitleIdx = ColPanelTitle
+	fp.table.ColorTextIdx = ColPanelText
+	fp.table.ColorSelectedTextIdx = ColPanelCursor
+	fp.table.ColorTitleIdx = ColPanelColumnTitle
+	fp.table.ColorBoxIdx = ColPanelBox
 	fp.SetCanFocus(true)
 	fp.Refresh()
 	return fp

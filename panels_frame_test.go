@@ -2,9 +2,12 @@ package main
 
 import (
 	"testing"
+	"github.com/unxed/vtui"
 )
 
 func TestPanelsFrame_Layout(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
 	pf := NewPanelsFrame()
 
 	// Simulate 80x25 terminal

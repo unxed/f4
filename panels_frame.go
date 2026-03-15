@@ -369,7 +369,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	return false
 }
 
-func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypePanels }
+func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.done = true }
 func (pf *PanelsFrame) openSubMenu(index int) {
 	menu := vtui.NewVMenu(pf.menuBar.Items[index].Label)

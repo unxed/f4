@@ -3,9 +3,12 @@ package main
 import (
 	"testing"
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 func TestCommandLine_Input(t *testing.T) {
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
 	cl := NewCommandLine("> ")
 	cl.SetPosition(0, 0, 10, 0)
 

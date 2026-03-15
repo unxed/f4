@@ -48,7 +48,7 @@ func (cl *CommandLine) DisplayObject(scr *vtui.ScreenBuf) {
 	if !cl.IsVisible() { return }
 
 	// 1. Draw Prompt
-	scr.Write(cl.X1, cl.Y1, vtui.StringToCharInfo(cl.Prompt, vtui.Palette[vtui.ColCommandLinePrompt]))
+	scr.Write(cl.X1, cl.Y1, vtui.StringToCharInfo(cl.Prompt, vtui.Palette[ColCommandLinePrompt]))
 
 	// 2. Draw Edit (input field)
 	cl.Edit.Show(scr)

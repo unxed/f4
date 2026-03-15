@@ -211,8 +211,8 @@ func (p *AnsiParser) handleSGR(n int) {
 	} else if n >= 100 && n <= 107 {
 		p.Attr = vtui.SetRGBBack(p.Attr, far2lPalette[ansiToFar[n-100]+8])
 	} else if n == 39 {
-		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[vtui.ColCommandLineUserScreen]))
+		p.Attr = vtui.SetRGBFore(p.Attr, vtui.GetRGBFore(vtui.Palette[ColCommandLineUserScreen]))
 	} else if n == 49 {
-		p.Attr = vtui.SetRGBBack(p.Attr, vtui.GetRGBBack(vtui.Palette[vtui.ColCommandLineUserScreen]))
+		p.Attr = vtui.SetRGBBack(p.Attr, vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen]))
 	}
 }

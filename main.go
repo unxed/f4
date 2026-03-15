@@ -30,6 +30,8 @@ func main() {
 	vtui.FrameManager.Init(scr)
 	// Sync vtui strings with our localization
 	vtui.UIStrings.DesktopWelcome = Msg("Desktop.Welcome")
+	// Setup f4 specific palette extensions
+	SetDefaultF4Palette()
 
 	// Apply custom palette from system config directory
 	configDir, err := os.UserConfigDir()
