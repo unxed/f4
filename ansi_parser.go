@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -73,6 +74,15 @@ func (p *AnsiParser) Process(data []byte) {
 				p.State = StateOSC
 			} else if b == '_' {
 				p.State = StateAPC
+			} else if b == '7' {
+				p.term.SaveCursor()
+				p.State = StateGround
+			} else if b == '8' {
+				p.term.RestoreCursor()
+				p.State = StateGround
+			} else if b == '\\' {
+				// String Terminator (ST)
+				p.State = StateGround
 			} else {
 				p.State = StateGround
 			}
@@ -175,10 +185,25 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 		}
 		p.term.SetCursor(p.term.CursorX, row-1)
 	case 'n': // DSR - Device Status Report
-		if len(args) > 0 && args[0] == 5 {
-			if p.pty != nil {
-				p.pty.Write([]byte("\x1b[0n"))
+		if len(args) > 0 {
+			if args[0] == 5 {
+				if p.pty != nil {
+					p.pty.Write([]byte("\x1b[0n"))
+				}
+			} else if args[0] == 6 {
+				if p.pty != nil {
+					resp := fmt.Sprintf("\x1b[%d;%dR", p.term.CursorY+1, p.term.CursorX+1)
+					p.pty.Write([]byte(resp))
+				}
 			}
+		}
+	case 's':
+		if len(p.Params) == 0 || (len(p.Params) == 1 && p.Params[0] == "") {
+			p.term.SaveCursor()
+		}
+	case 'u':
+		if len(p.Params) == 0 || (len(p.Params) == 1 && p.Params[0] == "") {
+			p.term.RestoreCursor()
 		}
 	case 'b': // REP - Repeat last character
 		n := 1

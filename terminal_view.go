@@ -24,6 +24,7 @@ type TerminalView struct {
 
 	// Saved state for main screen
 	savedX, savedY int
+	decSavedX, decSavedY int
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -179,6 +180,17 @@ func (tv *TerminalView) SetCursor(x, y int) {
 	if y < 0 { y = 0 }
 	if y >= tv.Height { y = tv.Height - 1 }
 	tv.CursorX, tv.CursorY = x, y
+}
+func (tv *TerminalView) SaveCursor() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	tv.decSavedX, tv.decSavedY = tv.CursorX, tv.CursorY
+}
+
+func (tv *TerminalView) RestoreCursor() {
+	tv.mu.Lock()
+	defer tv.mu.Unlock()
+	tv.CursorX, tv.CursorY = tv.decSavedX, tv.decSavedY
 }
 
 func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
