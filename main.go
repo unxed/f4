@@ -12,6 +12,13 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-test-plugins" {
+		vtui.DebugLog("--- TEST MODE ---")
+		pm := NewPluginManager()
+		pm.LoadAll()
+		pm.CloseAll()
+		return
+	}
 
 	// 1. Enter Raw Mode
 	restore, err := vtinput.Enable()
@@ -48,6 +55,11 @@ func main() {
 	panels := NewPanelsFrame()
 	panels.ResizeConsole(width, height) // Initialize panel sizes before pushing
 	vtui.FrameManager.Push(panels)
+
+	// --- Initialize Plugins ---
+	pluginManager := NewPluginManager()
+	pluginManager.LoadAll()
+	defer pluginManager.CloseAll()
 
 	// 4. Run!
 	vtui.FrameManager.Run()
