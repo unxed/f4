@@ -108,3 +108,13 @@ To enable detailed logging to `debug.log`, run with the `VTUI_DEBUG` environment
 ```bash
 VTUI_DEBUG=1 ./f4
 ```
+
+#### Performance & Architecture Notes
+
+##### Instant Bracketed Paste
+To achieve near-instantaneous text insertion for large clipboard buffers (comparable to `far2l`), `f4` utilizes several coordinated strategies:
+
+1.  **Atomic Commits:** The `EditorView` detects `PasteStart` and `PasteEnd` events. Instead of modifying the data model byte-by-byte, it accumulates incoming text in a temporary buffer and performs a single, atomic insertion into the `PieceTable`. This prevents memory fragmentation and reduces `LineIndex` updates from thousands to one.
+2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While a component is busy (e.g., during a paste operation), the UI rendering phase and terminal `Flush()` are entirely suppressed. This eliminates visual jitter and "running text" artifacts.
+3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a 2ms micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass. This ensures that even if the terminal sends data in chunks, the entire burst is processed as a single visual update.
+4.  **Zero-Allocation Rendering:** The `vtui` core is designed to minimize heap allocations during the `Flush()` cycle. By comparing the logical buffer with a physical screen "shadow," only the minimum necessary ANSI sequences are sent to the terminal.
