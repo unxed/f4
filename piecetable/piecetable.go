@@ -176,3 +176,38 @@ func (pt *PieceTable) ForEachRange(fn func(data []byte)) {
 		}
 	}
 }
+// GetRange возвращает срез байт для указанного диапазона.
+func (pt *PieceTable) GetRange(offset, length int) []byte {
+	if offset < 0 || length <= 0 || offset+length > pt.size {
+		return nil
+	}
+
+	res := make([]byte, 0, length)
+	remaining := length
+
+	startIdx, offInPiece := pt.offsetToPiece(offset)
+
+	for i := startIdx; i < len(pt.pieces) && remaining > 0; i++ {
+		p := pt.pieces[i]
+
+		// Определяем, сколько данных берем из этого куска
+		take := p.Length - offInPiece
+		if take > remaining {
+			take = remaining
+		}
+
+		var buf []byte
+		if p.Buf == Original {
+			buf = pt.orig
+		} else {
+			buf = pt.add
+		}
+
+		res = append(res, buf[p.Start+offInPiece : p.Start+offInPiece+take]...)
+
+		remaining -= take
+		offInPiece = 0 // Для последующих кусков читаем с начала
+	}
+
+	return res
+}

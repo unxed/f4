@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"github.com/unxed/f4/piecetable"
 	"os/user"
 	"strings"
 
@@ -267,6 +268,16 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// F10 exits the application (global, but can be overridden by terminal raw mode)
 	if e.VirtualKeyCode == vtinput.VK_F10 {
 		vtui.FrameManager.Shutdown()
+		return true
+	}
+
+	// F4 opens the internal editor on a test string
+	if e.VirtualKeyCode == vtinput.VK_F4 {
+		testText := "Welcome to f4 Editor!\nThis is a Piece Table based engine.\nIt supports multiple lines.\nTry scrolling up and down.\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10"
+		pt := piecetable.New([]byte(testText))
+		editor := NewEditorView(pt)
+		editor.SetPosition(0, 0, pf.lastW-1, pf.lastH-3) // Над коммандной строкой
+		vtui.FrameManager.Push(editor)
 		return true
 	}
 
