@@ -19,6 +19,8 @@ func ShowDemoDialog() {
 	dlg.AddItem(rb1)
 	dlg.AddItem(vtui.NewRadioButton(x1+4, y1+4, "Slow and Stable"))
 	dlg.AddItem(vtui.NewRadioButton(x1+4, y1+5, "Mental Health Mode"))
+	// Вертикальный разделитель/метка в центре
+	dlg.AddItem(vtui.NewVText(x1+28, y1+2, "│CORE│", vtui.Palette[vtui.ColDialogText]))
 
 	// 2. Чекбоксы
 	dlg.AddItem(vtui.NewText(x1+30, y1+2, "Settings:", vtui.Palette[vtui.ColDialogText]))
