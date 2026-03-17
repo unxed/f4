@@ -7,18 +7,32 @@ import (
 	"github.com/unxed/vtui"
 )
 
+type visualCell struct {
+	info       vtui.CharInfo
+	byteOffset int // Офсет в байтах от начала логической строки
+}
+
+type lineFragment struct {
+	cells            []visualCell
+	startOffset      int // Абсолютный офсет начала фрагмента
+	startByteInLine  int // Байт в логической строке, с которого начался фрагмент
+	endByteInLine    int // Байт, на котором фрагмент закончился
+}
+
 // EditorView — компонент текстового редактора.
 type EditorView struct {
 	vtui.ScreenObject
 	pt         *piecetable.PieceTable
 	li         *piecetable.LineIndex
 
-	ScrollTop  int // Первая видимая строка
-	ScrollLeft int // Горизонтальный скролл
+	ScrollTop     int // Индекс первой видимой логической строки
+	ScrollSubLine int // Индекс визуального фрагмента строки ScrollTop
+	ScrollLeft    int // Горизонтальный скролл (для WordWrap=false)
 
+	WordWrap         bool
 	CursorLine       int // Текущая строка курсора (логическая)
 	CursorPos        int // Текущая позиция в строке (в байтах)
-	DesiredCursorPos int // "Желаемая" позиция для навигации вверх/вниз
+	DesiredCursorPos int // "Желаемая" позиция (визуальная колонка)
 
 	selActive        bool
 	selAnchorOffset  int // Абсолютный офсет начала выделения
@@ -35,6 +49,7 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		pt:       pt,
 		li:       piecetable.NewLineIndex(),
 		filePath: path,
+		WordWrap: true,
 	}
 	ev.li.Rebuild(pt)
 	ev.SetCanFocus(true)
@@ -59,73 +74,55 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
-	cursorOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 
-	for i := 0; i < height; i++ {
-		lineIdx := ev.ScrollTop + i
-		currY := ev.Y1 + i
-		scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
-
-		if lineIdx < ev.li.LineCount() {
-			startOffset := ev.li.GetLineOffset(lineIdx)
-			endOffset := ev.pt.Size()
-			if lineIdx+1 < ev.li.LineCount() {
-				endOffset = ev.li.GetLineOffset(lineIdx + 1)
-			}
-
-			lineData := ev.pt.GetRange(startOffset, endOffset-startOffset)
-			// Визуально обрезаем переносы строк
-			drawLen := len(lineData)
-			if drawLen > 0 && lineData[drawLen-1] == '\n' { drawLen-- }
-			if drawLen > 0 && lineData[drawLen-1] == '\r' { drawLen-- }
-
-			// Рисуем посимвольно для учета выделения
-			currX := 0
-			byteInLine := 0
-			lineStr := string(lineData[:drawLen])
-			
-			// StringToCharInfo для всей строки, но потом пройдемся по CharInfo
-			cells := vtui.StringToCharInfo(lineStr, bgAttr)
-			
-			for cellIdx, cell := range cells {
-				if cellIdx < ev.ScrollLeft {
-					if cell.Char != vtui.WideCharFiller {
-						byteInLine += len(string(rune(cell.Char)))
-					}
-					continue
-				}
-				if currX >= width { break }
-
-				// Проверка выделения для текущего байта
-				absOffset := startOffset + byteInLine
-				if ev.selActive {
-					min, max := ev.selAnchorOffset, cursorOffset
-					if min > max { min, max = max, min }
-					if absOffset >= min && absOffset < max {
-						cell.Attributes = selAttr
-					}
-				}
-
-				scr.Write(ev.X1+currX, currY, []vtui.CharInfo{cell})
-				if cell.Char != vtui.WideCharFiller {
-					byteInLine += len(string(rune(cell.Char)))
-				}
-				currX++
-			}
+	rowsRendered := 0
+	for logLineIdx := ev.ScrollTop; logLineIdx < ev.li.LineCount() && rowsRendered < height; logLineIdx++ {
+		fragments := ev.getLineFragments(logLineIdx, width)
+		
+		startFrag := 0
+		if logLineIdx == ev.ScrollTop {
+			startFrag = ev.ScrollSubLine
 		}
-	}
 
-	// Установка курсора
-	if ev.IsFocused() {
-		scr.SetCursorVisible(true)
-		// Упрощенный расчет позиции (без учета wide chars и табов пока)
-		vx := ev.CursorPos - ev.ScrollLeft
-		vy := ev.CursorLine - ev.ScrollTop
+		for fIdx := startFrag; fIdx < len(fragments) && rowsRendered < height; fIdx++ {
+			currY := ev.Y1 + rowsRendered
+			scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
+			
+			frag := fragments[fIdx]
+			
+			// Отрисовка фрагмента с учетом выделения
+			for cellIdx, cell := range frag.cells {
+				absOffset := frag.startOffset + cell.byteOffset
+				if ev.selActive {
+					min, max := ev.getSelectionRange()
+					if absOffset >= min && absOffset < max {
+						cell.info.Attributes = selAttr
+					}
+				}
+				scr.Write(ev.X1+cellIdx, currY, []vtui.CharInfo{cell.info})
+			}
 
-		if vx >= 0 && vx < width && vy >= 0 && vy < height {
-			scr.SetCursorPos(ev.X1+vx, ev.Y1+vy)
-		} else {
-			scr.SetCursorVisible(false)
+			// Если на этом фрагменте стоит курсор — запоминаем визуальные координаты
+			if logLineIdx == ev.CursorLine && ev.CursorPos >= frag.startByteInLine && ev.CursorPos < frag.endByteInLine {
+				// Рассчитываем X внутри фрагмента
+				vx := 0
+				for _, c := range frag.cells {
+					if c.byteOffset < (ev.CursorPos - frag.startByteInLine) {
+						vx++
+					}
+				}
+				scr.SetCursorPos(ev.X1+vx, currY)
+				scr.SetCursorVisible(true)
+			} else if logLineIdx == ev.CursorLine && ev.CursorPos == ev.getLineLength(logLineIdx) && fIdx == len(fragments)-1 {
+				// Курсор в самом конце строки (после последнего символа)
+				vx := len(frag.cells)
+				if vx < width {
+					scr.SetCursorPos(ev.X1+vx, currY)
+					scr.SetCursorVisible(true)
+				}
+			}
+
+			rowsRendered++
 		}
 	}
 }
@@ -199,6 +196,14 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.SaveToFile()
 		return true
 
+	case vtinput.VK_F6:
+		ev.WordWrap = !ev.WordWrap
+		ev.ScrollLeft = 0
+		ev.ScrollSubLine = 0
+		ev.updateDesiredPos()
+		ev.ensureCursorVisible()
+		return true
+
 	case vtinput.VK_C:
 		if ctrl && ev.selActive {
 			ev.CopySelection()
@@ -207,20 +212,51 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_UP:
 		handleNav()
-		if ev.CursorLine > 0 {
-			ev.CursorLine--
-			ev.updateCursorToDesiredPos()
-			ev.ensureCursorVisible()
+		if ev.WordWrap {
+			if !ev.moveCursorVisual(0, -1) {
+				if ev.CursorLine > 0 {
+					ev.CursorLine--
+					frags := ev.getLineFragments(ev.CursorLine, ev.X2-ev.X1+1)
+					lastFrag := frags[len(frags)-1]
+					// Переход в ту же визуальную колонку на последней подстроке
+					targetX := ev.DesiredCursorPos
+					if targetX >= len(lastFrag.cells) { targetX = len(lastFrag.cells) - 1 }
+					if targetX < 0 { targetX = 0 }
+					if len(lastFrag.cells) > 0 {
+						ev.CursorPos = lastFrag.startByteInLine + lastFrag.cells[targetX].byteOffset
+					} else {
+						ev.CursorPos = lastFrag.startByteInLine
+					}
+				}
+			}
+		} else {
+			if ev.CursorLine > 0 {
+				ev.CursorLine--
+				ev.updateCursorToDesiredPos()
+			}
 		}
+		ev.ensureCursorVisible()
 		return true
+
 	case vtinput.VK_DOWN:
 		handleNav()
-		if ev.CursorLine < ev.li.LineCount()-1 {
-			ev.CursorLine++
-			ev.updateCursorToDesiredPos()
-			ev.ensureCursorVisible()
+		if ev.WordWrap {
+			if !ev.moveCursorVisual(0, 1) {
+				if ev.CursorLine < ev.li.LineCount()-1 {
+					ev.CursorLine++
+					ev.CursorPos = 0
+					ev.updateCursorToDesiredPos()
+				}
+			}
+		} else {
+			if ev.CursorLine < ev.li.LineCount()-1 {
+				ev.CursorLine++
+				ev.updateCursorToDesiredPos()
+			}
 		}
+		ev.ensureCursorVisible()
 		return true
+
 	case vtinput.VK_LEFT:
 		handleNav()
 		if ev.CursorPos > 0 {
@@ -229,9 +265,10 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			ev.CursorLine--
 			ev.CursorPos = ev.getLineLength(ev.CursorLine)
 		}
-		ev.DesiredCursorPos = ev.CursorPos
+		ev.updateDesiredPos()
 		ev.ensureCursorVisible()
 		return true
+
 	case vtinput.VK_RIGHT:
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
@@ -241,7 +278,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			ev.CursorLine++
 			ev.CursorPos = 0
 		}
-		ev.DesiredCursorPos = ev.CursorPos
+		ev.updateDesiredPos()
 		ev.ensureCursorVisible()
 		return true
 
@@ -365,6 +402,125 @@ func (ev *EditorView) updateCursorToDesiredPos() {
 	} else {
 		ev.CursorPos = ev.DesiredCursorPos
 	}
+}
+func (ev *EditorView) updateDesiredPos() {
+	if !ev.WordWrap {
+		ev.DesiredCursorPos = ev.CursorPos
+		return
+	}
+	width := ev.X2 - ev.X1 + 1
+	frags := ev.getLineFragments(ev.CursorLine, width)
+	for _, f := range frags {
+		if ev.CursorPos >= f.startByteInLine && ev.CursorPos < f.endByteInLine {
+			vx := 0
+			for _, c := range f.cells {
+				if c.byteOffset < (ev.CursorPos - f.startByteInLine) { vx++ }
+			}
+			ev.DesiredCursorPos = vx
+			return
+		}
+	}
+}
+
+func (ev *EditorView) moveCursorVisual(dx, dy int) bool {
+	width := ev.X2 - ev.X1 + 1
+	frags := ev.getLineFragments(ev.CursorLine, width)
+
+	currentFragIdx := -1
+	for i, f := range frags {
+		if ev.CursorPos >= f.startByteInLine && ev.CursorPos < f.endByteInLine {
+			currentFragIdx = i
+			break
+		}
+	}
+	if currentFragIdx == -1 && ev.CursorPos == ev.getLineLength(ev.CursorLine) {
+		currentFragIdx = len(frags) - 1
+	}
+
+	newFragIdx := currentFragIdx + dy
+	if newFragIdx >= 0 && newFragIdx < len(frags) {
+		f := frags[newFragIdx]
+		// Пытаемся сохранить визуальную колонку (DesiredCursorPos)
+		targetX := ev.DesiredCursorPos
+		if targetX >= len(f.cells) { targetX = len(f.cells) - 1 }
+		if targetX < 0 { targetX = 0 }
+
+		if len(f.cells) > 0 {
+			ev.CursorPos = f.startByteInLine + f.cells[targetX].byteOffset
+		} else {
+			ev.CursorPos = f.startByteInLine
+		}
+		return true
+	}
+	return false
+}
+
+func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
+	if lineIdx < 0 || lineIdx >= ev.li.LineCount() || width <= 0 {
+		return nil
+	}
+
+	startOffset := ev.li.GetLineOffset(lineIdx)
+	endOffset := ev.pt.Size()
+	if lineIdx+1 < ev.li.LineCount() {
+		endOffset = ev.li.GetLineOffset(lineIdx + 1)
+	}
+
+	lineData := ev.pt.GetRange(startOffset, endOffset-startOffset)
+	realLen := len(lineData)
+	if realLen > 0 && lineData[realLen-1] == '\n' {
+		realLen--
+		if realLen > 0 && lineData[realLen-1] == '\r' { realLen-- }
+	}
+
+	lineStr := string(lineData[:realLen])
+	bgAttr := vtui.Palette[ColCommandLineUserScreen]
+	cells := vtui.StringToCharInfo(lineStr, bgAttr)
+
+	if !ev.WordWrap {
+		vCells := make([]visualCell, len(cells))
+		currByte := 0
+		for i, c := range cells {
+			vCells[i] = visualCell{info: c, byteOffset: currByte}
+			if c.Char != vtui.WideCharFiller {
+				currByte += len(string(rune(c.Char)))
+			}
+		}
+		return []lineFragment{{
+			cells: vCells,
+			startOffset: startOffset,
+			startByteInLine: 0,
+			endByteInLine: realLen + 1,
+		}}
+	}
+
+	var fragments []lineFragment
+	currByte := 0
+	for i := 0; i < len(cells); i += width {
+		end := i + width
+		if end > len(cells) { end = len(cells) }
+
+		fCells := make([]visualCell, 0, end-i)
+		fStartByte := currByte
+		for j := i; j < end; j++ {
+			fCells = append(fCells, visualCell{info: cells[j], byteOffset: currByte - fStartByte})
+			if cells[j].Char != vtui.WideCharFiller {
+				currByte += len(string(rune(cells[j].Char)))
+			}
+		}
+
+		fragments = append(fragments, lineFragment{
+			cells: fCells,
+			startOffset: startOffset + fStartByte,
+			startByteInLine: fStartByte,
+			endByteInLine: currByte,
+		})
+	}
+
+	if len(fragments) == 0 {
+		fragments = append(fragments, lineFragment{startOffset: startOffset, endByteInLine: 1})
+	}
+	return fragments
 }
 func (ev *EditorView) SaveToFile() {
 	if ev.filePath == "" {

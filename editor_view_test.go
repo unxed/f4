@@ -221,6 +221,35 @@ func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
 		t.Errorf("Cursor after multiline delete: expected Line 0, Pos 4. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 }
+func TestEditorView_WordWrapNavigation(t *testing.T) {
+	// Создаем одну очень длинную строку (25 символов)
+	// При ширине 10 она должна разбиться на 3 визуальные строки: [0-9], [10-19], [20-24]
+	text := "0123456789ABCDEFGHIJklmno"
+	pt := piecetable.New([]byte(text))
+	ev := NewEditorView(pt, "")
+	ev.WordWrap = true
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 5 // Ширина 10
+
+	ev.CursorLine = 0
+	ev.CursorPos = 5 // Символ '5' в первом фрагменте
+	ev.DesiredCursorPos = 5
+
+	// 1. Нажимаем Вниз -> должны остаться на той же логической строке, но переместиться на фрагмент 2
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+
+	if ev.CursorLine != 0 {
+		t.Errorf("WordWrap Down: expected logical line 0, got %d", ev.CursorLine)
+	}
+	if ev.CursorPos != 15 { // '5' + 10 = 15 (символ 'F')
+		t.Errorf("WordWrap Down: expected byte pos 15, got %d", ev.CursorPos)
+	}
+
+	// 2. Нажимаем Вверх -> возвращаемся на фрагмент 1
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+	if ev.CursorPos != 5 {
+		t.Errorf("WordWrap Up: expected byte pos 5, got %d", ev.CursorPos)
+	}
+}
 func TestEditorView_BracketedPaste(t *testing.T) {
 	pt := piecetable.New([]byte("Start-"))
 	ev := NewEditorView(pt, "")
