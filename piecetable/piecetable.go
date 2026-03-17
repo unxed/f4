@@ -165,4 +165,14 @@ func (pt *PieceTable) Bytes() []byte {
 // String возвращает текущий текст в виде строки (удобно для тестов).
 func (pt *PieceTable) String() string {
 	return string(pt.Bytes())
+}// ForEachRange последовательно вызывает функцию для каждого фрагмента данных.
+// Это позволяет обрабатывать текст без аллокации единого большого слайса.
+func (pt *PieceTable) ForEachRange(fn func(data []byte)) {
+	for _, p := range pt.pieces {
+		if p.Buf == Original {
+			fn(pt.orig[p.Start : p.Start+p.Length])
+		} else {
+			fn(pt.add[p.Start : p.Start+p.Length])
+		}
+	}
 }
