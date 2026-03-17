@@ -20,6 +20,9 @@ type EditorView struct {
 	CursorPos        int // Текущая позиция в строке (в байтах)
 	DesiredCursorPos int // "Желаемая" позиция для навигации вверх/вниз
 
+	selActive        bool
+	selAnchorOffset  int // Абсолютный офсет начала выделения
+
 	filePath   string
 	done       bool
 }
@@ -49,42 +52,59 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 
+	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
+	cursorOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+
 	for i := 0; i < height; i++ {
 		lineIdx := ev.ScrollTop + i
 		currY := ev.Y1 + i
-
-		// Заполняем строку фоном
 		scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
 
 		if lineIdx < ev.li.LineCount() {
-			start := ev.li.GetLineOffset(lineIdx)
-			end := ev.pt.Size()
+			startOffset := ev.li.GetLineOffset(lineIdx)
+			endOffset := ev.pt.Size()
 			if lineIdx+1 < ev.li.LineCount() {
-				end = ev.li.GetLineOffset(lineIdx + 1)
+				endOffset = ev.li.GetLineOffset(lineIdx + 1)
 			}
 
-			lineLen := end - start
-			if lineLen > 0 {
-				data := ev.pt.GetRange(start, lineLen)
-				// Убираем \n или \r\n в конце для отрисовки
-				if len(data) > 0 && data[len(data)-1] == '\n' {
-					data = data[:len(data)-1]
-				}
-				if len(data) > 0 && data[len(data)-1] == '\r' {
-					data = data[:len(data)-1]
-				}
+			lineData := ev.pt.GetRange(startOffset, endOffset-startOffset)
+			// Визуально обрезаем переносы строк
+			drawLen := len(lineData)
+			if drawLen > 0 && lineData[drawLen-1] == '\n' { drawLen-- }
+			if drawLen > 0 && lineData[drawLen-1] == '\r' { drawLen-- }
 
-				// Превращаем байты в CharInfo (с учетом ScrollLeft)
-				lineStr := string(data)
-				cells := vtui.StringToCharInfo(lineStr, bgAttr)
-
-				if ev.ScrollLeft < len(cells) {
-					visibleCells := cells[ev.ScrollLeft:]
-					if len(visibleCells) > width {
-						visibleCells = visibleCells[:width]
+			// Рисуем посимвольно для учета выделения
+			currX := 0
+			byteInLine := 0
+			lineStr := string(lineData[:drawLen])
+			
+			// StringToCharInfo для всей строки, но потом пройдемся по CharInfo
+			cells := vtui.StringToCharInfo(lineStr, bgAttr)
+			
+			for cellIdx, cell := range cells {
+				if cellIdx < ev.ScrollLeft {
+					if cell.Char != vtui.WideCharFiller {
+						byteInLine += len(string(rune(cell.Char)))
 					}
-					scr.Write(ev.X1, currY, visibleCells)
+					continue
 				}
+				if currX >= width { break }
+
+				// Проверка выделения для текущего байта
+				absOffset := startOffset + byteInLine
+				if ev.selActive {
+					min, max := ev.selAnchorOffset, cursorOffset
+					if min > max { min, max = max, min }
+					if absOffset >= min && absOffset < max {
+						cell.Attributes = selAttr
+					}
+				}
+
+				scr.Write(ev.X1+currX, currY, []vtui.CharInfo{cell})
+				if cell.Char != vtui.WideCharFiller {
+					byteInLine += len(string(rune(cell.Char)))
+				}
+				currX++
 			}
 		}
 	}
@@ -107,6 +127,20 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	if !e.KeyDown { return false }
 
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+
+	handleNav := func() {
+		if shift {
+			if !ev.selActive {
+				ev.selActive = true
+				ev.selAnchorOffset = ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			}
+		} else {
+			ev.selActive = false
+		}
+	}
+
 	switch e.VirtualKeyCode {
 	case vtinput.VK_ESCAPE, vtinput.VK_F10:
 		ev.done = true
@@ -116,21 +150,30 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.SaveToFile()
 		return true
 
+	case vtinput.VK_C:
+		if ctrl && ev.selActive {
+			ev.CopySelection()
+			return true
+		}
+
 	case vtinput.VK_UP:
+		handleNav()
 		if ev.CursorLine > 0 {
 			ev.CursorLine--
 			ev.updateCursorToDesiredPos()
 			ev.ensureCursorVisible()
-			return true
 		}
+		return true
 	case vtinput.VK_DOWN:
+		handleNav()
 		if ev.CursorLine < ev.li.LineCount()-1 {
 			ev.CursorLine++
 			ev.updateCursorToDesiredPos()
 			ev.ensureCursorVisible()
-			return true
 		}
+		return true
 	case vtinput.VK_LEFT:
+		handleNav()
 		if ev.CursorPos > 0 {
 			ev.CursorPos--
 		} else if ev.CursorLine > 0 {
@@ -141,6 +184,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.ensureCursorVisible()
 		return true
 	case vtinput.VK_RIGHT:
+		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
 		if ev.CursorPos < lineLen {
 			ev.CursorPos++
@@ -153,26 +197,43 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_BACK:
-		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		if offset > 0 {
-			if ev.CursorPos == 0 {
-				// Удаляем перевод строки, склеиваем с предыдущей
-				prevLen := ev.getLineLength(ev.CursorLine - 1)
-				ev.pt.Delete(offset-1, 1)
-				ev.li.UpdateAfterDelete(offset-1, 1)
-				ev.CursorLine--
-				ev.CursorPos = prevLen
-			} else {
-				ev.pt.Delete(offset-1, 1)
-				ev.li.UpdateAfterDelete(offset-1, 1)
-				ev.CursorPos--
+		if ev.selActive {
+			ev.DeleteSelection()
+		} else {
+			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			if offset > 0 {
+				if ev.CursorPos == 0 {
+					prevLen := ev.getLineLength(ev.CursorLine - 1)
+					ev.pt.Delete(offset-1, 1)
+					ev.li.UpdateAfterDelete(offset-1, 1)
+					ev.CursorLine--
+					ev.CursorPos = prevLen
+				} else {
+					ev.pt.Delete(offset-1, 1)
+					ev.li.UpdateAfterDelete(offset-1, 1)
+					ev.CursorPos--
+				}
 			}
-			ev.DesiredCursorPos = ev.CursorPos
-			ev.ensureCursorVisible()
 		}
+		ev.DesiredCursorPos = ev.CursorPos
+		ev.ensureCursorVisible()
+		return true
+
+	case vtinput.VK_DELETE:
+		if ev.selActive {
+			ev.DeleteSelection()
+		} else {
+			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+			if offset < ev.pt.Size() {
+				ev.pt.Delete(offset, 1)
+				ev.li.UpdateAfterDelete(offset, 1)
+			}
+		}
+		ev.ensureCursorVisible()
 		return true
 
 	case vtinput.VK_RETURN:
+		if ev.selActive { ev.DeleteSelection() }
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		ev.pt.Insert(offset, []byte("\n"))
 		ev.li.UpdateAfterInsert(offset, []byte("\n"))
@@ -183,7 +244,8 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	if e.Char != 0 {
+	if e.Char != 0 && ctrl == false {
+		if ev.selActive { ev.DeleteSelection() }
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
@@ -227,13 +289,21 @@ func (ev *EditorView) getLineLength(line int) int {
 	if line+1 < ev.li.LineCount() {
 		end = ev.li.GetLineOffset(line + 1)
 	}
-	lineLen := end - start
-	if lineLen > 0 {
-		data := ev.pt.GetRange(start, lineLen)
-		if data[len(data)-1] == '\n' { lineLen-- }
-		if lineLen > 0 && data[len(data)-1] == '\r' { lineLen-- }
+
+	realLen := end - start
+	if realLen <= 0 {
+		return 0
 	}
-	return lineLen
+
+	data := ev.pt.GetRange(start, realLen)
+	// Учитываем переносы строк для ограничения курсора
+	if realLen > 0 && data[realLen-1] == '\n' {
+		realLen--
+	}
+	if realLen > 0 && data[realLen-1] == '\r' {
+		realLen--
+	}
+	return realLen
 }
 
 func (ev *EditorView) updateCursorToDesiredPos() {
@@ -254,5 +324,34 @@ func (ev *EditorView) SaveToFile() {
 		vtui.DebugLog("EDITOR: Failed to save file: %v", err)
 	} else {
 		vtui.DebugLog("EDITOR: Saved file %s", ev.filePath)
+	}
+}
+func (ev *EditorView) getSelectionRange() (int, int) {
+	if !ev.selActive { return 0, 0 }
+	cursorOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	min, max := ev.selAnchorOffset, cursorOffset
+	if min > max { min, max = max, min }
+	return min, max
+}
+
+func (ev *EditorView) CopySelection() {
+	min, max := ev.getSelectionRange()
+	if max > min {
+		data := ev.pt.GetRange(min, max-min)
+		vtui.SetClipboard(string(data))
+		vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
+	}
+}
+
+func (ev *EditorView) DeleteSelection() {
+	min, max := ev.getSelectionRange()
+	if max > min {
+		ev.pt.Delete(min, max-min)
+		// Для сложного удаления (через несколько строк) проще всего перестроить индекс
+		ev.li.Rebuild(ev.pt)
+		ev.selActive = false
+		// Обновляем позицию курсора на начало бывшего выделения
+		ev.CursorLine = ev.li.GetLineAtOffset(min)
+		ev.CursorPos = min - ev.li.GetLineOffset(ev.CursorLine)
 	}
 }

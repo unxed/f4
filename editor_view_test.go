@@ -136,3 +136,88 @@ func TestEditorView_SaveFile(t *testing.T) {
 		t.Errorf("Save failed: expected %q on disk, got %q", expected, string(savedData))
 	}
 }
+func TestEditorView_Selection(t *testing.T) {
+	pt := piecetable.New([]byte("Select Me"))
+	ev := NewEditorView(pt, "")
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+
+	// 1. Начинаем выделение (Shift + Right x 6)
+	// В тесте важно эмулировать KeyDown с флагом Shift
+	for i := 0; i < 6; i++ {
+		ev.ProcessKey(&vtinput.InputEvent{
+			Type:            vtinput.KeyEventType,
+			KeyDown:         true,
+			VirtualKeyCode:  vtinput.VK_RIGHT,
+			ControlKeyState: vtinput.ShiftPressed,
+		})
+	}
+
+	if !ev.selActive {
+		t.Fatal("Selection should be active")
+	}
+	if ev.selAnchorOffset != 0 {
+		t.Errorf("Anchor should be 0, got %d", ev.selAnchorOffset)
+	}
+
+	min, max := ev.getSelectionRange()
+	if min != 0 || max != 6 {
+		t.Errorf("Wrong selection range: [%d:%d]", min, max)
+	}
+
+	// 2. Копирование (Ctrl+C) - проверяем только лог или отсутствие паники
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_C,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+
+	// 3. Удаление выделенного (Delete)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_DELETE,
+	})
+
+	if pt.String() != " Me" {
+		t.Errorf("Delete selection failed: %q", pt.String())
+	}
+	if ev.selActive {
+		t.Error("Selection should be cleared after delete")
+	}
+}
+func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
+	// Текст из трех строк
+	pt := piecetable.New([]byte("Line1\nLine2\nLine3"))
+	ev := NewEditorView(pt, "")
+
+	// 1. Выделяем конец первой строки, всю вторую и начало третьей
+	// "Line[1\nLine2\nLin]e3"
+	ev.CursorLine = 0
+	ev.CursorPos = 4
+	ev.selActive = true
+	ev.selAnchorOffset = ev.li.GetLineOffset(0) + ev.CursorPos // Офсет 4
+
+	// Перемещаем курсор в конец выделения
+	ev.CursorLine = 2
+	ev.CursorPos = 3
+	// Офсет начала "Line3" (12) + 3 = 15
+
+	// 2. Удаляем выделение
+	ev.DeleteSelection()
+
+	// Ожидаемый результат: "Linee3"
+	expected := "Linee3"
+	if pt.String() != expected {
+		t.Errorf("Multiline delete failed: expected %q, got %q", expected, pt.String())
+	}
+
+	// Проверяем, что индекс строк обновился (осталась 1 строка)
+	if ev.li.LineCount() != 1 {
+		t.Errorf("LineCount after multiline delete: expected 1, got %d", ev.li.LineCount())
+	}
+
+	// Проверяем позицию курсора (должен быть в точке удаления)
+	if ev.CursorLine != 0 || ev.CursorPos != 4 {
+		t.Errorf("Cursor after multiline delete: expected Line 0, Pos 4. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
+	}
+}
