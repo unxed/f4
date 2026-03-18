@@ -1,5 +1,7 @@
 # f4 (an experimental Far Manager / far2l clone in Go)
 
+![](https://raw.githubusercontent.com/unxed/f4/refs/heads/main/screenshot.png)
+
 **The Core:** Creating an experimental, cross-platform TUI (Terminal User Interface) file manager that aims to fully replicate the features, UX, data structures, and rendering logic of `far2l` and Far Manager, but implemented entirely in Go.
 
 ### Philosophy & Goals
