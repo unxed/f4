@@ -18,7 +18,7 @@ This project is built around several core philosophical and technical principles
 
 ### UI & Input
 
-UI & input libraries are developed separately (`vtui`, `vtinput`)
+UI & input libraries are developed separately ([vtui](https://github.com/unxed/vtui), [vtinput](https://github.com/unxed/vtui))
 
 *   **Modern Terminals Only:** We target actively developed terminals (Konsole, kitty, iTerm2, Windows Terminal). Other terminals simply won't allow replicating Far's UI accurately.
 *   **Input (`vtinput`):** Built as a separate library to handle advanced protocols like the Kitty Keyboard Protocol and Win32 Input Mode. This is strictly required for distinguishing combinations like `Ctrl+Enter` or `Shift+Tab`.
