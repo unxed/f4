@@ -5,7 +5,7 @@ import "testing"
 func TestOSVFS_PathLogic(t *testing.T) {
 	vfs := NewOSVFS(".")
 
-	// Тестируем логику путей (она должна быть консистентна с filepath)
+	// Testing path logic (it should be consistent with filepath)
 	joined := vfs.Join("dir", "file.txt")
 	if vfs.Base(joined) != "file.txt" {
 		t.Errorf("VFS Base failed: %s", vfs.Base(joined))

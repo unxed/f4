@@ -13,9 +13,9 @@ import (
 func TestEditorView_TypingAndBackspace(t *testing.T) {
 	pt := piecetable.New([]byte("Hello"))
 	ev := NewEditorView(pt, "")
-	ev.CursorPos = 5 // Конец "Hello"
+	ev.CursorPos = 5 // End of "Hello"
 
-	// 1. Печатаем '!'
+	// 1. Typing '!'
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
 	if pt.String() != "Hello!" {
 		t.Errorf("Typing failed: expected 'Hello!', got '%s'", pt.String())
@@ -24,7 +24,7 @@ func TestEditorView_TypingAndBackspace(t *testing.T) {
 		t.Errorf("CursorPos after typing: expected 6, got %d", ev.CursorPos)
 	}
 
-	// 2. Стираем '!' через Backspace
+	// 2. Deleting '!' via Backspace
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
 	if pt.String() != "Hello" {
 		t.Errorf("Backspace failed: expected 'Hello', got '%s'", pt.String())
@@ -38,15 +38,15 @@ func TestEditorView_LineNavigation(t *testing.T) {
 	pt := piecetable.New([]byte("Line1\nLine2"))
 	ev := NewEditorView(pt, "")
 	ev.CursorLine = 0
-	ev.CursorPos = 5 // Конец "Line1"
+	ev.CursorPos = 5 // End of "Line1"
 
-	// 1. Стрелка Вправо в конце строки -> переход на начало следующей
+	// 1. Right Arrow at the end of the line -> move to the beginning of the next
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
 	if ev.CursorLine != 1 || ev.CursorPos != 0 {
 		t.Errorf("Cross-line Right failed: expected Line 1, Pos 0. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 
-	// 2. Стрелка Влево в начале строки -> переход в конец предыдущей
+	// 2. Left Arrow at the start of the line -> move to the end of the previous
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
 	if ev.CursorLine != 0 || ev.CursorPos != 5 {
 		t.Errorf("Cross-line Left failed: expected Line 0, Pos 5. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
@@ -56,9 +56,9 @@ func TestEditorView_LineNavigation(t *testing.T) {
 func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 	pt := piecetable.New([]byte("ABC"))
 	ev := NewEditorView(pt, "")
-	ev.CursorPos = 1 // Между A и B
+	ev.CursorPos = 1 // Between A and B
 
-	// 1. Нажимаем Enter -> разрыв строки "A" и "BC"
+	// 1. Press Enter -> split line "A" and "BC"
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
 	if pt.String() != "A\nBC" {
 		t.Errorf("Enter splitting failed: expected 'A\\nBC', got %q", pt.String())
@@ -67,7 +67,7 @@ func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 		t.Errorf("Cursor position after Enter wrong: Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 
-	// 2. Нажимаем Backspace в начале второй строки -> склейка обратно в "ABC"
+	// 2. Press Backspace at the start of the second line -> merge back to "ABC"
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
 	if pt.String() != "ABC" {
 		t.Errorf("Backspace merging failed: expected 'ABC', got %q", pt.String())
@@ -78,19 +78,19 @@ func TestEditorView_EnterAndBackspaceMerging(t *testing.T) {
 }
 
 func TestEditorView_StickyColumn(t *testing.T) {
-	// Создаем текст:
+	// Creating text:
 	// LongLine (8)
 	// Short (5)
 	// LongLine (8)
 	pt := piecetable.New([]byte("LongLine\nShort\nLongLine"))
 	ev := NewEditorView(pt, "")
 
-	// Встаем в конец первой длинной строки
+	// Position at the end of the first long line
 	ev.CursorLine = 0
 	ev.CursorPos = 8
 	ev.DesiredCursorPos = 8
 
-	// 1. Вниз на короткую строку -> визуально в конце (5), но желаемая позиция остается 8
+	// 1. Down to short line -> visually at the end (5), but desired position remains 8
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorPos != 5 {
 		t.Errorf("Down to short line: expected pos 5, got %d", ev.CursorPos)
@@ -99,7 +99,7 @@ func TestEditorView_StickyColumn(t *testing.T) {
 		t.Errorf("Desired position lost! Expected 8, got %d", ev.DesiredCursorPos)
 	}
 
-	// 2. Вниз на длинную строку -> позиция должна восстановиться до 8
+	// 2. Down to long line -> position should be restored to 8
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorLine != 2 || ev.CursorPos != 8 {
 		t.Errorf("Sticky column failed: expected Line 2, Pos 8. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
@@ -107,7 +107,7 @@ func TestEditorView_StickyColumn(t *testing.T) {
 }
 
 func TestEditorView_SaveFile(t *testing.T) {
-	// 1. Создаем временный файл
+	// 1. Create a temporary file
 	tmpFile := "test_save.txt"
 	defer os.Remove(tmpFile)
 	err := os.WriteFile(tmpFile, []byte("Original"), 0644)
@@ -115,20 +115,20 @@ func TestEditorView_SaveFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 2. Открываем его в редакторе
+	// 2. Open it in the editor
 	pt := piecetable.New([]byte("Original"))
 	ev := NewEditorView(pt, tmpFile)
 
-	// 3. Имитируем ввод текста " + Edit" в конец
+	// 3. Simulate typing text " + Edit" at the end
 	ev.CursorPos = 8
 	for _, char := range " + Edit" {
 		ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: char})
 	}
 
-	// 4. Имитируем нажатие F2 (Сохранение)
+	// 4. Simulate pressing F2 (Save)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F2})
 
-	// 5. Читаем файл с диска и проверяем, что данные записались
+	// 5. Read file from disk and check that data was written
 	savedData, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatal(err)
@@ -145,8 +145,8 @@ func TestEditorView_Selection(t *testing.T) {
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 
-	// 1. Начинаем выделение (Shift + Right x 6)
-	// В тесте важно эмулировать KeyDown с флагом Shift
+	// 1. Start selection (Shift + Right x 6)
+	// Important to emulate KeyDown with Shift flag in the test
 	for i := 0; i < 6; i++ {
 		ev.ProcessKey(&vtinput.InputEvent{
 			Type:            vtinput.KeyEventType,
@@ -168,14 +168,14 @@ func TestEditorView_Selection(t *testing.T) {
 		t.Errorf("Wrong selection range: [%d:%d]", min, max)
 	}
 
-	// 2. Копирование (Ctrl+C) - проверяем только лог или отсутствие паники
+	// 2. Copying (Ctrl+C) - checking only the log or lack of panic
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_C,
 		ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 
-	// 3. Удаление выделенного (Delete)
+	// 3. Deleting selected (Delete)
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_DELETE,
@@ -189,83 +189,83 @@ func TestEditorView_Selection(t *testing.T) {
 	}
 }
 func TestEditorView_DeleteSelectionMultiline(t *testing.T) {
-	// Текст из трех строк
+	// Three-line text
 	pt := piecetable.New([]byte("Line1\nLine2\nLine3"))
 	ev := NewEditorView(pt, "")
 
-	// 1. Выделяем конец первой строки, всю вторую и начало третьей
+	// 1. Select the end of the first line, all of the second, and the start of the third
 	// "Line[1\nLine2\nLin]e3"
 	ev.CursorLine = 0
 	ev.CursorPos = 4
 	ev.selActive = true
-	ev.selAnchorOffset = ev.li.GetLineOffset(0) + ev.CursorPos // Офсет 4
+	ev.selAnchorOffset = ev.li.GetLineOffset(0) + ev.CursorPos // Offset 4
 
-	// Перемещаем курсор в конец выделения
+	// Move cursor to the end of selection
 	ev.CursorLine = 2
 	ev.CursorPos = 3
-	// Офсет начала "Line3" (12) + 3 = 15
+	// Offset of the beginning of "Line3" (12) + 3 = 15
 
-	// 2. Удаляем выделение
+	// 2. Delete selection
 	ev.DeleteSelection()
 
-	// Ожидаемый результат: "Linee3"
+	// Expected result: "Linee3"
 	expected := "Linee3"
 	if pt.String() != expected {
 		t.Errorf("Multiline delete failed: expected %q, got %q", expected, pt.String())
 	}
 
-	// Проверяем, что индекс строк обновился (осталась 1 строка)
+	// Check that line index updated (1 line left)
 	if ev.li.LineCount() != 1 {
 		t.Errorf("LineCount after multiline delete: expected 1, got %d", ev.li.LineCount())
 	}
 
-	// Проверяем позицию курсора (должен быть в точке удаления)
+	// Check cursor position (should be at the deletion point)
 	if ev.CursorLine != 0 || ev.CursorPos != 4 {
 		t.Errorf("Cursor after multiline delete: expected Line 0, Pos 4. Got Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
 }
 func TestEditorView_WordWrapNavigation(t *testing.T) {
-	// Создаем одну очень длинную строку (25 символов)
-	// При ширине 10 она должна разбиться на 3 визуальные строки: [0-9], [10-19], [20-24]
+	// Create one very long line (25 characters)
+	// At width 10, it should split into 3 visual lines: [0-9], [10-19], [20-24]
 	text := "0123456789ABCDEFGHIJklmno"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 5 // Ширина 10
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 5 // Width 10
 
 	ev.CursorLine = 0
-	ev.CursorPos = 5 // Символ '5' в первом фрагменте
+	ev.CursorPos = 5 // Character '5' in the first fragment
 	ev.DesiredCursorPos = 5
 
-	// 1. Нажимаем Вниз -> должны остаться на той же логической строке, но переместиться на фрагмент 2
+	// 1. Press Down -> should stay on same logical line but move to fragment 2
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 
 	if ev.CursorLine != 0 {
 		t.Errorf("WordWrap Down: expected logical line 0, got %d", ev.CursorLine)
 	}
-	if ev.CursorPos != 15 { // '5' + 10 = 15 (символ 'F')
+	if ev.CursorPos != 15 { // '5' + 10 = 15 (character 'F')
 		t.Errorf("WordWrap Down: expected byte pos 15, got %d", ev.CursorPos)
 	}
 
-	// 2. Нажимаем Вверх -> возвращаемся на фрагмент 1
+	// 2. Press Up -> return to fragment 1
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
 	if ev.CursorPos != 5 {
 		t.Errorf("WordWrap Up: expected byte pos 5, got %d", ev.CursorPos)
 	}
 }
 func TestEditorView_UTF8Editing(t *testing.T) {
-	// "Привет" - русские буквы занимают по 2 байта
+	// "Привет" - Russian letters occupy 2 bytes each
 	pt := piecetable.New([]byte("Привет"))
 	ev := NewEditorView(pt, "")
-	ev.CursorPos = 4 // После "Пр" (4 байта)
+	ev.CursorPos = 4 // After "Пр" (4 bytes)
 
-	// 1. Вставляем еще одну букву (2 байта)
+	// 1. Insert another letter (2 bytes)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'и'})
 	if ev.CursorPos != 6 {
 		t.Errorf("UTF8 typing: expected pos 6, got %d", ev.CursorPos)
 	}
 
-	// 2. Backspace должен удалить ровно один символ (2 байта)
+	// 2. Backspace should remove exactly one character (2 bytes)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
 	if pt.String() != "Привет" {
 		t.Errorf("UTF8 backspace failed: %q", pt.String())
@@ -276,10 +276,10 @@ func TestEditorView_UTF8Editing(t *testing.T) {
 }
 
 func TestEditorView_WideCharWrap(t *testing.T) {
-	// "A世B" -> A(1), 世(2), B(1). Всего 4 ячейки.
-	// Ширина 2.
-	// Ожидаемые фрагменты: ["A ", "世", "B "]
-	// (世 не влезает в первую строку после A, должна перенестись целиком)
+	// "A世B" -> A(1), 世(2), B(1). Total 4 cells.
+	// Width 2.
+	// Expected fragments: ["A ", "世", "B "]
+	// (世 does not fit in the first line after A, must be wrapped entirely)
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
@@ -289,7 +289,7 @@ func TestEditorView_WideCharWrap(t *testing.T) {
 		t.Fatalf("Expected at least 2 fragments, got %d", len(frags))
 	}
 
-	// Проверяем, что фрагмент не заканчивается на "половине" иероглифа
+	// Check that fragment does not end on "half" of a character
 	for i, f := range frags {
 		for _, cell := range f.cells {
 			if cell.info.Char == vtui.WideCharFiller && i == 0 {
@@ -303,10 +303,10 @@ func TestEditorView_SelectionWrapping(t *testing.T) {
 	pt := piecetable.New([]byte("1234567890"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 4, 2 // Ширина 5
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 4, 2 // Width 5
 
-	// Выделяем "456" (с 3-й по 6-ю позицию)
-	// Это захватывает конец первого фрагмента "12345" и начало второго "67890"
+	// Select "456" (from 3rd to 6th position)
+	// This captures the end of the first fragment "12345" and the start of the second "67890"
 	ev.CursorPos = 3
 	ev.selActive = true
 	ev.selAnchorOffset = 3
@@ -318,31 +318,31 @@ func TestEditorView_SelectionWrapping(t *testing.T) {
 	}
 }
 func TestEditorView_WideCharNavigation(t *testing.T) {
-	// "A世B" -> 世 занимает 2 колонки.
+	// "A世B" -> 世 occupies 2 columns.
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = false
-	ev.CursorPos = 0 // На 'A'
+	ev.CursorPos = 0 // On 'A'
 
-	// 1. Вправо -> должны попасть на '世' (смещение 1)
+	// 1. Right -> should land on '世' (offset 1)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
 	if ev.CursorPos != 1 {
 		t.Errorf("Navigate to Wide: expected pos 1, got %d", ev.CursorPos)
 	}
 
-	// 2. Вправо -> должны ПЕРЕПРЫГНУТЬ '世' (её размер 3 байта в UTF-8) и попасть на 'B' (смещение 1+3=4)
+	// 2. Right -> should SKIP OVER '世' (size 3 bytes in UTF-8) and land on 'B' (offset 1+3=4)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
 	if ev.CursorPos != 4 {
 		t.Errorf("Navigate over Wide: expected pos 4, got %d", ev.CursorPos)
 	}
 }
 func TestEditorView_UTF8Selection(t *testing.T) {
-	// "Да" - 2 руны, 4 байта
+	// "Да" - 2 runes, 4 bytes
 	pt := piecetable.New([]byte("Да"))
 	ev := NewEditorView(pt, "")
 	ev.CursorPos = 0
 
-	// Начинаем выделение: Shift + Right (одна буква 'Д')
+	// Start selection: Shift + Right (one letter 'Д')
 	ev.ProcessKey(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_RIGHT,
@@ -359,13 +359,13 @@ func TestEditorView_HomeEnd(t *testing.T) {
 	pt := piecetable.New([]byte("Hello World"))
 	ev := NewEditorView(pt, "")
 
-	// 1. Тест End
+	// 1. End test
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
 	if ev.CursorPos != 11 {
 		t.Errorf("End failed: expected pos 11, got %d", ev.CursorPos)
 	}
 
-	// 2. Тест Home
+	// 2. Home test
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_HOME})
 	if ev.CursorPos != 0 {
 		t.Errorf("Home failed: expected pos 0, got %d", ev.CursorPos)
@@ -376,9 +376,9 @@ func TestEditorView_WideCharBackspace(t *testing.T) {
 	// "A世" -> 'A' (1), '世' (3 bytes)
 	pt := piecetable.New([]byte("A世"))
 	ev := NewEditorView(pt, "")
-	ev.CursorPos = 4 // В самом конце
+	ev.CursorPos = 4 // At the very end
 
-	// Нажимаем Backspace (удаляем '世')
+	// Press Backspace (remove '世')
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
 
 	if pt.String() != "A" {
@@ -394,33 +394,33 @@ func TestEditorView_BracketedPaste(t *testing.T) {
 	ev.CursorLine = 0
 	ev.CursorPos = 6
 
-	// 1. Сигнал начала вставки (PasteStart: true)
+	// 1. Paste start signal (PasteStart: true)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: true})
 	if !ev.IsBusy() {
 		t.Error("Editor should be Busy during paste")
 	}
 
-	// 2. Имитируем символы: "A", "B", Enter (\n), "C"
+	// 2. Simulate characters: "A", "B", Enter (\n), "C"
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'A'})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'B'})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'C'})
 
-	// ВАЖНО: Модель не должна меняться до PasteStart: false
+	// IMPORTANT: Model should not change until PasteStart: false
 	if pt.String() != "Start-" {
 		t.Errorf("Model changed prematurely during paste: %q", pt.String())
 	}
 
-	// 3. Сигнал конца вставки (PasteStart: false)
+	// 3. Paste end signal (PasteStart: false)
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: false})
 
-	// Теперь всё должно быть в модели
+	// Now everything should be in the model
 	expected := "Start-AB\nC"
 	if pt.String() != expected {
 		t.Errorf("Paste commit failed: expected %q, got %q", expected, pt.String())
 	}
 
-	// Проверяем позицию курсора (строка 1, позиция 1 - после 'C')
+	// Check cursor position (line 1, position 1 - after 'C')
 	if ev.CursorLine != 1 || ev.CursorPos != 1 {
 		t.Errorf("Post-paste cursor error: Line %d, Pos %d", ev.CursorLine, ev.CursorPos)
 	}
@@ -429,7 +429,7 @@ func TestEditorView_ExtremeBounds(t *testing.T) {
 	pt := piecetable.New([]byte("A"))
 	ev := NewEditorView(pt, "")
 
-	// 1. Backspace в начале файла не должен ничего ломать
+	// 1. Backspace at file start should not break anything
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_BACK})
@@ -437,7 +437,7 @@ func TestEditorView_ExtremeBounds(t *testing.T) {
 		t.Error("Backspace at file start modified the text")
 	}
 
-	// 2. Delete в конце файла не должен ничего ломать
+	// 2. Delete at file end should not break anything
 	ev.CursorPos = 1
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DELETE})
 	if pt.String() != "A" {
@@ -446,7 +446,7 @@ func TestEditorView_ExtremeBounds(t *testing.T) {
 }
 
 func TestEditorView_EmptyLinesWrap(t *testing.T) {
-	// Файл из трех пустых строк (только переносы)
+	// File of three empty lines (breaks only)
 	pt := piecetable.New([]byte("\n\n"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
@@ -456,13 +456,13 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 		t.Errorf("Expected 3 lines, got %d", ev.li.LineCount())
 	}
 
-	// Проверяем, что getLineFragments не возвращает nil для пустой строки
+	// Check that getLineFragments does not return nil for empty line
 	frags := ev.getLineFragments(0, 10)
 	if len(frags) == 0 {
 		t.Fatal("Empty line fragments should not be empty")
 	}
 
-	// Навигация по пустым строкам
+	// Empty line navigation
 	ev.CursorLine = 0
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
 	if ev.CursorLine != 1 {
@@ -471,34 +471,34 @@ func TestEditorView_EmptyLinesWrap(t *testing.T) {
 }
 
 func TestEditorView_WordWrapScrolling(t *testing.T) {
-	// Создаем длинный текст (одна логическая строка, разбитая на 5 фрагментов)
-	// Ширина 10, длина 45
+	// Create long text (one logical line split into 5 fragments)
+	// Width 10, length 45
 	text := "0123456789ABCDEFGHIJklmnopqrstuvwxyz012345678"
 	pt := piecetable.New([]byte(text))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
-	// Окно высотой 2 строки (X1, Y1, X2, Y2)
-	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 1 
-	
+	// Window height of 2 lines (X1, Y1, X2, Y2)
+	ev.X1, ev.Y1, ev.X2, ev.Y2 = 0, 0, 9, 1
+
 	ev.CursorLine = 0
 	ev.CursorPos = 0
 	ev.ensureCursorVisible()
-	
+
 	if ev.ScrollTop != 0 || ev.ScrollSubLine != 0 {
 		t.Error("Initial scroll should be 0:0")
 	}
 
-	// 1. Прыгаем в конец очень длинной строки (офсет 45)
+	// 1. Jump to the end of a very long line (offset 45)
 	ev.CursorPos = 45
 	ev.ensureCursorVisible()
-	
-	// Так как высота окна 2, а фрагментов 5, верхним должен стать 4-й фрагмент
-	// (чтобы 4-й и 5-й фрагменты были видны на экране)
+
+	// Since window height is 2 and fragments are 5, the 4th fragment should become the top one
+	// (so that 4th and 5th fragments are visible on screen)
 	if ev.ScrollSubLine != 3 {
 		t.Errorf("WordWrap scroll failed: expected ScrollSubLine 3, got %d", ev.ScrollSubLine)
 	}
 	
-	// 2. Прыгаем обратно в начало
+	// 2. Jump back to the beginning
 	ev.CursorPos = 0
 	ev.ensureCursorVisible()
 	if ev.ScrollSubLine != 0 {
@@ -506,19 +506,19 @@ func TestEditorView_WordWrapScrolling(t *testing.T) {
 	}
 }
 func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
-	// Текст с широким символом
+	// Text with wide character
 	pt := piecetable.New([]byte("A世B"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
 
-	// Экстремально узкое окно (ширина 1)
-	// '世' занимает 2 колонки. Раньше это вызывало бесконечный цикл.
+	// Extremely narrow window (width 1)
+	// '世' occupies 2 columns. Previously this caused an infinite loop.
 	frags := ev.getLineFragments(0, 1)
 
 	if len(frags) == 0 {
 		t.Fatal("Should have produced fragments even for narrow window")
 	}
-	// Проверяем, что мы не зависли и прошли всю строку
+	// Check that we didn't hang and traversed the entire line
 	lastFrag := frags[len(frags)-1]
 	if lastFrag.endByteInLine < 5 { // A(1) + 世(3) + B(1) = 5
 		t.Errorf("Fragments didn't cover the whole line: end at %d", lastFrag.endByteInLine)
@@ -561,20 +561,20 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 func TestEditorView_LongLinePerformance(t *testing.T) {
 	t.Parallel()
 
-	// Создаем одну очень длинную строку (100 КБ), чтобы симулировать проблему.
-	// Без фикса это вызывало бы O(N*M) чтений и зависание.
+	// Create one very long line (100 KB) to simulate the problem.
+	// Without the fix, this would cause O(N*M) reads and hanging.
 	longLine := strings.Repeat("a", 100*1024)
 	pt := piecetable.New([]byte(longLine))
 	ev := NewEditorView(pt, "")
 	ev.SetPosition(0, 0, 79, 24) // 80x25 viewport
 
-	// Устанавливаем курсор в середину строки
+	// Set cursor in the middle of the line
 	ev.CursorPos = 50 * 1024
 
-	// Оборачиваем тест в таймаут. Если редактор "зависнет", тест упадет.
+	// Wrap test in timeout. If editor "hangs", test fails.
 	done := make(chan struct{})
 	go func() {
-		// Имитируем 100 нажатий "вправо". Это сильно нагрузит ensureCursorVisible.
+		// Simulate 100 "right" presses. This heavily loads ensureCursorVisible.
 		for i := 0; i < 100; i++ {
 			ev.ProcessKey(&vtinput.InputEvent{
 				Type:           vtinput.KeyEventType,
@@ -582,7 +582,7 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 				VirtualKeyCode: vtinput.VK_RIGHT,
 			})
 		}
-		// Переход в конец строки — еще одна дорогая операция без кэширования
+		// Moving to end of line — another expensive operation without caching
 		ev.ProcessKey(&vtinput.InputEvent{
 			Type:           vtinput.KeyEventType,
 			KeyDown:        true,
@@ -593,8 +593,8 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 
 	select {
 	case <-done:
-		// Успех: все операции завершились за отведенное время.
-	case <-time.After(200 * time.Millisecond): // 200мс — щедрый таймаут. Зависание длилось бы секунды.
+		// Success: all operations finished in time.
+	case <-time.After(200 * time.Millisecond): // 200ms — generous timeout. Hanging would last seconds.
 		t.Fatal("Performance test timed out. EditorView is likely still hanging on long lines.")
 	}
 }

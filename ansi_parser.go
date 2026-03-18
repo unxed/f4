@@ -125,8 +125,8 @@ func (p *AnsiParser) Process(data []byte) {
 
 func (p *AnsiParser) handleCSI(cmd byte) {
 	args := make([]int, len(p.Params))
-	// Если аргументов нет, args будет пустым слайсом.
-	// Это важно для правильной обработки команд по умолчанию.
+	// If there are no arguments, args will be an empty slice.
+	// This is important for correct handling of default commands.
 	for i, s := range p.Params {
 		s = strings.TrimLeft(s, "?<=>")
 		val, _ := strconv.Atoi(s)

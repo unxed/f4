@@ -93,10 +93,10 @@ func (pf *PanelsFrame) buildPrompt() []vtui.CharInfo {
 	}
 
 	bg := vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
-	// Используем цвета, максимально похожие на классический bash
-	greenAttr := vtui.SetRGBBoth(0, 0x8AE234, bg) // Ярко-зеленый
-	blueAttr := vtui.SetRGBBoth(0, 0x729FCF, bg)  // Ярко-синий
-	defAttr := vtui.SetRGBBoth(0, 0xFFFFFF, bg)   // Белый
+	// Use colors as close as possible to classic bash
+	greenAttr := vtui.SetRGBBoth(0, 0x8AE234, bg) // Bright green
+	blueAttr := vtui.SetRGBBoth(0, 0x729FCF, bg)  // Bright blue
+	defAttr := vtui.SetRGBBoth(0, 0xFFFFFF, bg)   // White
 
 	var prompt []vtui.CharInfo
 	prompt = append(prompt, vtui.StringToCharInfo(username+"@"+host, greenAttr)...)
@@ -291,7 +291,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if path != "" {
 			data, err := os.ReadFile(path)
 			if err != nil {
-				// Если файла нет, открываем пустой редактор для создания
+				// If the file does not exist, open an empty editor for creation
 				data = []byte("")
 			}
 			pt := piecetable.New(data)

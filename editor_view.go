@@ -10,33 +10,33 @@ import (
 
 type visualCell struct {
 	info       vtui.CharInfo
-	byteOffset int // Офсет в байтах от начала логической строки
+	byteOffset int // Offset in bytes from the start of the logical line
 }
 
 type lineFragment struct {
 	cells            []visualCell
-	startOffset      int // Абсолютный офсет начала фрагмента
-	startByteInLine  int // Байт в логической строке, с которого начался фрагмент
-	endByteInLine    int // Байт, на котором фрагмент закончился
+	startOffset      int // Absolute offset of the fragment start
+	startByteInLine  int // Byte in the logical line where the fragment starts
+	endByteInLine    int // Byte where the fragment ends
 }
 
-// EditorView — компонент текстового редактора.
+// EditorView is a text editor component.
 type EditorView struct {
 	vtui.ScreenObject
 	pt         *piecetable.PieceTable
 	li         *piecetable.LineIndex
 
-	ScrollTop     int // Индекс первой видимой логической строки
-	ScrollSubLine int // Индекс визуального фрагмента строки ScrollTop
-	ScrollLeft    int // Горизонтальный скролл (для WordWrap=false)
+	ScrollTop     int // Index of the first visible logical line
+	ScrollSubLine int // Index of the visual fragment of the ScrollTop line
+	ScrollLeft    int // Horizontal scroll (for WordWrap=false)
 
 	WordWrap         bool
-	CursorLine       int // Текущая строка курсора (логическая)
-	CursorPos        int // Текущая позиция в строке (в байтах)
-	DesiredCursorPos int // "Желаемая" позиция (визуальная колонка)
+	CursorLine       int // Current cursor line (logical)
+	CursorPos        int // Current position in the line (in bytes)
+	DesiredCursorPos int // "Desired" position (visual column)
 
 	selActive        bool
-	selAnchorOffset  int // Абсолютный офсет начала выделения
+	selAnchorOffset  int // Absolute offset of the selection start
 
 	pasting          bool
 	pasteBuffer      []rune
@@ -74,8 +74,8 @@ func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 
 func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	if !ev.IsVisible() { return }
-	// Оптимизация: во время активной вставки (Bracketed Paste) не обновляем буфер экрана.
-	// Это предотвращает тысячи тяжелых операций StringToCharInfo и аллокаций GetRange.
+	// Optimization: do not update the screen buffer during active insertion (Bracketed Paste).
+	// This prevents thousands of heavy StringToCharInfo operations and GetRange allocations.
 	if ev.pasting { return }
 
 	width := ev.X2 - ev.X1 + 1
@@ -98,10 +98,10 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		for fIdx := startFrag; fIdx < len(fragments) && rowsRendered < height; fIdx++ {
 			currY := ev.Y1 + rowsRendered
 			scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
-			
+
 			frag := fragments[fIdx]
-			
-			// Отрисовка фрагмента с учетом выделения
+
+			// Rendering fragment considering selection
 			for cellIdx, cell := range frag.cells {
 				absOffset := frag.startOffset + cell.byteOffset
 				if ev.selActive {
@@ -113,9 +113,9 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				scr.Write(ev.X1+cellIdx, currY, []vtui.CharInfo{cell.info})
 			}
 
-			// Если на этом фрагменте стоит курсор — запоминаем визуальные координаты
+			// If the cursor is on this fragment — remember the visual coordinates
 			if logLineIdx == ev.CursorLine && ev.CursorPos >= frag.startByteInLine && ev.CursorPos < frag.endByteInLine {
-				// Рассчитываем X внутри фрагмента
+				// Calculate X inside the fragment
 				vx := 0
 				for _, c := range frag.cells {
 					if c.byteOffset < (ev.CursorPos - frag.startByteInLine) {
@@ -125,7 +125,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				scr.SetCursorPos(ev.X1+vx, currY)
 				scr.SetCursorVisible(true)
 			} else if logLineIdx == ev.CursorLine && ev.CursorPos == lineLen && fIdx == len(fragments)-1 {
-				// Курсор в самом конце строки (после последнего символа)
+				// Cursor at the very end of the line (after the last character)
 				vx := len(frag.cells)
 				if vx < width {
 					scr.SetCursorPos(ev.X1+vx, currY)
@@ -139,7 +139,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 }
 
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
-	// 1. Обработка Bracketed Paste (события приходят вне KeyDown)
+	// 1. Processing Bracketed Paste (events arrive outside KeyDown)
 	if e.Type == vtinput.PasteEventType {
 		if e.PasteStart {
 			ev.pasting = true
@@ -151,7 +151,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 				data := []byte(string(ev.pasteBuffer))
 				ev.pt.Insert(offset, data)
-				// Инкрементальное обновление вместо тяжелого Rebuild
+				// Incremental update instead of heavy Rebuild
 				ev.li.UpdateAfterInsert(offset, data)
 				ev.clearCaches()
 
@@ -165,11 +165,11 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// 2. Накопление символов в режиме вставки
+	// 2. Accumulating characters in paste mode
 	if ev.pasting {
 		if e.Type == vtinput.KeyEventType && e.KeyDown {
 			if e.Char != 0 {
-				// Обрабатываем системные переносы внутри вставки
+				// Handle system line breaks inside the paste
 				if e.Char == '\r' || e.Char == '\n' {
 					ev.pasteBuffer = append(ev.pasteBuffer, '\n')
 				} else {
@@ -182,7 +182,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// 3. Обычная обработка клавиш
+	// 3. Regular key processing
 	if !e.KeyDown { return false }
 
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -231,7 +231,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					ev.CursorLine--
 					frags := ev.getLineFragments(ev.CursorLine, ev.X2-ev.X1+1)
 					lastFrag := frags[len(frags)-1]
-					// Переход в ту же визуальную колонку на последней подстроке
+					// Moving to the same visual column on the last subline
 					targetX := ev.DesiredCursorPos
 					if targetX >= len(lastFrag.cells) { targetX = len(lastFrag.cells) - 1 }
 					if targetX < 0 { targetX = 0 }
@@ -273,7 +273,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_LEFT:
 		handleNav()
 		if ev.CursorPos > 0 {
-			// Ищем начало предыдущего UTF-8 символа в строке
+			// Search for the beginning of the previous UTF-8 character in the line
 			lineStart := ev.li.GetLineOffset(ev.CursorLine)
 			data := ev.pt.GetRange(lineStart, ev.CursorPos)
 			_, size := utf8.DecodeLastRune(data)
@@ -325,7 +325,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset > 0 {
 				if ev.CursorPos == 0 {
-					// Склеиваем с предыдущей строкой (удаляем \n)
+					// Merge with the previous line (remove \n)
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
 					ev.pt.Delete(offset-1, 1)
 					ev.li.UpdateAfterDelete(offset-1, 1)
@@ -333,7 +333,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
-					// Удаляем UTF-8 символ перед курсором
+					// Remove the UTF-8 character before the cursor
 					lineStart := ev.li.GetLineOffset(ev.CursorLine)
 					lineData := ev.pt.GetRange(lineStart, ev.CursorPos)
 					_, size := utf8.DecodeLastRune(lineData)
@@ -355,7 +355,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		} else {
 			offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 			if offset < ev.pt.Size() {
-				// Удаляем UTF-8 символ под курсором
+				// Remove the UTF-8 character under the cursor
 				peekLen := 4
 				if ev.pt.Size()-offset < 4 { peekLen = ev.pt.Size() - offset }
 				data := ev.pt.GetRange(offset, peekLen)
@@ -404,7 +404,7 @@ func (ev *EditorView) ensureCursorVisible() {
 	if width <= 0 || height <= 0 { return }
 
 	if !ev.WordWrap {
-		// Классический скроллинг для режима без переносов
+		// Classic scrolling for mode without wrapping
 		ev.ScrollSubLine = 0
 		if ev.CursorLine < ev.ScrollTop {
 			ev.ScrollTop = ev.CursorLine
@@ -419,20 +419,20 @@ func (ev *EditorView) ensureCursorVisible() {
 		return
 	}
 
-	// Скроллинг для Word Wrap: считаем визуальные ряды
+	// Scrolling for Word Wrap: count visual rows
 	ev.ScrollLeft = 0
 
-	// 1. Находим, на каком визуальном ряду сейчас курсор
+	// 1. Find which visual row the cursor is on
 	cursorRow := -1
 	totalRows := 0
 
-	// Считаем ряды от начала документа до курсора
+	// Count rows from the document start to the cursor
 	for l := 0; l <= ev.CursorLine; l++ {
 		frags := ev.getLineFragments(l, width)
 		lineLen := ev.getLineLength(l)
 		for fIdx, f := range frags {
 			onThisFrag := (l == ev.CursorLine && ev.CursorPos >= f.startByteInLine && ev.CursorPos < f.endByteInLine)
-			// Краевой случай: курсор в самом конце строки
+			// Edge case: cursor at the very end of the line
 			if !onThisFrag && l == ev.CursorLine && ev.CursorPos == lineLen && fIdx == len(frags)-1 {
 				onThisFrag = true
 			}
@@ -448,7 +448,7 @@ func (ev *EditorView) ensureCursorVisible() {
 		}
 	}
 
-	// 2. Находим, какой визуальный ряд сейчас самый верхний (ScrollTop + ScrollSubLine)
+	// 2. Find which visual row is currently the top one (ScrollTop + ScrollSubLine)
 	startRow := 0
 	for l := 0; l < ev.ScrollTop; l++ {
 		startRow += len(ev.getLineFragments(l, width))
@@ -456,9 +456,9 @@ func (ev *EditorView) ensureCursorVisible() {
 	startRow += ev.ScrollSubLine
 
 	for {
-		// 3. Проверяем видимость
+		// 3. Check visibility
 		if cursorRow < startRow {
-			// Скроллим вверх по одному визуальному ряду
+			// Scroll up by one visual row
 			if ev.ScrollSubLine > 0 {
 				ev.ScrollSubLine--
 			} else if ev.ScrollTop > 0 {
@@ -467,7 +467,7 @@ func (ev *EditorView) ensureCursorVisible() {
 			} else { break }
 			startRow--
 		} else if cursorRow >= startRow+height {
-			// Скроллим вниз по одному визуальному ряду
+			// Scroll down by one visual row
 			maxSub := len(ev.getLineFragments(ev.ScrollTop, width)) - 1
 			if ev.ScrollSubLine < maxSub {
 				ev.ScrollSubLine++
@@ -477,7 +477,7 @@ func (ev *EditorView) ensureCursorVisible() {
 			}
 			startRow++
 		} else {
-			break // Курсор виден
+			break // Cursor is visible
 		}
 	}
 }
@@ -507,9 +507,9 @@ func (ev *EditorView) getLineLength(line int) int {
 	}
 
 	data := ev.pt.GetRange(start, totalLen)
-	
-	// Безопасно уменьшаем длину, если в конце есть переносы строк.
-	// Сначала проверяем \n, затем (если он был) проверяем стоящий перед ним \r.
+
+	// Safely decrease length if there are line breaks at the end.
+	// First check for \n, then (if present) check for \r before it.
 	if totalLen > 0 && data[totalLen-1] == '\n' {
 		totalLen--
 		if totalLen > 0 && data[totalLen-1] == '\r' {
@@ -565,7 +565,7 @@ func (ev *EditorView) moveCursorVisual(dx, dy int) bool {
 	newFragIdx := currentFragIdx + dy
 	if newFragIdx >= 0 && newFragIdx < len(frags) {
 		f := frags[newFragIdx]
-		// Пытаемся сохранить визуальную колонку (DesiredCursorPos)
+		// Try to preserve visual column (DesiredCursorPos)
 		targetX := ev.DesiredCursorPos
 		if targetX >= len(f.cells) { targetX = len(f.cells) - 1 }
 		if targetX < 0 { targetX = 0 }
@@ -634,8 +634,8 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 		fCells := make([]visualCell, 0, width)
 		fStartByte := currByte
 
-		// Если следующий символ — WideCharFiller, значит текущий фрагмент
-		// должен закончиться раньше, чтобы не разрывать широкий символ.
+		// If the next character is WideCharFiller, then the current fragment
+		// must end earlier to avoid breaking a wide character.
 		actualEnd := end
 		if actualEnd < len(cells) && cells[actualEnd].Char == vtui.WideCharFiller {
 			actualEnd--
@@ -648,15 +648,15 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 			}
 		}
 
-		// Защита от бесконечного цикла: если фрагмент пустой (actualEnd <= i),
-		// значит ширина окна меньше ширины символа. В этом случае забираем
-		// хотя бы один физический символ (даже если он широкий), чтобы сдвинуться.
+		// Infinite loop protection: if fragment is empty (actualEnd <= i),
+		// it means window width is less than character width. In this case, take
+		// at least one physical character (even if wide) to move forward.
 		if actualEnd <= i && i < len(cells) {
 			actualEnd = i + 1
 			if actualEnd < len(cells) && cells[actualEnd].Char == vtui.WideCharFiller {
-				actualEnd++ // Забираем широкого целиком
+				actualEnd++ // Take the whole wide character
 			}
-			// Повторяем наполнение для этого спец-случая
+			// Repeat filling for this special case
 			fCells = nil
 			for j := i; j < actualEnd && j < len(cells); j++ {
 				fCells = append(fCells, visualCell{info: cells[j], byteOffset: currByte - fStartByte})
@@ -673,12 +673,12 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 			endByteInLine: currByte,
 		})
 
-		// Переходим к следующему фрагменту
-		i = i + (actualEnd - i) - width // Корректировка шага цикла (т.к. цикл делает i += width)
+		// Move to the next fragment
+		i = i + (actualEnd - i) - width // Loop step correction (since loop does i += width)
 	}
 
 	if len(fragments) == 0 {
-		// Для пустой строки создаем один пустой фрагмент
+		// Create one empty fragment for an empty line
 		fragments = append(fragments, lineFragment{
 			startOffset: startOffset,
 			startByteInLine: 0,
@@ -697,7 +697,7 @@ func (ev *EditorView) SaveToFile() {
 	if ev.filePath == "" {
 		return
 	}
-	// Сохранение содержимого PieceTable на диск.
+	// Saving PieceTable content to disk.
 	err := os.WriteFile(ev.filePath, ev.pt.Bytes(), 0644)
 	if err != nil {
 		vtui.DebugLog("EDITOR: Failed to save file: %v", err)
@@ -726,11 +726,11 @@ func (ev *EditorView) DeleteSelection() {
 	min, max := ev.getSelectionRange()
 	if max > min {
 		ev.pt.Delete(min, max-min)
-		// Инкрементальное обновление
+		// Incremental update
 		ev.li.UpdateAfterDelete(min, max-min)
 		ev.clearCaches()
 		ev.selActive = false
-		// Обновляем позицию курсора на начало бывшего выделения
+		// Update cursor position to the start of the former selection
 		ev.CursorLine = ev.li.GetLineAtOffset(min)
 		ev.CursorPos = min - ev.li.GetLineOffset(ev.CursorLine)
 	}

@@ -1,6 +1,6 @@
 package piecetable
 
-// BufferType указывает, в каком буфере находится фрагмент текста.
+// BufferType indicates which buffer a text fragment is in.
 type BufferType int
 
 const (
@@ -8,22 +8,22 @@ const (
 	Add
 )
 
-// Piece описывает один фрагмент текста.
+// Piece describes one text fragment.
 type Piece struct {
 	Buf    BufferType
-	Start  int // Смещение начала фрагмента в соответствующем буфере
-	Length int // Длина фрагмента
+	Start  int // Offset of the fragment start in the corresponding buffer
+	Length int // Piece length
 }
 
-// PieceTable — структура для эффективного редактирования больших текстов.
+// PieceTable is a structure for efficient editing of large texts.
 type PieceTable struct {
-	orig   []byte  // Исходный (Read-only) буфер
-	add    []byte  // Добавочный (Append-only) буфер
-	pieces []Piece // Таблица фрагментов
-	size   int     // Текущая логическая длина всего текста
+	orig   []byte  // Original (Read-only) buffer
+	add    []byte  // Additive (Append-only) buffer
+	pieces []Piece // Piece table
+	size   int     // Current logical length of the entire text
 }
 
-// New создает новую таблицу фрагментов из исходного текста.
+// New creates a new piece table from original text.
 func New(text []byte) *PieceTable {
 	pt := &PieceTable{
 		orig: text,
@@ -35,12 +35,12 @@ func New(text []byte) *PieceTable {
 	return pt
 }
 
-// Size возвращает текущую логическую длину текста.
+// Size returns current logical length of the text.
 func (pt *PieceTable) Size() int {
 	return pt.size
 }
 
-// offsetToPiece находит индекс фрагмента и смещение внутри него по глобальному смещению.
+// offsetToPiece finds piece index and offset within it by global offset.
 func (pt *PieceTable) offsetToPiece(offset int) (pieceIdx int, offsetInPiece int) {
 	if offset == pt.size {
 		return len(pt.pieces), 0
@@ -55,7 +55,7 @@ func (pt *PieceTable) offsetToPiece(offset int) (pieceIdx int, offsetInPiece int
 	return len(pt.pieces), 0
 }
 
-// Insert вставляет данные по указанному смещению.
+// Insert inserts data at the specified offset.
 func (pt *PieceTable) Insert(offset int, data []byte) {
 	if offset < 0 || offset > pt.size || len(data) == 0 {
 		return
@@ -65,14 +65,14 @@ func (pt *PieceTable) Insert(offset int, data []byte) {
 	pt.add = append(pt.add, data...)
 	newPiece := Piece{Buf: Add, Start: addStart, Length: len(data)}
 
-	// Если таблица пуста
+	// If the table is empty
 	if pt.size == 0 {
 		pt.pieces = []Piece{newPiece}
 		pt.size += len(data)
 		return
 	}
 
-	// Оптимизация: если вставляем в самый конец и предыдущий кусок тоже Add — сливаем их
+	// Optimization: if inserting at the very end and previous piece is also Add — merge them
 	if offset == pt.size && len(pt.pieces) > 0 {
 		lastIdx := len(pt.pieces) - 1
 		lastP := pt.pieces[lastIdx]
@@ -81,13 +81,13 @@ func (pt *PieceTable) Insert(offset int, data []byte) {
 			pt.size += len(data)
 			return
 		}
-		// Иначе просто добавляем новый кусок в конец
+		// Otherwise just append a new piece to the end
 		pt.pieces = append(pt.pieces, newPiece)
 		pt.size += len(data)
 		return
 	}
 
-	// Общий случай: вставка в середину
+	// General case: insertion in the middle
 	idx, off := pt.offsetToPiece(offset)
 	p := pt.pieces[idx]
 
@@ -95,10 +95,10 @@ func (pt *PieceTable) Insert(offset int, data []byte) {
 	newPieces = append(newPieces, pt.pieces[:idx]...)
 
 	if off == 0 {
-		// Вставка ровно перед куском
+		// Insertion exactly before the piece
 		newPieces = append(newPieces, newPiece, p)
 	} else {
-		// Разрезаем текущий кусок на два
+		// Split the current piece into two
 		left := Piece{Buf: p.Buf, Start: p.Start, Length: off}
 		right := Piece{Buf: p.Buf, Start: p.Start + off, Length: p.Length - off}
 		newPieces = append(newPieces, left, newPiece, right)
@@ -112,7 +112,7 @@ func (pt *PieceTable) Insert(offset int, data []byte) {
 	pt.size += len(data)
 }
 
-// Delete удаляет фрагмент текста заданной длины начиная со смещения.
+// Delete removes a text fragment of specified length starting from offset.
 func (pt *PieceTable) Delete(offset, length int) {
 	if offset < 0 || length <= 0 || offset+length > pt.size {
 		return
@@ -124,13 +124,13 @@ func (pt *PieceTable) Delete(offset, length int) {
 	var newPieces []Piece
 	newPieces = append(newPieces, pt.pieces[:startIdx]...)
 
-	// Остаток левого разрезанного куска
+	// Remainder of the left split piece
 	if startOff > 0 {
 		p := pt.pieces[startIdx]
 		newPieces = append(newPieces, Piece{Buf: p.Buf, Start: p.Start, Length: startOff})
 	}
 
-	// Остаток правого разрезанного куска
+	// Remainder of the right split piece
 	if endIdx < len(pt.pieces) {
 		p := pt.pieces[endIdx]
 		if endOff < p.Length {
@@ -138,7 +138,7 @@ func (pt *PieceTable) Delete(offset, length int) {
 		}
 	}
 
-	// Все куски после endIdx
+	// All pieces after endIdx
 	if endIdx+1 < len(pt.pieces) {
 		newPieces = append(newPieces, pt.pieces[endIdx+1:]...)
 	}
@@ -147,9 +147,9 @@ func (pt *PieceTable) Delete(offset, length int) {
 	pt.size -= length
 }
 
-// Bytes собирает и возвращает весь текущий текст.
-// Примечание: для рендеринга больших файлов в будущем мы напишем методы ReadAt,
-// чтобы не выгружать весь буфер в память.
+// Bytes assembles and returns all current text.
+// Note: for large file rendering in future we'll write ReadAt methods,
+// so as not to unload entire buffer into memory.
 func (pt *PieceTable) Bytes() []byte {
 	res := make([]byte, 0, pt.size)
 	for _, p := range pt.pieces {
@@ -162,11 +162,13 @@ func (pt *PieceTable) Bytes() []byte {
 	return res
 }
 
-// String возвращает текущий текст в виде строки (удобно для тестов).
+// String returns current text as a string (convenient for tests).
 func (pt *PieceTable) String() string {
 	return string(pt.Bytes())
-}// ForEachRange последовательно вызывает функцию для каждого фрагмента данных.
-// Это позволяет обрабатывать текст без аллокации единого большого слайса.
+}
+
+// ForEachRange sequentially calls a function for each data fragment.
+// This allows processing text without allocating a single large slice.
 func (pt *PieceTable) ForEachRange(fn func(data []byte)) {
 	for _, p := range pt.pieces {
 		if p.Buf == Original {
@@ -176,7 +178,8 @@ func (pt *PieceTable) ForEachRange(fn func(data []byte)) {
 		}
 	}
 }
-// GetRange возвращает срез байт для указанного диапазона.
+
+// GetRange returns a byte slice for the specified range.
 func (pt *PieceTable) GetRange(offset, length int) []byte {
 	if offset < 0 || length <= 0 || offset+length > pt.size {
 		return nil
@@ -190,7 +193,7 @@ func (pt *PieceTable) GetRange(offset, length int) []byte {
 	for i := startIdx; i < len(pt.pieces) && remaining > 0; i++ {
 		p := pt.pieces[i]
 
-		// Определяем, сколько данных берем из этого куска
+		// Determine how much data we take from this piece
 		take := p.Length - offInPiece
 		if take > remaining {
 			take = remaining
@@ -206,7 +209,7 @@ func (pt *PieceTable) GetRange(offset, length int) []byte {
 		res = append(res, buf[p.Start+offInPiece : p.Start+offInPiece+take]...)
 
 		remaining -= take
-		offInPiece = 0 // Для последующих кусков читаем с начала
+		offInPiece = 0 // For subsequent pieces, read from start
 	}
 
 	return res

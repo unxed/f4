@@ -18,29 +18,29 @@ func TestPieceTable_Basic(t *testing.T) {
 func TestPieceTable_Insert(t *testing.T) {
 	pt := New([]byte("Hello"))
 
-	// Вставка в конец (Append)
+	// Insert at end (Append)
 	pt.Insert(5, []byte(" World"))
 	if pt.String() != "Hello World" {
 		t.Errorf("Insert end failed: %s", pt.String())
 	}
 
-	// Оптимизация добавления: добавляем символ в конец, кусок должен объединиться
+	// Addition optimization: adding character at end, pieces should merge
 	pt.Insert(11, []byte("!"))
 	if pt.String() != "Hello World!" {
 		t.Errorf("Insert optimization failed: %s", pt.String())
 	}
-	// У нас должно быть ровно 2 куска: [Hello] и [ World!]
+	// We should have exactly 2 pieces: [Hello] and [ World!]
 	if len(pt.pieces) != 2 {
 		t.Errorf("Optimization failed, expected 2 pieces, got %d", len(pt.pieces))
 	}
 
-	// Вставка в начало
+	// Insert at start
 	pt.Insert(0, []byte("Say "))
 	if pt.String() != "Say Hello World!" {
 		t.Errorf("Insert start failed: %s", pt.String())
 	}
 
-	// Вставка в середину (разрезание оригинального буфера)
+	// Insert in middle (splitting original buffer)
 	pt.Insert(6, []byte("o "))
 	if pt.String() != "Say Heo llo World!" {
 		t.Errorf("Insert middle failed: %s", pt.String())
@@ -50,25 +50,25 @@ func TestPieceTable_Insert(t *testing.T) {
 func TestPieceTable_Delete(t *testing.T) {
 	pt := New([]byte("Hello World!"))
 
-	// Удаление из середины одного куска
-	pt.Delete(5, 6) // Удаляем " World"
+	// Deleting from middle of one piece
+	pt.Delete(5, 6) // Remove " World"
 	if pt.String() != "Hello!" {
 		t.Errorf("Delete middle failed: %s", pt.String())
 	}
-	// После удаления из середины 1 кусок должен превратиться в 2
+	// After middle deletion, 1 piece should become 2
 	if len(pt.pieces) != 2 {
 		t.Errorf("Expected 2 pieces after middle delete, got %d", len(pt.pieces))
 	}
 
-	// Удаление на границе (с захватом конца левого и начала правого куска)
-	pt.Insert(5, []byte(" World")) // Восстановили: "Hello World!" -> куски: ["Hello"], [" World"], ["!"]
+	// Deleting on boundary (capturing end of left and start of right piece)
+	pt.Insert(5, []byte(" World")) // Restored: "Hello World!" -> pieces: ["Hello"], [" World"], ["!"]
 
-	pt.Delete(4, 3) // Удаляем "o W" -> Должно остаться "Hellorld!"
+	pt.Delete(4, 3) // Remove "o W" -> Should leave "Hellorld!"
 	if pt.String() != "Hellorld!" {
 		t.Errorf("Delete across boundary failed: %s", pt.String())
 	}
 
-	// Удаление всего текста
+	// Deleting all text
 	pt.Delete(0, pt.Size())
 	if pt.String() != "" {
 		t.Errorf("Delete all failed: '%s'", pt.String())

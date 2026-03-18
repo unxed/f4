@@ -60,7 +60,7 @@ func main() {
 	panels.ResizeConsole(width, height) // Initialize panel sizes before pushing
 	vtui.FrameManager.Push(panels)
 
-	// Создаем тестовую панель с большим количеством файлов для скроллбара
+	// Create test panel with many files for scrollbar
 	if fsp, ok := panels.left.(*FileSystemPanel); ok {
 		for i := 0; i < 50; i++ {
 			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})

@@ -3,7 +3,7 @@ package piecetable
 import "testing"
 
 func TestLineIndex_Build(t *testing.T) {
-	// Текст:
+	// Text:
 	// Line 1 (6 bytes: L,i,n,e,1,\n)
 	// Line 2 (6 bytes: L,i,n,e,2,\n)
 	// Line 3 (5 bytes: L,i,n,e,3)
@@ -15,7 +15,7 @@ func TestLineIndex_Build(t *testing.T) {
 		t.Errorf("Expected 3 lines, got %d", li.LineCount())
 	}
 
-	// Проверка смещений
+	// Check offsets
 	if li.GetLineOffset(0) != 0 {
 		t.Errorf("Line 0 offset: expected 0, got %d", li.GetLineOffset(0))
 	}
@@ -50,7 +50,7 @@ func TestLineIndex_GetLineAtOffset(t *testing.T) {
 	}
 }
 func TestLineIndex_AppendAtEOF(t *testing.T) {
-	// Проверка вставки в конец файла без \n
+	// Check insertion at EOF without \n
 	pt := New([]byte("NoNewline"))
 	li := NewLineIndex()
 	li.Rebuild(pt)
@@ -63,7 +63,7 @@ func TestLineIndex_AppendAtEOF(t *testing.T) {
 		t.Errorf("Expected 1 line, got %d", li.LineCount())
 	}
 
-	// Вставляем \n в середину
+	// Insert \n into the middle
 	newline := []byte("\n")
 	pt.Insert(2, newline)
 	li.UpdateAfterInsert(2, newline)
@@ -87,24 +87,24 @@ func TestLineIndex_Empty(t *testing.T) {
 }
 
 func TestLineIndex_DeepConsistency(t *testing.T) {
-	// Проверяем, что серия инкрементальных обновлений дает тот же результат,
-	// что и полный Rebuild.
+	// Check that a series of incremental updates gives the same result
+	// as a full Rebuild.
 	text := []byte("Line 1\nLine 2\nLine 3")
 	pt := New(text)
 	li := NewLineIndex()
 	li.Rebuild(pt)
-	
-	// 1. Вставка в середину с переносом
+
+	// 1. Insertion in the middle with a break
 	insertData := []byte("New\nData")
-	offset := 7 // Начало "Line 2"
+	offset := 7 // Start of "Line 2"
 	pt.Insert(offset, insertData)
 	li.UpdateAfterInsert(offset, insertData)
-	
-	// 2. Удаление части текста
+
+	// 2. Deleting part of the text
 	pt.Delete(2, 10)
 	li.UpdateAfterDelete(2, 10)
-	
-	// Сравниваем с эталоном
+
+	// Compare with the reference
 	liExpected := NewLineIndex()
 	liExpected.Rebuild(pt)
 	
@@ -119,7 +119,7 @@ func TestLineIndex_DeepConsistency(t *testing.T) {
 	}
 }
 func TestLineIndex_IncrementalStress(t *testing.T) {
-	// Псевдо-рандомный тест на выносливость индекса
+	// Pseudo-random index endurance test
 	pt := New([]byte("Initial Text\nLine 2\nLine 3"))
 	li := NewLineIndex()
 	li.Rebuild(pt)
@@ -130,7 +130,7 @@ func TestLineIndex_IncrementalStress(t *testing.T) {
 		data   string
 	}{
 		{true, 5, "!!!\n!!!"},
-		{false, 2, "12345"}, // удаление 5 байт со смещения 2
+		{false, 2, "12345"}, // deleting 5 bytes from offset 2
 		{true, 0, "\nStart\n"},
 		{false, 10, "1"},
 		{true, 15, "End"},
@@ -147,7 +147,7 @@ func TestLineIndex_IncrementalStress(t *testing.T) {
 			li.UpdateAfterDelete(op.off, length)
 		}
 
-		// Сравнение с честным Rebuild на каждом шаге
+		// Comparison with honest Rebuild at each step
 		liRef := NewLineIndex()
 		liRef.Rebuild(pt)
 

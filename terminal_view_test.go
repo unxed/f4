@@ -35,19 +35,19 @@ func TestTerminalView_SaveRestoreCursor(t *testing.T) {
 
 func TestTerminalView_ScrollingRegion(t *testing.T) {
 	tv := NewTerminalView(80, 10)
-	// Устанавливаем регион прокрутки: строки со 2 по 5 (1-based: 3;6)
+	// Set scrolling region: lines 2 to 5 (1-based: 3;6)
 	tv.ScrollTop = 2
 	tv.ScrollBottom = 5
 
-	// Заполняем строку 5
+	// Filling line 5
 	tv.SetCursor(0, 5)
 	tv.PutChar('X', 0)
 
-	// Вызываем прокрутку в регионе (перенос строки на последней строке региона)
+	// Call scroll in region (newline on the last line of region)
 	tv.SetCursor(0, 5)
 	tv.PutChar('\n', 0)
 
-	// Проверяем: строка 5 должна стать пустой, а 'X' должен уехать на строку 4
+	// Check: line 5 should be empty, and 'X' should move to line 4
 	if tv.Lines[4][0].Char != 'X' {
 		t.Errorf("Scroll region failed: 'X' should be at line 4, got %c at line 5", rune(tv.Lines[5][0].Char))
 	}
@@ -60,16 +60,16 @@ func TestTerminalView_AutoWrap(t *testing.T) {
 	tv := NewTerminalView(width, 5)
 	tv.SetCursor(0, 0)
 
-	// Пишем 10 символов (заполняем строку)
+	// Write 10 characters (fill line)
 	for i := 0; i < 10; i++ {
 		tv.PutChar('X', 0)
 	}
 
-	if tv.CursorX != 10 { // На грани
+	if tv.CursorX != 10 { // On the edge
 		t.Errorf("CursorX should be 10, got %d", tv.CursorX)
 	}
 
-	// Пишем 11-й символ. Должен произойти автоперенос.
+	// Write 11th character. Auto-wrap should occur.
 	tv.PutChar('Y', 0)
 
 	if tv.CursorY != 1 {

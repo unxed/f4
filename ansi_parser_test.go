@@ -183,9 +183,9 @@ func TestAnsiParser_OSC4_Palette(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	p := NewAnsiParser(tv, nil)
 
-	// ANSI Color 1 — Red. По умолчанию в палитре f4 это 0xA00000.
-	// Меняем его через OSC 4 на ярко-зеленый #00FF00
-	// Формат: ESC ] 4 ; index ; color BEL
+	// ANSI Color 1 — Red. By default in f4 palette it's 0xA00000.
+	// Change it via OSC 4 to bright green #00FF00
+	// Format: ESC ] 4 ; index ; color BEL
 	oscSeq := "\x1b]4;1;#00FF00\x07"
 	p.Process([]byte(oscSeq))
 
@@ -197,7 +197,7 @@ func TestAnsiParser_REP_ECH(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	p := NewAnsiParser(tv, nil)
 
-	// 1. Тест REP (Repeat last char): пишем 'A' и повторяем 5 раз
+	// 1. Test REP (Repeat last char): write 'A' and repeat 5 times
 	p.Process([]byte("A\x1b[5b"))
 	line := tv.Lines[tv.CursorY]
 	for i := 0; i < 6; i++ {
@@ -206,7 +206,7 @@ func TestAnsiParser_REP_ECH(t *testing.T) {
 		}
 	}
 
-	// 2. Тест ECH (Erase characters): стираем 3 символа с позиции 0
+	// 2. Test ECH (Erase characters): erase 3 characters from position 0
 	tv.SetCursor(0, tv.CursorY)
 	p.Process([]byte("\x1b[3X"))
 	for i := 0; i < 3; i++ {
@@ -219,7 +219,7 @@ func TestAnsiParser_SplitUTF8(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	p := NewAnsiParser(tv, nil)
 
-	// Символ 'П' (0xD0 0x9F) отправляем по частям
+	// Symbol 'П' (0xD0 0x9F) sent in parts
 	p.Process([]byte{0xD0})
 	if tv.Lines[tv.CursorY][0].Char == 0xD0 {
 		t.Error("Parser should not put incomplete UTF-8 byte on screen")
