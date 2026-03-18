@@ -1,77 +1,77 @@
+# f4 (an experimental Far Manager / far2l clone in Go)
 
-#### f4 (a far2l clone in go)
+**The Core:** Creating an experimental, cross-platform TUI (Terminal User Interface) file manager that aims to fully replicate the features, UX, data structures, and rendering logic of `far2l` and Far Manager, but implemented entirely in Go.
 
-**The Core:** Creating a modern cross-platform TUI (Terminal User Interface) file manager that fully replicates the features, UX, data structures, and rendering logic of `far2l`, but implemented in Go.
+### Philosophy & Goals
 
-**Why Go?**
-1. High development speed and perfect compatibility with LLM-based code generation.
-2. Native concurrency (goroutines) for I/O operations (ensuring no UI freezes while calculating folder sizes).
-3. Performance: Thanks to a zero-allocation approach in the rendering loop, Garbage Collector (GC) pauses are kept below 0.5ms, making them unnoticeable compared to terminal I/O latency.
+This project is built around several core philosophical and technical principles:
 
-**Plugin Architecture (Hybrid In-Process):**
-Total rejection of JSON-RPC due to input lag. Plugins will run within the same address space or host memory:
-1. **Lua (`gopher-lua`):** For fast macros, scripting, and UI customization.
-2. **WASM (`wazero`):** For heavy system plugins (archivers, VFS, parsers). Provides 100% portability (a single `.wasm` file for Linux, macOS, and Windows) and security (sandboxing).
+1. **The Go Experiment:** Testing the viability of building a heavy-duty TUI in Go. Go provides cross-platform compilation out of the box, fast development, and zero dependency hell (e.g., an x64 Linux binary runs on any x64 Linux without external library issues).
+2. **AI-Driven:** Active use of modern, powerful LLMs like Gemini 3.1 Pro for test-driven development and code generation. LLMs write Go exceptionally well.
+3. **Test-Driven Development (TDD):** Ensuring core stability and behavioral correctness from the start.
+4. **Memory Management:** Go has a Garbage Collector (GC), but we use local optimizations (like a zero-allocation rendering loop) to bypass GC lag where it matters, keeping UI freezes unnoticeable.
+5. **Far Heritage:** Copying all successful concepts from Far (screen buffer, frame manager, etc.) and keeping internal structures and their names as close to the original C++ versions as possible.
+6. **Iterative Scope:** First, replicate 1:1 everything in `far2l` that is personally needed by the author (on Linux). Next, cover everything else in `far2l`. Finally, port useful additions that appeared in Far3.
+7. **Bazaar Policy:** Openness to community contributions and patches.
 
----
+*Trade-offs:* The compiled binary is currently ~10MB, which might not fit in highly constrained environments like home routers.
 
-#### vtui Architecture (UI Framework)
+### UI & Input
 
-We are not using existing UI frameworks. We are building our own `vtui` framework around data structures similar to those used in `far2l`. This provides a familiar environment for C++ version developers and allows for easy algorithm porting.
+UI & input libraries are developed separately (`vtui`, `vtinput`)
 
-**1. Base Types (Win32/far2l Port):**
-We will use Go equivalents:
-```go
-type Coord struct { X, Y int16 }
-type SmallRect struct { Left, Top, Right, Bottom int16 }
+*   **Modern Terminals Only:** We target actively developed terminals (Konsole, kitty, iTerm2, Windows Terminal). Other terminals simply won't allow replicating Far's UI accurately.
+*   **Input (`vtinput`):** Built as a separate library to handle advanced protocols like the Kitty Keyboard Protocol and Win32 Input Mode. This is strictly required for distinguishing combinations like `Ctrl+Enter` or `Shift+Tab`.
+*   **Framework (`vtui`):** A custom UI framework built from scratch in the style of Far, borrowing responsive layout features (like window resizing and anchors) from Turbo Vision. Ideally, it should cover all capabilities of Far's UI kit and Turbo Vision (excluding non-relevant features like custom serialization engines).
+*   **Future Renderers:** We currently render exclusively via ANSI ESC sequences (yielding TrueColor out of the box). In the future, a custom GUI renderer (for example, via SDL or OpenGL) may be added, similar to `far2l`.
 
-// far2l uses DWORD64 for attributes (including RGB) and COMP_CHAR
-type CharInfo struct {
-    Char       uint64 // Corresponds to union (WCHAR/COMP_CHAR)
-    Attributes uint64 // Corresponds to DWORD64 Attributes
-}
-```
+### Integrated Terminal & OS Integration
 
-**2. Attribute Concept (from `far2l`):**
-*   Lower 16 bits: Classic Win32 colors (FOREGROUND_BLUE, etc.) and flags.
-*   Bits 16-39: 24-bit RGB text color (`FOREGROUND_TRUECOLOR`).
-*   Bits 40-63: 24-bit RGB background color (`BACKGROUND_TRUECOLOR`).
+*   **Built-in Terminal:** A fully-fledged built-in terminal running underneath the panels, just like `far2l`.
+*   **Windows Strategy:** We target recent Windows versions that support ConPTY. A built-in terminal cannot be implemented properly without it. We avoid the legacy Windows Console API entirely and rely purely on ESC sequence rendering.
+And, since we are targeting the latest versions of Windows, we can afford not to render in the old Windows console API, but to render directly in the escape sequence for the Windows Terminal, which is definitely present in modern versions of Windows. Windows Terminal supports all we need for proper input, clipboard operations, etc.
 
-**3. Virtual Screen (ScreenBuf):**
-A precise analog of `ScreenBuf` from `scrbuf.cpp`.
-*   **Double Buffering:** Contains `Buf` (current logic state) and `Shadow` (what is currently physically on the terminal screen).
-*   **Diff & Flush:** The `Flush()` method compares `Buf` and `Shadow`. When differences are found, it generates and outputs the minimum necessary set of ANSI escape sequences (cursor positioning, color changes, character output) to `stdout`, then copies the changes to `Shadow`. Rendering is performed without allocations.
+### Plugin Architecture (Hybrid In-Process)
 
-**4. Object Hierarchy (ScreenObject):**
-A base interface/struct `ScreenObject` (analogous to `scrobj.hpp`), implemented by all UI elements (Panels, Dialogs, Viewer).
-*   Properties: `X1, Y1, X2, Y2`, Visibility flags.
-*   Methods: `Show()`, `Hide()`, `ProcessKey()`, `ProcessMouse()`.
+Initially we considered JSON-RPC approach, but rejected it due to possible input lag, so plugins will run within the same address space or host memory:
+
+1. **WASM (`wazero`):** For heavy system plugins (archivers, VFS, parsers). Write in Go, C, C++, Zig, Rust, etc.—anything that compiles to WASM. Provides 100% portability (a single `.wasm` file for all OSes) and sandboxed security.
+2. **Lua (`gopher-lua`):** For fast macros, scripting, and UI customization.
+3. **Python:** Just as Lua. Planned for future integration.
+4. **API Universality:** The plugin API will ideally support adapter wrappers for *any* existing Far API: Far2, Far3, far2m, and far2l.
+5. **Internal Plugins:** The most critical plugins (like network protocols) will be statically linked into the binary but will use the exact same HostAPI as external plugins.
 
 ---
 
-#### Roadmap
+### Roadmap
 
-**Phase 1: Foundation (`vtui` package)**
-1. Port `CharInfo`, `Coord`, `SmallRect` structures, color constants, and color-handling macros (GET_RGB_FORE, SET_RGB_FORE, etc.).
-2. Create the `ScreenBuf` class (struct) with `AllocBuf`, `Write(x, y, text)`, and `ApplyColor` methods.
-3. Write the `Flush()` algorithm that translates the difference between `Buf` and `Shadow` into raw VT (ANSI) sequences and outputs them to the terminal.
-4. Integrate `vtinput` into a test loop that renders keyboard/mouse reactions onto the `ScreenBuf`.
+**Phase 1: Foundation (Done)**
+*   `vtinput`: Advanced keyboard protocol parsing (Kitty, Win32, Legacy).
+*   `vtui` Core: `CharInfo`, `ScreenBuf` double-buffering, zero-allocation `Flush()`.
+*   `vtui` Primitives: `ScreenObject`, Dialogs, Menus, Buttons, Edits, Layouts (`GrowMode`).
 
-**Phase 2: Base UI Primitives (`vtui/views` package)**
-1. Base `ScreenObject` (coordinate management, focus, background preservation via `SaveScreen`).
-2. `Frame/Box` (border rendering).
-3. `VMenu` (vertical menu) with scrolling and mouse support.
+**Phase 2: Core Application (Done)**
+*   Base `f4` UI: Panels, CommandLine, KeyBar, MenuBar.
+*   `EditorView` powered by an optimized Piece Table (bracketed paste, UTF-8, zero-allocation render).
+*   Built-in Terminal (`TerminalView` + ANSI Parser + Unix PTY integration).
+*   Plugin Manager foundation (WASM via wazero, Lua via gopher-lua).
 
-**Phase 3: f4 Core Preparation (`f4` package)**
+**Phase 3: Parity & VFS Expansion (Current)**
+*   Complete remaining standard Far dialogs (Search, Copy/Move, File Attributes, Configuration).
+*   Implement mostly used file manager features like copy file, make folder, etc.
+*   Expand VFS (Virtual File System) to support archives and network protocols (FTP, SFTP) as internal plugins.
+
+**Phase 4: Advanced Features (Future)**
+*   Windows ConPTY backend implementation.
+*   All far2l features.
+*   All Far3 and far2m features.
+*   Flesh out `HostAPI` to support comprehensive wrappers for other Far verisons APIs, implement whose wrappers
+*   Python plugin support.
+*   Custom GUI renderer (SDL/OpenGL).
 
 ---
 
-Project folder structure: `f4_project` -> `f4`, `vtui`, `vtinput`.
-Development is carried out via small patches in the `ap` format (https://github.com/unxed/ap).
-
----
-
-#### Getting Started (Ubuntu)
+### Getting Started (Ubuntu)
 
 **1. Install Prerequisites**
 Ensure you have Go (1.24 or newer) installed:
@@ -84,11 +84,9 @@ sudo apt install golang git
 The project consists of three main components that must reside in the same parent directory:
 ```bash
 mkdir f4_project && cd f4_project
-# Place f4, vtui, and vtinput folders here.
-# If you are cloning:
-# git clone https://github.com/unxed/f4.git
-# git clone https://github.com/unxed/vtui.git
-# git clone https://github.com/unxed/vtinput.git
+git clone https://github.com/unxed/f4.git
+git clone https://github.com/unxed/vtui.git
+git clone https://github.com/unxed/vtinput.git
 ```
 
 **3. Build**
@@ -109,30 +107,24 @@ To enable detailed logging to `debug.log`, run with the `VTUI_DEBUG` environment
 VTUI_DEBUG=1 ./f4
 ```
 
-#### Performance & Architecture Notes
+---
 
-##### Instant Bracketed Paste
-To achieve near-instantaneous text insertion for large clipboard buffers (comparable to `far2l`), `f4` utilizes several coordinated strategies:
+### Performance & Architecture Notes
 
-1.  **Atomic Commits:** The `EditorView` detects `PasteStart` and `PasteEnd` events. Instead of modifying the data model byte-by-byte, it accumulates incoming text in a temporary buffer and performs a single, atomic insertion into the `PieceTable`. This prevents memory fragmentation and reduces `LineIndex` updates from thousands to one.
-2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While a component is busy (e.g., during a paste operation), the UI rendering phase and terminal `Flush()` are entirely suppressed. This eliminates visual jitter and "running text" artifacts.
-3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a 2ms micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass. This ensures that even if the terminal sends data in chunks, the entire burst is processed as a single visual update.
-4.  **Zero-Allocation Rendering:** The `vtui` core is designed to minimize heap allocations during the `Flush()` cycle. By comparing the logical buffer with a physical screen "shadow," only the minimum necessary ANSI sequences are sent to the terminal.
+**Instant Bracketed Paste**
+To achieve near-instantaneous pasting text via terminal Paste feature for large clipboard buffers (comparable to `far2l`), `f4` utilizes several coordinated strategies:
+1.  **Atomic Commits:** The `EditorView` detects `PasteStart` and `PasteEnd` events. Instead of modifying the data model byte-by-byte, it accumulates incoming text in a temporary buffer and performs a single, atomic insertion into the `PieceTable`.
+2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While busy, the UI rendering phase and terminal `Flush()` are entirely suppressed, eliminating visual jitter.
+3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass.
+4.  **Zero-Allocation Rendering:** The `vtui` core minimizes heap allocations during the `Flush()` cycle, sending only the minimum necessary ANSI sequences to the terminal.
 
-### Why vtui?
-
-While `tcell` and `tview` are industry standards for Go-based terminal applications, `f4` utilizes `vtui` to achieve a higher level of interactive performance and UX consistency.
-
-1. **Advanced Input:** `vtui` uses `vtinput` library that supports full-featured input protocols of advanced terminals: kitty keyboard protocol and win32 input mode. This is critical where precise handling of combined modifiers (Ctrl, Alt, Shift) is non-negotiable.
-2. **Optimized Rendering:** Unlike `tview` which often re-renders widgets, `vtui` uses a `ScreenBuf` approach to send only modified terminal cells, ensuring best performance.
-3. **Stateful Interaction:** `vtui` architecture provides a robust, stateful hierarchy for handling nested modal dialogs and focus cycles, mimicking Turbo Vision/Delphi/WinForms: ideal for complex application like file manager (or spreadsheet, or database client, or mp3 player, etc).
-
-#### vtui vs. tcell + tview/cview
+**Why vtui? (vtui vs. tcell + tview/cview)**
+While `tcell` and `tview` are industry standards for Go-based terminal applications, `f4` utilizes `vtui` to achieve a higher level of interactive performance and UX consistency tailored for heavy-duty TUIs.
 
 | Criterion | tcell + tview/cview | vtui (f4) |
 | :--- | :--- | :--- |
 | **Layout Philosophy** | Flexbox/Grid (Web-like) | GrowMode/Anchors (Win32/Turbo Vision) |
 | **Focus Handling** | Linear or component-specific | Hierarchical |
-| **Keyboard** | General | Full-featured (kitty/win32 protocols) |
-| **Rendering** | Full-widget updates | Only changed cells are updated |
-| **Better suits for** | CLI dashboards | Stateful desktop-class applications |
+| **Keyboard** | General terminfo mapping | Full-featured (kitty/win32 protocols) |
+| **Rendering** | Full-widget declarative updates | Bitwise diffing (only changed cells are updated) |
+| **Target Use Case** | CLI dashboards | Stateful desktop-class applications |
