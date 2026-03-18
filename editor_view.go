@@ -43,6 +43,9 @@ type EditorView struct {
 
 	filePath   string
 	done       bool
+
+	lineLengthCache   map[int]int
+	lineFragmentCache map[int]map[int][]lineFragment
 }
 
 func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
@@ -52,10 +55,16 @@ func NewEditorView(pt *piecetable.PieceTable, path string) *EditorView {
 		filePath: path,
 		WordWrap: true,
 	}
+	ev.clearCaches()
 	ev.li.Rebuild(pt)
 	ev.SetCanFocus(true)
 	ev.SetFocus(true)
 	return ev
+}
+
+func (ev *EditorView) clearCaches() {
+	ev.lineLengthCache = make(map[int]int)
+	ev.lineFragmentCache = make(map[int]map[int][]lineFragment)
 }
 
 func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
@@ -79,7 +88,8 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	rowsRendered := 0
 	for logLineIdx := ev.ScrollTop; logLineIdx < ev.li.LineCount() && rowsRendered < height; logLineIdx++ {
 		fragments := ev.getLineFragments(logLineIdx, width)
-		
+		lineLen := ev.getLineLength(logLineIdx)
+
 		startFrag := 0
 		if logLineIdx == ev.ScrollTop {
 			startFrag = ev.ScrollSubLine
@@ -114,7 +124,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				}
 				scr.SetCursorPos(ev.X1+vx, currY)
 				scr.SetCursorVisible(true)
-			} else if logLineIdx == ev.CursorLine && ev.CursorPos == ev.getLineLength(logLineIdx) && fIdx == len(fragments)-1 {
+			} else if logLineIdx == ev.CursorLine && ev.CursorPos == lineLen && fIdx == len(fragments)-1 {
 				// Курсор в самом конце строки (после последнего символа)
 				vx := len(frag.cells)
 				if vx < width {
@@ -143,7 +153,8 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				ev.pt.Insert(offset, data)
 				// Инкрементальное обновление вместо тяжелого Rebuild
 				ev.li.UpdateAfterInsert(offset, data)
-				
+				ev.clearCaches()
+
 				newOffset := offset + len(data)
 				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
 				ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
@@ -201,6 +212,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.WordWrap = !ev.WordWrap
 		ev.ScrollLeft = 0
 		ev.ScrollSubLine = 0
+		ev.clearCaches()
 		ev.updateDesiredPos()
 		ev.ensureCursorVisible()
 		return true
@@ -317,6 +329,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
 					ev.pt.Delete(offset-1, 1)
 					ev.li.UpdateAfterDelete(offset-1, 1)
+					ev.clearCaches()
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
@@ -327,6 +340,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 					ev.pt.Delete(offset-size, size)
 					ev.li.UpdateAfterDelete(offset-size, size)
+					ev.clearCaches()
 					ev.CursorPos -= size
 				}
 			}
@@ -349,6 +363,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 				ev.pt.Delete(offset, size)
 				ev.li.UpdateAfterDelete(offset, size)
+				ev.clearCaches()
 			}
 		}
 		ev.ensureCursorVisible()
@@ -359,6 +374,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		ev.pt.Insert(offset, []byte("\n"))
 		ev.li.UpdateAfterInsert(offset, []byte("\n"))
+		ev.clearCaches()
 		ev.CursorLine++
 		ev.CursorPos = 0
 		ev.DesiredCursorPos = 0
@@ -372,6 +388,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
 		ev.li.UpdateAfterInsert(offset, data)
+		ev.clearCaches()
 		ev.CursorPos += len(data)
 		ev.DesiredCursorPos = ev.CursorPos
 		ev.ensureCursorVisible()
@@ -405,35 +422,40 @@ func (ev *EditorView) ensureCursorVisible() {
 	// Скроллинг для Word Wrap: считаем визуальные ряды
 	ev.ScrollLeft = 0
 
-	for {
-		// 1. Находим, на каком визуальном ряду сейчас курсор
-		cursorRow := -1
-		totalRows := 0
+	// 1. Находим, на каком визуальном ряду сейчас курсор
+	cursorRow := -1
+	totalRows := 0
 
-		// Считаем ряды от начала документа до курсора
-		for l := 0; l <= ev.CursorLine; l++ {
-			frags := ev.getLineFragments(l, width)
-			for fIdx, f := range frags {
-				onThisFrag := (l == ev.CursorLine && ev.CursorPos >= f.startByteInLine && ev.CursorPos < f.endByteInLine)
-				// Краевой случай: курсор в самом конце строки
-				if !onThisFrag && l == ev.CursorLine && ev.CursorPos == ev.getLineLength(l) && fIdx == len(frags)-1 {
-					onThisFrag = true
-				}
-
-				if onThisFrag {
-					cursorRow = totalRows
-				}
-				totalRows++
+	// Считаем ряды от начала документа до курсора
+	for l := 0; l <= ev.CursorLine; l++ {
+		frags := ev.getLineFragments(l, width)
+		lineLen := ev.getLineLength(l)
+		for fIdx, f := range frags {
+			onThisFrag := (l == ev.CursorLine && ev.CursorPos >= f.startByteInLine && ev.CursorPos < f.endByteInLine)
+			// Краевой случай: курсор в самом конце строки
+			if !onThisFrag && l == ev.CursorLine && ev.CursorPos == lineLen && fIdx == len(frags)-1 {
+				onThisFrag = true
 			}
-		}
 
-		// 2. Находим, какой визуальный ряд сейчас самый верхний (ScrollTop + ScrollSubLine)
-		startRow := 0
-		for l := 0; l < ev.ScrollTop; l++ {
-			startRow += len(ev.getLineFragments(l, width))
+			if onThisFrag {
+				cursorRow = totalRows
+				break
+			}
+			totalRows++
 		}
-		startRow += ev.ScrollSubLine
+		if cursorRow != -1 {
+			break
+		}
+	}
 
+	// 2. Находим, какой визуальный ряд сейчас самый верхний (ScrollTop + ScrollSubLine)
+	startRow := 0
+	for l := 0; l < ev.ScrollTop; l++ {
+		startRow += len(ev.getLineFragments(l, width))
+	}
+	startRow += ev.ScrollSubLine
+
+	for {
 		// 3. Проверяем видимость
 		if cursorRow < startRow {
 			// Скроллим вверх по одному визуальному ряду
@@ -443,6 +465,7 @@ func (ev *EditorView) ensureCursorVisible() {
 				ev.ScrollTop--
 				ev.ScrollSubLine = len(ev.getLineFragments(ev.ScrollTop, width)) - 1
 			} else { break }
+			startRow--
 		} else if cursorRow >= startRow+height {
 			// Скроллим вниз по одному визуальному ряду
 			maxSub := len(ev.getLineFragments(ev.ScrollTop, width)) - 1
@@ -452,6 +475,7 @@ func (ev *EditorView) ensureCursorVisible() {
 				ev.ScrollTop++
 				ev.ScrollSubLine = 0
 			}
+			startRow++
 		} else {
 			break // Курсор виден
 		}
@@ -467,6 +491,9 @@ func (ev *EditorView) IsBusy() bool { return ev.pasting }
 func (ev *EditorView) getLineLength(line int) int {
 	if line < 0 || line >= ev.li.LineCount() {
 		return 0
+	}
+	if length, ok := ev.lineLengthCache[line]; ok {
+		return length
 	}
 	start := ev.li.GetLineOffset(line)
 	end := ev.pt.Size()
@@ -489,6 +516,7 @@ func (ev *EditorView) getLineLength(line int) int {
 			totalLen--
 		}
 	}
+	ev.lineLengthCache[line] = totalLen
 	return totalLen
 }
 
@@ -555,6 +583,12 @@ func (ev *EditorView) moveCursorVisual(dx, dy int) bool {
 func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 	if lineIdx < 0 || lineIdx >= ev.li.LineCount() || width <= 0 {
 		return nil
+	}
+
+	if wCache, ok := ev.lineFragmentCache[width]; ok {
+		if frags, ok := wCache[lineIdx]; ok {
+			return frags
+		}
 	}
 
 	startOffset := ev.li.GetLineOffset(lineIdx)
@@ -651,6 +685,12 @@ func (ev *EditorView) getLineFragments(lineIdx, width int) []lineFragment {
 			endByteInLine: 0,
 		})
 	}
+
+	if ev.lineFragmentCache[width] == nil {
+		ev.lineFragmentCache[width] = make(map[int][]lineFragment)
+	}
+	ev.lineFragmentCache[width][lineIdx] = fragments
+
 	return fragments
 }
 func (ev *EditorView) SaveToFile() {
@@ -688,6 +728,7 @@ func (ev *EditorView) DeleteSelection() {
 		ev.pt.Delete(min, max-min)
 		// Инкрементальное обновление
 		ev.li.UpdateAfterDelete(min, max-min)
+		ev.clearCaches()
 		ev.selActive = false
 		// Обновляем позицию курсора на начало бывшего выделения
 		ev.CursorLine = ev.li.GetLineAtOffset(min)
