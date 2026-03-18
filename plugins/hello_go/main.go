@@ -9,6 +9,8 @@ func f4Log(ptr uint32, len uint32)
 
 //go:wasmimport env F4_GetVersion
 func f4GetVersion(ptr uint32, maxlen uint32) uint32
+//go:wasmimport env F4_Message
+func f4Message(ptr uint32, len uint32)
 
 func main() {
 	buf := make([]byte, 64)
@@ -18,5 +20,5 @@ func main() {
 	msg := "Hello from Go WASM Plugin! Host version: " + ver
 
 	b := []byte(msg)
-	f4Log(uint32(uintptr(unsafe.Pointer(&b[0]))), uint32(len(b)))
+	f4Message(uint32(uintptr(unsafe.Pointer(&b[0]))), uint32(len(b)))
 }

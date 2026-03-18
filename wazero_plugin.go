@@ -32,6 +32,7 @@ func (p *WasmPlugin) Init(hostApi HostAPI) error {
 	_, err := p.rt.NewHostModuleBuilder("env").
 		NewFunctionBuilder().WithFunc(p.f4Log).Export("F4_Log").
 		NewFunctionBuilder().WithFunc(p.f4GetVersion).Export("F4_GetVersion").
+		NewFunctionBuilder().WithFunc(p.f4Message).Export("F4_Message").
 		Instantiate(ctx)
 	if err != nil {
 		return err
@@ -80,6 +81,12 @@ func (p *WasmPlugin) f4GetVersion(ctx context.Context, m api.Module, ptr uint32,
 	}
 	m.Memory().Write(ptr, []byte(ver))
 	return uint32(len(ver))
+}
+// F4_Message(ptr, len)
+func (p *WasmPlugin) f4Message(ctx context.Context, m api.Module, ptr uint32, len uint32) {
+	if bytes, ok := m.Memory().Read(ptr, len); ok {
+		p.api.Message(string(bytes))
+	}
 }
 
 // far2lMessage - simplified thunk for far2l C-API compat

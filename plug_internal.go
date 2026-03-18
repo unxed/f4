@@ -4,7 +4,7 @@ package main
 type InternalHelloPlugin struct {}
 
 func (p *InternalHelloPlugin) Init(api HostAPI) error {
-	api.Log("Hello from Internal Plugin! F4 version is: " + api.GetVersion())
+	api.Message("Hello from Internal Go Plugin! F4 version: " + api.GetVersion())
 	return nil
 }
 
