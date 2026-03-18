@@ -5,8 +5,8 @@ echo "1. Downloading Go dependencies..."
 go mod tidy
 
 echo "2. Building Go WASM plugin..."
-# Warning! Using Go WASM plugins may seriously slow down f4 startup.
-# This should be fixed or some alternative solugtion may be considered.
+echo "Warning! Using Go WASM plugins may seriously slow down f4 startup."
+echo "This should be fixed or some alternative solugtion may be considered."
 cd plugins/hello_go
 GOOS=wasip1 GOARCH=wasm go build -o hello_go.wasm .
 cd ../..
