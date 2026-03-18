@@ -10,7 +10,7 @@ __attribute__((export_name("SetStartupInfoW")))
 void SetStartupInfoW(void* info) {
     // In a real far2l plugin, we would save 'info' and call info->Message(...)
     // Here we call the thunk directly to prove C -> WASM -> Go host execution works.
-    FarMessage("Hello from C WASM Plugin via Far2l Compat API!");
+    FarMessage("Hello from C WASM Plugin via far2l compat API!");
 }
 
 int main() {
