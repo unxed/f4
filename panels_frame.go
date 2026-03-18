@@ -6,7 +6,6 @@ import (
 	"github.com/unxed/f4/piecetable"
 	"os/user"
 	"strings"
-	"unicode"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -25,7 +24,6 @@ type PanelsFrame struct {
 
 	showKeyBar bool
 	showPanels bool
-	menuActive bool
 	lastW      int
 	lastH      int
 
@@ -43,10 +41,19 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.showKeyBar = true
 	pf.showPanels = true
 
-	pf.menuBar = vtui.NewMenuBar([]string{
-		"&" + Msg("Menu.Left"), "&" + Msg("Menu.Files"), "&" + Msg("Menu.Commands"),
-		"&" + Msg("Menu.Options"), "&" + Msg("Menu.Right"),
-	})
+	pf.menuBar = vtui.NewMenuBar(nil)
+	pf.menuBar.Items = []vtui.MenuBarItem{
+		{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{{Text: Msg("Menu.Exit")}}},
+		{Label: "&" + Msg("Menu.Files"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		{Label: "&" + Msg("Menu.Commands"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		{Label: "&" + Msg("Menu.Options"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+		{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{{Text: "Placeholder"}}},
+	}
+	pf.menuBar.OnCommand = func(menuIdx, itemIdx int) {
+		if menuIdx == 0 && itemIdx == 0 {
+			vtui.FrameManager.Shutdown()
+		}
+	}
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
 
@@ -163,8 +170,8 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	rightW := w - leftW
 
 	if pf.left == nil {
-		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, NewOSVFS("."))
-		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, NewOSVFS("."))
+		pf.left = NewFileSystemPanel(0, contentY1, leftW, panelH, vtui.NewOSVFS("."))
+		pf.right = NewFileSystemPanel(leftW, contentY1, rightW, panelH, vtui.NewOSVFS("."))
 	} else {
 		pf.left.SetPosition(0, contentY1, leftW-1, panelY2)
 		pf.right.SetPosition(leftW, contentY1, w-1, panelY2)
@@ -237,21 +244,13 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if MacroMgr != nil && MacroMgr.Recording {
 		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
 	}
-
-	// Menu must be drawn LAST to appear on top of panels
-	if pf.menuActive {
-		pf.menuBar.SetVisible(true)
-		pf.menuBar.Show(scr)
-	} else {
-		pf.menuBar.SetVisible(false)
-	}
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+	//shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-	pf.keyBar.SetModifiers(shift, ctrl, alt)
+	//alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 
 	if !e.KeyDown {
 		return false
@@ -308,28 +307,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// F9 toggles MenuBar
-	if e.VirtualKeyCode == vtinput.VK_F9 {
-		pf.menuActive = !pf.menuActive
-		pf.menuBar.Active = pf.menuActive
-		return true
-	}
-
-	// Alt+Letter triggers top menu
-	if alt && e.Char != 0 {
-		charLower := unicode.ToLower(e.Char)
-		for i, item := range pf.menuBar.Items {
-			_, hk, _ := vtui.ParseAmpersandString(item.Label)
-			if hk == charLower {
-				pf.menuActive = true
-				pf.menuBar.Active = true
-				pf.menuBar.SelectPos = i
-				pf.openSubMenu(i)
-				return true
-			}
-		}
-	}
-
 	// Esc clears command line if it's not empty
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.cmdLine.IsEmpty() {
 		pf.cmdLine.Clear()
@@ -355,20 +332,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	// If menu is active, it takes all input
-	if pf.menuActive {
-		if e.VirtualKeyCode == vtinput.VK_ESCAPE {
-			pf.menuActive = false
-			pf.menuBar.Active = false
-			return true
-		}
-		// Enter or Down opens the submenu
-		if e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_DOWN {
-			pf.openSubMenu(pf.menuBar.SelectPos)
-			return true
-		}
-		return pf.menuBar.ProcessKey(e)
-	}
 
 	// Ctrl+O toggles panels visibility
 	if e.VirtualKeyCode == vtinput.VK_O && ctrl {
@@ -464,44 +427,5 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 
 func (pf *PanelsFrame) GetType() vtui.FrameType { return vtui.TypeUser + 1 }
 func (pf *PanelsFrame) SetExitCode(code int)     { pf.done = true }
-func (pf *PanelsFrame) openSubMenu(index int) {
-	menu := vtui.NewVMenu(pf.menuBar.Items[index].Label)
-	menu.AddItem(Msg("Menu.Exit"))
-
-	x := pf.menuBar.GetItemX(index)
-	menu.SetPosition(x, 1, x+15, 3)
-
-	// Keep pf.menuActive = true so MenuBar stays visible under the VMenu.
-	// But set Active = false for visual state (selection doesn't move while submenu is open).
-	pf.menuBar.Active = false
-
-	menu.OnSelect = func(selected int) {
-		if selected == 0 { // "Exit"
-			vtui.FrameManager.Shutdown()
-		}
-	}
-
-	// If we close the menu with Esc, we return focus to the MenuBar
-	menu.OnClose = func() {
-		pf.menuBar.Active = true
-	}
-
-	// Handle switching between top menu items with Left/Right arrows
-	menu.OnLeft = func() {
-		pf.menuBar.Active = true
-		// Simulate Left key on MenuBar to update its SelectPos
-		pf.menuBar.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
-		pf.openSubMenu(pf.menuBar.SelectPos)
-	}
-
-	menu.OnRight = func() {
-		pf.menuBar.Active = true
-		// Simulate Right key on MenuBar
-		pf.menuBar.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT})
-		pf.openSubMenu(pf.menuBar.SelectPos)
-	}
-
-	vtui.FrameManager.Push(menu)
-}
 func (pf *PanelsFrame) IsDone() bool             { return pf.done }
 func (pf *PanelsFrame) IsBusy() bool             { return false }

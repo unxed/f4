@@ -60,10 +60,14 @@ func main() {
 	panels.ResizeConsole(width, height) // Initialize panel sizes before pushing
 	vtui.FrameManager.Push(panels)
 
+	// Register global UI components owned by f4
+	vtui.FrameManager.MenuBar = panels.menuBar
+	vtui.FrameManager.KeyBar = panels.keyBar
+
 	// Create test panel with many files for scrollbar
 	if fsp, ok := panels.left.(*FileSystemPanel); ok {
 		for i := 0; i < 50; i++ {
-			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
+			fsp.entries = append(fsp.entries, &fileEntry{VFSItem: vtui.VFSItem{Name: fmt.Sprintf("test_file_%d.txt", i), Size: 1024}})
 		}
 		rows := make([]vtui.TableRow, len(fsp.entries))
 		for i, e := range fsp.entries { rows[i] = e }
