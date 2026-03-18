@@ -307,11 +307,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.ShowHelp()
 		return true
 	}
-	// Alt+F11 calls UI Demo Dialog
-	if e.VirtualKeyCode == vtinput.VK_F11 && alt {
-		ShowDemoDialog()
-		return true
-	}
 
 	// F9 toggles MenuBar
 	if e.VirtualKeyCode == vtinput.VK_F9 {
