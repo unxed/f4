@@ -6,6 +6,7 @@ import (
 	"github.com/unxed/f4/piecetable"
 	"os/user"
 	"strings"
+	"unicode"
 
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -43,8 +44,8 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.showPanels = true
 
 	pf.menuBar = vtui.NewMenuBar([]string{
-		Msg("Menu.Left"), Msg("Menu.Files"), Msg("Menu.Commands"),
-		Msg("Menu.Options"), Msg("Menu.Right"),
+		"&" + Msg("Menu.Left"), "&" + Msg("Menu.Files"), "&" + Msg("Menu.Commands"),
+		"&" + Msg("Menu.Options"), "&" + Msg("Menu.Right"),
 	})
 	pf.cmdLine = NewCommandLine(Msg("Panels.Prompt"))
 	pf.keyBar = vtui.NewKeyBar()
@@ -317,6 +318,21 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		pf.menuActive = !pf.menuActive
 		pf.menuBar.Active = pf.menuActive
 		return true
+	}
+
+	// Alt+Letter triggers top menu
+	if alt && e.Char != 0 {
+		charLower := unicode.ToLower(e.Char)
+		for i, item := range pf.menuBar.Items {
+			_, hk, _ := vtui.ParseAmpersandString(item.Label)
+			if hk == charLower {
+				pf.menuActive = true
+				pf.menuBar.Active = true
+				pf.menuBar.SelectPos = i
+				pf.openSubMenu(i)
+				return true
+			}
+		}
 	}
 
 	// Esc clears command line if it's not empty
