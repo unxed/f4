@@ -118,3 +118,21 @@ To achieve near-instantaneous text insertion for large clipboard buffers (compar
 2.  **Busy State Signaling:** Components can signal a `Busy` state to the `FrameManager`. While a component is busy (e.g., during a paste operation), the UI rendering phase and terminal `Flush()` are entirely suppressed. This eliminates visual jitter and "running text" artifacts.
 3.  **Event Draining (Burst Processing):** The `FrameManager` implements an "event draining" loop with a 2ms micro-timeout. It aggressively consumes all pending input events from the OS buffer before attempting a single render pass. This ensures that even if the terminal sends data in chunks, the entire burst is processed as a single visual update.
 4.  **Zero-Allocation Rendering:** The `vtui` core is designed to minimize heap allocations during the `Flush()` cycle. By comparing the logical buffer with a physical screen "shadow," only the minimum necessary ANSI sequences are sent to the terminal.
+
+### Why vtui for f4?
+
+While `tcell` and `tview` are industry standards for Go-based terminal applications, `f4` utilizes `vtui` to achieve a higher level of interactive performance and UX consistency.
+
+1. **Advanced Input:** `vtui` uses `vtinput` library that supports full-featured input protocols of advanced terminals: kitty keyboard protocol and win32 input mode. This is critical where precise handling of combined modifiers (Ctrl, Alt, Shift) is non-negotiable.
+2. **Optimized Rendering:** Unlike `tview` which often re-renders widgets, `vtui` uses a `ScreenBuf` approach to send only modified terminal cells, ensuring best performance.
+3. **Stateful Interaction:** `vtui` architecture provides a robust, stateful hierarchy for handling nested modal dialogs and focus cycles, mimicking Turbo Vision/Delphi/WinForms: ideal for complex application like file manager (or spreadsheet, or database client, or mp3 player, etc).
+
+# vtui vs. tcell + tview/cview
+
+| Criterion | tcell + tview/cview | vtui (f4) |
+| :--- | :--- | :--- |
+| **Layout Philosophy** | Flexbox/Grid (Web-like) | GrowMode/Anchors (Win32/Turbo Vision) |
+| **Focus Handling** | Linear or component-specific | Hierarchical |
+| **Keyboard** | General | Full-featured (kitty/win32 protocols) |
+| **Rendering** | Full-widget updates | Only changed cells are updated |
+| **Better suits for** | CLI dashboards | Stateful desktop-class applications |
