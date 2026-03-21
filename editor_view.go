@@ -42,6 +42,8 @@ type EditorView struct {
 
 	pasting     bool
 	pasteBuffer []rune
+	renderBytes []byte          // Reusable buffer for text data
+	renderCells []vtui.CharInfo // Reusable buffer for row rendering
 
 	filePath string
 	done     bool
@@ -117,25 +119,17 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			currY := ev.Y1 + rowsRendered
 			scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
 
-			textBytes := ev.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
-			cells := vtui.StringToCharInfo(string(textBytes), bgAttr)
+			ev.renderBytes = ev.renderBytes[:0]
+			ev.renderBytes = ev.pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
 
 			if ev.selActive {
 				selMin, selMax := ev.getSelectionRange()
-				currByte := 0
-				for i := range cells {
-					absPos := frag.ByteOffsetStart + currByte
-					if absPos >= selMin && absPos < selMax {
-						cells[i].Attributes = selAttr
-					}
-					if cells[i].Char != vtui.WideCharFiller {
-						_, size := utf8.DecodeRune(textBytes[currByte:])
-						currByte += size
-					}
-				}
+				ev.renderCells = vtui.FillCharInfoWithSelection(ev.renderCells, ev.renderBytes, bgAttr, selAttr, frag.ByteOffsetStart, selMin, selMax)
+			} else {
+				ev.renderCells = vtui.FillCharInfo(ev.renderCells, ev.renderBytes, bgAttr)
 			}
 
-			scr.Write(ev.X1-ev.ScrollLeft, currY, cells)
+			scr.Write(ev.X1-ev.ScrollLeft, currY, ev.renderCells)
 
 			if absVRow == curVRow {
 				scr.SetCursorPos(ev.X1+curVCol-ev.ScrollLeft, currY)
@@ -166,7 +160,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 				ev.pt.Insert(offset, data)
 				// Incremental update instead of heavy Rebuild
 				ev.li.UpdateAfterInsert(offset, data)
-				ev.clearCaches()
+				ev.engine.InvalidateFrom(ev.CursorLine)
 
 				newOffset := offset + len(data)
 				ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
@@ -314,7 +308,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 					prevLen := ev.getLineLength(ev.CursorLine - 1)
 					ev.pt.Delete(offset-1, 1)
 					ev.li.UpdateAfterDelete(offset-1, 1)
-					ev.clearCaches()
+					ev.engine.InvalidateFrom(ev.CursorLine - 1)
 					ev.CursorLine--
 					ev.CursorPos = prevLen
 				} else {
@@ -325,7 +319,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 					ev.pt.Delete(offset-size, size)
 					ev.li.UpdateAfterDelete(offset-size, size)
-					ev.clearCaches()
+					ev.engine.InvalidateFrom(ev.CursorLine)
 					ev.CursorPos -= size
 				}
 			}
@@ -348,7 +342,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 				ev.pt.Delete(offset, size)
 				ev.li.UpdateAfterDelete(offset, size)
-				ev.clearCaches()
+				ev.engine.InvalidateFrom(ev.CursorLine)
 			}
 		}
 		ev.ensureCursorVisible()
@@ -361,7 +355,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		ev.pt.Insert(offset, []byte("\n"))
 		ev.li.UpdateAfterInsert(offset, []byte("\n"))
-		ev.clearCaches()
+		ev.engine.InvalidateFrom(ev.CursorLine)
 		ev.CursorLine++
 		ev.CursorPos = 0
 		ev.DesiredVisualCol = 0
@@ -377,7 +371,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
 		ev.li.UpdateAfterInsert(offset, data)
-		ev.clearCaches()
+		ev.engine.InvalidateFrom(ev.CursorLine)
 		ev.CursorPos += len(data)
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()

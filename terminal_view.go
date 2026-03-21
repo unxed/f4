@@ -130,7 +130,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 			tv.pt.Insert(offset, []byte("\n"))
 			tv.li.UpdateAfterInsert(offset, []byte("\n"))
 			tv.lastLineOffset = tv.pt.Size()
-			tv.engine.InvalidateCache()
+			tv.engine.InvalidateFrom(tv.li.LineCount() - 2)
 		} else if r >= 0x20 {
 			// Если мы в начале строки и в логе уже что-то есть для этой строки —
 			// вероятно, это перерисовка промпта оболочкой. Удаляем старое.
@@ -156,7 +156,7 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 			buf := []byte(string(r))
 			tv.pt.Insert(offset, buf)
 			tv.li.UpdateAfterInsert(offset, buf)
-			tv.engine.InvalidateCache()
+			tv.engine.InvalidateFrom(tv.li.LineCount() - 1)
 		}
 	}
 
