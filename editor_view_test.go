@@ -537,21 +537,21 @@ func TestEditorView_WordWrapInfiniteLoop(t *testing.T) {
 	}
 }
 
-func TestEditorView_F6_ToggleWordWrap(t *testing.T) {
+func TestEditorView_F3_ToggleWordWrap(t *testing.T) {
 	pt := piecetable.New([]byte("some text"))
 	ev := NewEditorView(pt, "")
 	ev.WordWrap = true
 
-	// Press F6
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F6})
+	// Press F3
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if ev.WordWrap {
-		t.Error("F6 failed to disable WordWrap")
+		t.Error("F3 failed to disable WordWrap")
 	}
 
-	// Press F6 again
-	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F6})
+	// Press F3 again
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3})
 	if !ev.WordWrap {
-		t.Error("F6 failed to re-enable WordWrap")
+		t.Error("F3 failed to re-enable WordWrap")
 	}
 }
 

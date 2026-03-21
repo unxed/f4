@@ -217,7 +217,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		ev.SaveToFile()
 		return true
 
-	case vtinput.VK_F6:
+	case vtinput.VK_F3:
 		ev.WordWrap = !ev.WordWrap
 		ev.ScrollLeft = 0
 		ev.clearCaches()
