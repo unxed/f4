@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"unicode/utf8"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtui/textlayout"
@@ -87,8 +86,9 @@ func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 }
 
 func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
-	if !ev.IsVisible() { return }
-	if ev.pasting { return }
+	if !ev.IsVisible() || ev.pasting {
+		return
+	}
 
 	width := ev.X2 - ev.X1 + 1
 	height := ev.Y2 - ev.Y1 + 1
@@ -98,59 +98,57 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
 
-	// 1. Позиция курсора в абсолютных визуальных координатах
 	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 	curVRow, curVCol := ev.engine.LogicalToVisual(curOffset)
 
-	// 2. Отрисовка видимых визуальных строк
+	startLogLine, startFragIdx := ev.engine.GetLogLineAtVisualRow(ev.ScrollTopRow)
+	vRowsBeforeDocStart := ev.ScrollTopRow - startFragIdx
+
 	rowsRendered := 0
-	totalVRows := 0
-
-	// Находим начало нашего вьюпорта
-	for logIdx := 0; logIdx < ev.li.LineCount() && rowsRendered < height; logIdx++ {
+	for logIdx := startLogLine; logIdx < ev.li.LineCount(); logIdx++ {
 		frags := ev.engine.GetFragments(logIdx)
-		for _, frag := range frags {
-			if totalVRows >= ev.ScrollTopRow {
-				currY := ev.Y1 + rowsRendered
-				scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
-
-				text := string(ev.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart))
-
-				// Рисуем посимвольно для учета выделения
-				byteIdx := 0
-				visualCol := 0
-				for _, r := range text {
-					attr := bgAttr
-					absPos := frag.ByteOffsetStart + byteIdx
-					if ev.selActive {
-						min, max := ev.getSelectionRange()
-						if absPos >= min && absPos < max {
-							attr = selAttr
-						}
-					}
-
-					charCells := vtui.StringToCharInfo(string(r), attr)
-					// Учитываем ScrollLeft если WordWrap выключен
-					scr.Write(ev.X1 + visualCol - ev.ScrollLeft, currY, charCells)
-
-					byteIdx += len(string(r))
-					rw := runewidth.RuneWidth(r)
-					if rw <= 0 {
-						rw = 1
-					}
-					visualCol += rw
-				}
-
-				// Если курсор на этой визуальной строке - ставим его
-				if totalVRows == curVRow {
-					scr.SetCursorPos(ev.X1 + curVCol - ev.ScrollLeft, currY)
-					scr.SetCursorVisible(true)
-				}
-
-				rowsRendered++
+		for fIdx := 0; fIdx < len(frags); fIdx++ {
+			if logIdx == startLogLine && fIdx < startFragIdx {
+				continue
 			}
-			totalVRows++
+
+			frag := frags[fIdx]
+			absVRow := vRowsBeforeDocStart + fIdx
+
+			currY := ev.Y1 + rowsRendered
+			scr.FillRect(ev.X1, currY, ev.X2, currY, ' ', bgAttr)
+
+			textBytes := ev.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
+			cells := vtui.StringToCharInfo(string(textBytes), bgAttr)
+
+			if ev.selActive {
+				selMin, selMax := ev.getSelectionRange()
+				currByte := 0
+				for i := range cells {
+					absPos := frag.ByteOffsetStart + currByte
+					if absPos >= selMin && absPos < selMax {
+						cells[i].Attributes = selAttr
+					}
+					if cells[i].Char != vtui.WideCharFiller {
+						_, size := utf8.DecodeRune(textBytes[currByte:])
+						currByte += size
+					}
+				}
+			}
+
+			scr.Write(ev.X1-ev.ScrollLeft, currY, cells)
+
+			if absVRow == curVRow {
+				scr.SetCursorPos(ev.X1+curVCol-ev.ScrollLeft, currY)
+				scr.SetCursorVisible(true)
+			}
+
+			rowsRendered++
+			if rowsRendered >= height {
+				return
+			}
 		}
+		vRowsBeforeDocStart += len(frags)
 	}
 }
 
@@ -359,7 +357,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 
 	case vtinput.VK_RETURN:
-		if ev.selActive { ev.DeleteSelection() }
+		if ev.selActive {
+			ev.DeleteSelection()
+		}
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		ev.pt.Insert(offset, []byte("\n"))
 		ev.li.UpdateAfterInsert(offset, []byte("\n"))
@@ -372,7 +372,9 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	if e.Char != 0 && ctrl == false {
-		if ev.selActive { ev.DeleteSelection() }
+		if ev.selActive {
+			ev.DeleteSelection()
+		}
 		offset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		data := []byte(string(e.Char))
 		ev.pt.Insert(offset, data)
