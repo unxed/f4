@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/unxed/vtinput"
@@ -285,14 +286,50 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 
 	case vtinput.VK_LEFT:
 		handleNav()
-		if ev.CursorPos > 0 {
+		if ctrl {
 			lineStart := ev.li.GetLineOffset(ev.CursorLine)
-			data := ev.pt.GetRange(lineStart, ev.CursorPos)
-			_, size := utf8.DecodeLastRune(data)
-			ev.CursorPos -= size
-		} else if ev.CursorLine > 0 {
-			ev.CursorLine--
-			ev.CursorPos = ev.getLineLength(ev.CursorLine)
+			lineData := ev.pt.GetRange(lineStart, ev.getLineLength(ev.CursorLine))
+			runes := []rune(string(lineData))
+
+			// Find current rune position
+			currRuneIdx := 0
+			byteAcc := 0
+			for i, r := range runes {
+				if byteAcc >= ev.CursorPos {
+					currRuneIdx = i
+					break
+				}
+				byteAcc += utf8.RuneLen(r)
+				if i == len(runes)-1 { currRuneIdx = len(runes) }
+			}
+
+			if currRuneIdx > 0 {
+				pos := currRuneIdx
+				// Skip spaces
+				for pos > 0 && unicode.IsSpace(runes[pos-1]) { pos-- }
+				// Skip word
+				for pos > 0 && !unicode.IsSpace(runes[pos-1]) { pos-- }
+
+				// Convert rune index back to byte offset
+				newBytePos := 0
+				for i := 0; i < pos; i++ {
+					newBytePos += utf8.RuneLen(runes[i])
+				}
+				ev.CursorPos = newBytePos
+			} else if ev.CursorLine > 0 {
+				ev.CursorLine--
+				ev.CursorPos = ev.getLineLength(ev.CursorLine)
+			}
+		} else {
+			if ev.CursorPos > 0 {
+				lineStart := ev.li.GetLineOffset(ev.CursorLine)
+				data := ev.pt.GetRange(lineStart, ev.CursorPos)
+				_, size := utf8.DecodeLastRune(data)
+				ev.CursorPos -= size
+			} else if ev.CursorLine > 0 {
+				ev.CursorLine--
+				ev.CursorPos = ev.getLineLength(ev.CursorLine)
+			}
 		}
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()
@@ -301,16 +338,51 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_RIGHT:
 		handleNav()
 		lineLen := ev.getLineLength(ev.CursorLine)
-		if ev.CursorPos < lineLen {
+		if ctrl {
 			lineStart := ev.li.GetLineOffset(ev.CursorLine)
-			peekLen := 4
-			if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
-			data := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
-			_, size := utf8.DecodeRune(data)
-			ev.CursorPos += size
-		} else if ev.CursorLine < ev.li.LineCount()-1 {
-			ev.CursorLine++
-			ev.CursorPos = 0
+			lineData := ev.pt.GetRange(lineStart, lineLen)
+			runes := []rune(string(lineData))
+
+			// Find current rune position
+			currRuneIdx := len(runes)
+			byteAcc := 0
+			for i, r := range runes {
+				if byteAcc >= ev.CursorPos {
+					currRuneIdx = i
+					break
+				}
+				byteAcc += utf8.RuneLen(r)
+			}
+
+			if currRuneIdx < len(runes) {
+				pos := currRuneIdx
+				// Skip word
+				for pos < len(runes) && !unicode.IsSpace(runes[pos]) { pos++ }
+				// Skip spaces
+				for pos < len(runes) && unicode.IsSpace(runes[pos]) { pos++ }
+
+				// Convert rune index back to byte offset
+				newBytePos := 0
+				for i := 0; i < pos; i++ {
+					newBytePos += utf8.RuneLen(runes[i])
+				}
+				ev.CursorPos = newBytePos
+			} else if ev.CursorLine < ev.li.LineCount()-1 {
+				ev.CursorLine++
+				ev.CursorPos = 0
+			}
+		} else {
+			if ev.CursorPos < lineLen {
+				lineStart := ev.li.GetLineOffset(ev.CursorLine)
+				peekLen := 4
+				if lineLen-ev.CursorPos < 4 { peekLen = lineLen - ev.CursorPos }
+				data := ev.pt.GetRange(lineStart+ev.CursorPos, peekLen)
+				_, size := utf8.DecodeRune(data)
+				ev.CursorPos += size
+			} else if ev.CursorLine < ev.li.LineCount()-1 {
+				ev.CursorLine++
+				ev.CursorPos = 0
+			}
 		}
 		ev.updateDesiredVisualCol()
 		ev.ensureCursorVisible()

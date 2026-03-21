@@ -681,3 +681,53 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 		t.Fatal("Performance test timed out. EditorView is likely still hanging on long lines.")
 	}
 }
+
+func TestEditorView_WordNavigation(t *testing.T) {
+	pt := piecetable.New([]byte("hello world  test"))
+	ev := NewEditorView(pt, "")
+	ev.CursorPos = 0
+
+	// 1. Ctrl + Right -> should jump to start of "world" (index 6)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RIGHT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorPos != 6 {
+		t.Errorf("Ctrl+Right (1) failed: expected pos 6, got %d", ev.CursorPos)
+	}
+
+	// 2. Ctrl + Right -> should jump to start of "test" (index 13)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_RIGHT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorPos != 13 {
+		t.Errorf("Ctrl+Right (2) failed: expected pos 13, got %d", ev.CursorPos)
+	}
+
+	// 3. Ctrl + Left -> back to start of "world" (index 6)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorPos != 6 {
+		t.Errorf("Ctrl+Left (1) failed: expected pos 6, got %d", ev.CursorPos)
+	}
+
+	// 4. Ctrl + Left -> back to start (index 0)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_LEFT,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if ev.CursorPos != 0 {
+		t.Errorf("Ctrl+Left (2) failed: expected pos 0, got %d", ev.CursorPos)
+	}
+}
