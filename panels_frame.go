@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/vtui/piecetable"
 	"os/user"
 	"strings"
 

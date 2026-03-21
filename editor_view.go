@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 	"unicode/utf8"
-	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/vtui/piecetable"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
