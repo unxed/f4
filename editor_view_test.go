@@ -572,6 +572,47 @@ func TestEditorView_WideCharDelete(t *testing.T) {
 		t.Errorf("Cursor position after Wide Delete should remain 1, got %d", ev.CursorPos)
 	}
 }
+func TestEditorView_PageNavigation(t *testing.T) {
+	// Create 20 lines of text
+	var buf []byte
+	for i := 0; i < 20; i++ {
+		buf = append(buf, []byte("Line\n")...)
+	}
+	pt := piecetable.New(buf)
+	ev := NewEditorView(pt, "")
+	ev.SetPosition(0, 0, 79, 4) // Viewport height 5
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+
+	// 1. PgDn
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+	if ev.CursorLine != 5 {
+		t.Errorf("PgDn failed: expected line 5, got %d", ev.CursorLine)
+	}
+
+	// 2. PgUp
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+	if ev.CursorLine != 0 {
+		t.Errorf("PgUp failed: expected line 0, got %d", ev.CursorLine)
+	}
+
+	// 3. Selection with PgDn (Shift + PgDn)
+	ev.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_NEXT,
+		ControlKeyState: vtinput.ShiftPressed,
+	})
+
+	if !ev.selActive {
+		t.Fatal("Shift+PgDn should activate selection")
+	}
+	min, max := ev.getSelectionRange()
+	// Selection from offset 0 to start of line 5 (5 characters "Line\n" * 5 = 25)
+	if min != 0 || max != 25 {
+		t.Errorf("Shift+PgDn range failed: expected [0:25], got [%d:%d]", min, max)
+	}
+}
 func TestEditorView_LongLinePerformance(t *testing.T) {
 	t.Parallel()
 
