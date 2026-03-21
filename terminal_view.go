@@ -132,8 +132,8 @@ func (tv *TerminalView) PutChar(r rune, attr uint64) {
 			tv.lastLineOffset = tv.pt.Size()
 			tv.engine.InvalidateCache()
 		} else if r >= 0x20 {
-			// Детекция перезаписи строки (например, при ресайзе или редактировании ввода)
-			// Если курсор в начале строки, а в логе уже есть данные для этой строки — удаляем их.
+			// Если мы в начале строки и в логе уже что-то есть для этой строки —
+			// вероятно, это перерисовка промпта оболочкой. Удаляем старое.
 			if tv.CursorX == 0 && tv.pt.Size() > tv.lastLineOffset {
 				tv.pt.Delete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
 				tv.li.UpdateAfterDelete(tv.lastLineOffset, tv.pt.Size()-tv.lastLineOffset)
@@ -206,15 +206,9 @@ func (tv *TerminalView) newline() {
 
 func (tv *TerminalView) scrollUp(top, bottom, n int) {
 	buf := tv.getBuffer()
-	if top < 0 {
-		top = 0
-	}
-	if bottom >= len(buf) {
-		bottom = len(buf) - 1
-	}
-	if top >= bottom {
-		return
-	}
+	if top < 0 { top = 0 }
+	if bottom >= len(buf) { bottom = len(buf) - 1 }
+	if top >= bottom { return }
 
 	for i := 0; i < n; i++ {
 		copy(buf[top:bottom], buf[top+1:bottom+1])
@@ -225,23 +219,13 @@ func (tv *TerminalView) scrollUp(top, bottom, n int) {
 	}
 }
 
-// --- Методы API для AnsiParser ---
-
 func (tv *TerminalView) SetCursor(x, y int) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if x < 0 {
-		x = 0
-	}
-	if x >= tv.Width {
-		x = tv.Width - 1
-	}
-	if y < 0 {
-		y = 0
-	}
-	if y >= tv.Height {
-		y = tv.Height - 1
-	}
+	if x < 0 { x = 0 }
+	if x >= tv.Width { x = tv.Width - 1 }
+	if y < 0 { y = 0 }
+	if y >= tv.Height { y = tv.Height - 1 }
 	tv.CursorX, tv.CursorY = x, y
 }
 
@@ -267,9 +251,7 @@ func (tv *TerminalView) EraseCharacter(n int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= len(buf) {
-		return
-	}
+	if tv.CursorY < 0 || tv.CursorY >= len(buf) { return }
 	line := buf[tv.CursorY]
 	for i := 0; i < n && (tv.CursorX+i) < tv.Width; i++ {
 		line[tv.CursorX+i] = vtui.CharInfo{Char: ' ', Attributes: attr}
@@ -290,9 +272,7 @@ func (tv *TerminalView) EraseDisplay(mode int, attr uint64) {
 		if tv.CursorY >= 0 && tv.CursorY < tv.Height {
 			line := buf[tv.CursorY]
 			for j := (tv.CursorX); j < tv.Width; j++ {
-				if j >= 0 {
-					line[j] = vtui.CharInfo{Char: ' ', Attributes: attr}
-				}
+				if j >= 0 { line[j] = vtui.CharInfo{Char: ' ', Attributes: attr} }
 			}
 		}
 		for i := tv.CursorY + 1; i < tv.Height; i++ {
@@ -309,9 +289,7 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	buf := tv.getBuffer()
-	if tv.CursorY < 0 || tv.CursorY >= tv.Height {
-		return
-	}
+	if tv.CursorY < 0 || tv.CursorY >= tv.Height { return }
 	line := buf[tv.CursorY]
 	start, end := 0, tv.Width
 	if mode == 0 {
@@ -329,9 +307,7 @@ func (tv *TerminalView) EraseLine(mode int, attr uint64) {
 func (tv *TerminalView) SetAltScreen(enable bool) {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
-	if tv.UseAltScreen == enable {
-		return
-	}
+	if tv.UseAltScreen == enable { return }
 	if enable {
 		tv.savedX, tv.savedY = tv.CursorX, tv.CursorY
 		tv.CursorX, tv.CursorY = 0, 0
@@ -341,7 +317,6 @@ func (tv *TerminalView) SetAltScreen(enable bool) {
 	tv.UseAltScreen = enable
 }
 
-// getAttrAt ищет атрибут, действующий на данном байтовом оффсете истории.
 func (tv *TerminalView) getAttrAt(offset int) uint64 {
 	idx := sort.Search(len(tv.styles), func(i int) bool {
 		return tv.styles[i].Offset > offset
@@ -352,15 +327,15 @@ func (tv *TerminalView) getAttrAt(offset int) uint64 {
 	return DefaultTermAttr
 }
 
-// --- Отрисовка (Display) ---
-
 func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 	tv.ScreenObject.Show(scr)
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 
+	// Очищаем всю область терминала черным цветом
+	scr.FillRect(tv.X1, tv.Y1, tv.X1+tv.Width-1, tv.Y1+tv.Height-1, ' ', DefaultTermAttr)
+
 	if tv.UseAltScreen {
-		// В режиме AltScreen (интерактив) рисуем фиксированную сетку
 		for y, line := range tv.AltLines {
 			scr.Write(tv.X1, tv.Y1+y, line)
 		}
@@ -371,15 +346,19 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	// Режим Main Screen: Рисуем из PieceTable с динамической пересвёрткой (Reflow)
 	tv.engine.SetWidth(tv.Width)
 	totalRows := tv.engine.GetTotalVisualRows()
 
-	// Авто-скролл к концу
 	if totalRows > tv.Height {
 		tv.ScrollTopRow = totalRows - tv.Height
 	} else {
 		tv.ScrollTopRow = 0
+	}
+
+	// Рассчитываем вертикальный отступ для короткого лога (прижимаем к низу)
+	yPadding := 0
+	if totalRows < tv.Height {
+		yPadding = tv.Height - totalRows
 	}
 
 	rowsRendered := 0
@@ -392,46 +371,35 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 				continue
 			}
 
-			currY := tv.Y1 + rowsRendered
-			// Очищаем строку перед отрисовкой
-			scr.FillRect(tv.X1, currY, tv.X1+tv.Width-1, currY, ' ', DefaultTermAttr)
+			currY := tv.Y1 + yPadding + rowsRendered
+			if currY > tv.Y1+tv.Height-1 { break }
 
 			textBytes := tv.pt.GetRange(frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
-
-			// Накладываем атрибуты
 			cells := make([]vtui.CharInfo, 0, frag.VisualWidth)
 			currentByte := 0
 			for currentByte < len(textBytes) {
 				r, size := utf8.DecodeRune(textBytes[currentByte:])
-				absPos := frag.ByteOffsetStart + currentByte
-				attr := tv.getAttrAt(absPos)
-
-				// Добавляем ячейки символа
-				charCells := vtui.StringToCharInfo(string(r), attr)
-				cells = append(cells, charCells...)
+				attr := tv.getAttrAt(frag.ByteOffsetStart + currentByte)
+				cells = append(cells, vtui.StringToCharInfo(string(r), attr)...)
 				currentByte += size
 			}
 
 			scr.Write(tv.X1, currY, cells)
 			rowsRendered++
-			if rowsRendered >= tv.Height {
-				break
-			}
 		}
 	}
 
-	// В режиме лога курсор рисуется в конце последней строки вывода
 	if tv.IsVisible() {
 		lastOffset := tv.pt.Size()
 		vRow, vCol := tv.engine.LogicalToVisual(lastOffset)
-		if vRow >= tv.ScrollTopRow && vRow < tv.ScrollTopRow+tv.Height {
-			scr.SetCursorPos(tv.X1+vCol, tv.Y1+(vRow-tv.ScrollTopRow))
+		visualRowOnScreen := vRow - tv.ScrollTopRow
+		if visualRowOnScreen >= 0 && visualRowOnScreen < tv.Height {
+			scr.SetCursorPos(tv.X1+vCol, tv.Y1 + yPadding + visualRowOnScreen)
 			scr.SetCursorVisible(true)
 		}
 	}
 }
 
-// Вспомогательные методы MDI
 func (tv *TerminalView) Resize(w, h int) {
 	if tv.Width == w && tv.Height == h {
 		return
