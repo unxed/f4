@@ -90,10 +90,8 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 		return
 	}
 
-	width := ev.X2 - ev.X1 + 1
+	ev.ensureEngineWidth() // Гарантируем актуальность ширины перед отрисовкой
 	height := ev.Y2 - ev.Y1 + 1
-	ev.engine.SetWidth(width)
-	ev.engine.ToggleWrap(ev.WordWrap)
 
 	bgAttr := vtui.Palette[ColCommandLineUserScreen]
 	selAttr := vtui.Palette[vtui.ColDialogEditSelected]
@@ -417,7 +415,18 @@ func (ev *EditorView) ensureCursorVisible() {
 }
 
 func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool { return false }
-func (ev *EditorView) ResizeConsole(w, h int) {}
+
+func (ev *EditorView) SetPosition(x1, y1, x2, y2 int) {
+	ev.ScreenObject.SetPosition(x1, y1, x2, y2)
+	ev.ensureEngineWidth()
+	ev.ensureCursorVisible()
+}
+
+func (ev *EditorView) ResizeConsole(w, h int) {
+	// Редактор в f4 обычно занимает всё пространство кроме статус-бара (h-3)
+	ev.SetPosition(0, 0, w-1, h-3)
+}
+
 func (ev *EditorView) GetType() vtui.FrameType { return vtui.TypeUser + 2 }
 func (ev *EditorView) SetExitCode(c int) { ev.done = true }
 func (ev *EditorView) IsDone() bool { return ev.done }
