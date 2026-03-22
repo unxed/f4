@@ -505,11 +505,12 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return true
 
 	case vtui.CmCopy:
-		// Demonstrate Async Background Task with safe UI updates!
 		pf.startDemoAsyncTask()
 		return true
 	}
-	return pf.ScreenObject.HandleCommand(cmd, args)
+	// Do not delegate to ScreenObject.HandleCommand if we don't want bubbling
+	// or if we want PanelsFrame to be the final consumer of these commands.
+	return false
 }
 
 func (pf *PanelsFrame) startDemoAsyncTask() {
