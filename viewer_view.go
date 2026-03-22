@@ -184,7 +184,15 @@ func (vv *ViewerView) drawStatus(scr *vtui.ScreenBuf) {
 
 	percent := 0
 	if vv.backend.Size() > 0 {
-		percent = int((vv.TopOffset * 100) / vv.backend.Size())
+		// Calculate percentage based on current view position relative to total file size.
+		// We add the view height so that 100% is reached when the bottom of the file
+		// is visible, not just the top.
+		viewHeight := int64(vv.Y2 - vv.Y1)
+		curr := vv.TopOffset + viewHeight
+		if curr > vv.backend.Size() {
+			curr = vv.backend.Size()
+		}
+		percent = int((curr * 100) / vv.backend.Size())
 	}
 
 	mode := Msg("Viewer.ModeText")
