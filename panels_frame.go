@@ -79,10 +79,12 @@ type PanelsFrame struct {
 	cmdLine *CommandLine
 	keyBar  *vtui.KeyBar
 
-	showKeyBar bool
-	showPanels bool
-	lastW      int
-	lastH      int
+	showKeyBar     bool
+	showPanels     bool
+	showLeftPanel  bool
+	showRightPanel bool
+	lastW          int
+	lastH          int
 
 	// Integrated Terminal
 	pty        PtyBackend
@@ -112,6 +114,8 @@ func NewPanelsFrame() *PanelsFrame {
 	pf.SetHelp("Panels")
 	pf.showKeyBar = true
 	pf.showPanels = true
+	pf.showLeftPanel = true
+	pf.showRightPanel = true
 
 	pf.menuBar = vtui.NewMenuBar(nil)
 	pf.menuBar.SetOwner(pf)
@@ -539,10 +543,20 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	}
 
 	if pf.showPanels {
-		pf.termView.SetVisible(false)
-		for i, p := range pf.panels {
-			p.SetFocus(pf.activeIdx == i)
-			p.Show(scr)
+		// Если одна из панелей скрыта — показываем терминал под видимой панелью
+		if !pf.showLeftPanel || !pf.showRightPanel {
+			pf.termView.SetVisible(true)
+			pf.termView.Show(scr)
+		} else {
+			pf.termView.SetVisible(false)
+		}
+		if pf.showLeftPanel {
+			pf.panels[0].SetFocus(pf.activeIdx == 0)
+			pf.panels[0].Show(scr)
+		}
+		if pf.showRightPanel {
+			pf.panels[1].SetFocus(pf.activeIdx == 1)
+			pf.panels[1].Show(scr)
 		}
 	} else {
 		pf.termView.SetVisible(true)
@@ -691,6 +705,28 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Ctrl+O toggles panels visibility (must intercept before raw input mode)
 	if e.VirtualKeyCode == vtinput.VK_O && ctrl && !alt && !shift && e.KeyDown {
 		pf.showPanels = !pf.showPanels
+		pf.showLeftPanel = pf.showPanels
+		pf.showRightPanel = pf.showPanels
+		vtui.FrameManager.HardRefresh()
+		if pf.showPanels {
+			pf.RefreshAll()
+		}
+		return true
+	}
+
+	// Ctrl+F1 toggles left panel, Ctrl+F2 toggles right panel
+	if e.VirtualKeyCode == vtinput.VK_F1 && ctrl && !alt && !shift && e.KeyDown {
+		pf.showLeftPanel = !pf.showLeftPanel
+		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
+		vtui.FrameManager.HardRefresh()
+		if pf.showPanels {
+			pf.RefreshAll()
+		}
+		return true
+	}
+	if e.VirtualKeyCode == vtinput.VK_F2 && ctrl && !alt && !shift && e.KeyDown {
+		pf.showRightPanel = !pf.showRightPanel
+		pf.showPanels = pf.showLeftPanel || pf.showRightPanel
 		vtui.FrameManager.HardRefresh()
 		if pf.showPanels {
 			pf.RefreshAll()
@@ -1511,7 +1547,7 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			"", "", Msg("KeyBar.AltF7"), Msg("KeyBar.AltF8"), "", "", "", Msg("KeyBar.AltF12"),
 		},
 		Ctrl: vtui.KeyBarLabels{
-			"", "", Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
+			Msg("KeyBar.CtrlF1"), Msg("KeyBar.CtrlF2"), Msg("KeyBar.CtrlF3"), Msg("KeyBar.CtrlF4"), Msg("KeyBar.CtrlF5"), Msg("KeyBar.CtrlF6"), Msg("KeyBar.CtrlF7"), "", "", "", "Fork", "Close",
 		},
 	}
 }
@@ -1921,6 +1957,8 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.activeIdx = pf.activeIdx
 	clone.showKeyBar = pf.showKeyBar
 	clone.showPanels = pf.showPanels
+	clone.showLeftPanel = pf.showLeftPanel
+	clone.showRightPanel = pf.showRightPanel
 
 	if pf.termView != nil && clone.termView != nil {
 		clone.termView.CloneStateFrom(pf.termView)

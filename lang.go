@@ -121,6 +121,8 @@ var Lng = map[string]string{
 	"KeyBar.AltF7":  "Find",
 	"KeyBar.AltF8":  "History",
 	"KeyBar.AltF12": "Folders",
+	"KeyBar.CtrlF1": "Left",
+	"KeyBar.CtrlF2": "Right",
 	"KeyBar.CtrlF3": "Name",
 	"KeyBar.CtrlF4": "Ext",
 	"KeyBar.CtrlF5": "Time",
