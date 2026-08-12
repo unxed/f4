@@ -962,6 +962,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 		if e.VirtualKeyCode == vtinput.VK_E && !ctrl {
 			break
 		}
+		// Ctrl+Up scrolls the text under the cursor, which keeps its row
+		// on the screen (far2l editor.cpp, Editor::ScrollUp). The Ctrl+E
+		// alias stays a plain cursor movement.
+		if ctrl && !shift && !alt && e.VirtualKeyCode == vtinput.VK_UP {
+			ev.scrollViewBy(-1)
+			return true
+		}
 		handleNav()
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
 		vRow, _ := ev.engine.LogicalToVisual(curOffset)
@@ -999,6 +1006,13 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 				RunAction("Editor.Cut")
 				return true
 			}
+		}
+		// Ctrl+Down scrolls the text under the cursor, which keeps its row
+		// on the screen (far2l editor.cpp, Editor::ScrollDown). The Ctrl+X
+		// alias stays a plain cursor movement.
+		if ctrl && !shift && !alt && e.VirtualKeyCode == vtinput.VK_DOWN {
+			ev.scrollViewBy(1)
+			return true
 		}
 		handleNav()
 		curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
@@ -1085,15 +1099,22 @@ func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
 			break
 		}
 		handleNav()
+		// Jump by word only if it's the real Left arrow + Ctrl
+		wordJump := ctrl && !isAlias
 		if ev.CursorVirtualSpaces > 0 {
-			ev.CursorVirtualSpaces--
-			ev.updateDesiredVisualCol()
-			ev.ensureCursorVisible()
-			return true
+			if !wordJump {
+				ev.CursorVirtualSpaces--
+				ev.updateDesiredVisualCol()
+				ev.ensureCursorVisible()
+				return true
+			}
+			// Past EOL a word jump behaves as if the cursor stood at the
+			// real end of the line: the virtual spaces are dropped first
+			// and the jump then starts from the last character.
+			ev.CursorVirtualSpaces = 0
 		}
 
-		// Jump by word only if it's the real Left arrow + Ctrl
-		if ctrl && !isAlias {
+		if wordJump {
 			if ev.CursorPos > 0 {
 				runes := ev.getLogicalLineRunes(ev.CursorLine)
 				currRuneIdx := 0
@@ -1622,6 +1643,53 @@ func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr
 	return target
 }
 
+// syncVirtualSpaces re-derives CursorVirtualSpaces after a vertical move:
+// when the cursor lands on a shorter line and "cursor beyond EOL" is on, the
+// desired visual column is kept alive by virtual spaces past the line end.
+func (ev *EditorView) syncVirtualSpaces() {
+	lineLen := ev.getLineLength(ev.CursorLine)
+	if ev.CursorPos == lineLen && ev.CursorBeyondEOL {
+		_, endVCol := ev.engine.LogicalToVisual(ev.li.GetLineOffset(ev.CursorLine) + lineLen)
+		if ev.DesiredVisualCol > endVCol {
+			ev.CursorVirtualSpaces = ev.DesiredVisualCol - endVCol
+			return
+		}
+	}
+	ev.CursorVirtualSpaces = 0
+}
+
+// scrollViewBy scrolls the text by delta visual rows under a cursor that
+// keeps its row on the screen: far2l's Editor::ScrollUp/ScrollDown move
+// TopScreen and CurLine together, preserving the cell column. Only when the
+// view cannot scroll any further — the top of the file is already shown, or
+// the last screenful is — do they fall back to a bare Up()/Down() and let the
+// cursor walk on alone. Nothing happens once the cursor sits on the first or
+// last row. The selection is left untouched: scrolling is not a navigation.
+func (ev *EditorView) scrollViewBy(delta int) {
+	height := ev.Y2 - ev.Y1
+	if height <= 0 {
+		return
+	}
+	curOffset := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+	vRow, _ := ev.engine.LogicalToVisual(curOffset)
+	totalRows := ev.engine.GetTotalVisualRows()
+
+	targetRow := vRow + delta
+	if targetRow < 0 || targetRow >= totalRows {
+		return
+	}
+
+	maxTop := max(totalRows-height, 0)
+	ev.ScrollTopRow = min(max(ev.ScrollTopRow+delta, 0), maxTop)
+
+	newOffset := ev.engine.VisualToLogical(targetRow, ev.DesiredVisualCol)
+	ev.CursorLine = ev.li.GetLineAtOffset(newOffset)
+	ev.CursorPos = newOffset - ev.li.GetLineOffset(ev.CursorLine)
+	ev.syncVirtualSpaces()
+	ev.ensureCursorVisible()
+	vtui.FrameManager.Redraw()
+}
+
 func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
@@ -1693,10 +1761,14 @@ func (ev *EditorView) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 
 	if e.WheelDirection != 0 {
+		speed := AppConfig.WheelEditorDown
+		vk := uint16(vtinput.VK_DOWN)
 		if e.WheelDirection > 0 {
-			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
-		} else {
-			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+			speed = AppConfig.WheelEditorUp
+			vk = vtinput.VK_UP
+		}
+		for i := 0; i < wheelScrollLines(speed); i++ {
+			ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vk})
 		}
 		return true
 	}
@@ -3559,18 +3631,20 @@ func (ev *EditorView) GetTitle() string {
 	return "Editor"
 }
 
-// GetWorkspaceTabTitle provides a compact, icon-led title for the workspace
+// GetWorkspaceTabTitle provides a compact title for the workspace
 // tab bar while leaving GetTitle available for contexts that need the fuller
 // textual description.
 func (ev *EditorView) GetWorkspaceTabTitle() string {
 	if ev.DisplayTitle != "" {
-		return "✎ " + ev.DisplayTitle
+		return ev.DisplayTitle
 	}
 	if ev.filePath != "" {
-		return "✎ " + filepath.Base(ev.filePath)
+		return filepath.Base(ev.filePath)
 	}
-	return "✎ Editor"
+	return "Editor"
 }
+
+func (ev *EditorView) GetWorkspaceTabMarker() string { return "E" }
 
 // buildSearchRegex compiles an editor search pattern with the rules shared
 // by Find, Find All and Replace: non-regex input is quoted literally, case

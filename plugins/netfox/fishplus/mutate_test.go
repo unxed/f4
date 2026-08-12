@@ -311,3 +311,100 @@ func checkChtimes(t *testing.T, c *Client) {
 		t.Fatalf("session out of sync after utime: %q %v", got, err)
 	}
 }
+
+func TestSymlinkAgainstLocalShell(t *testing.T) {
+	c := newLocalShellClient(t)
+	ctx := context.Background()
+	root := t.TempDir()
+
+	if !c.CanSymlink() {
+		t.Skip("no ln on this machine")
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "target.txt"), []byte("hi"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A relative target is the ordinary case and the one a path guard would
+	// wrongly refuse, so it goes first.
+	link := filepath.Join(root, "relative link")
+	if err := c.Symlink(ctx, link, "target.txt"); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	got, err := os.Readlink(link)
+	if err != nil {
+		t.Fatalf("readlink: %v", err)
+	}
+	if got != "target.txt" {
+		t.Errorf("target = %q, want %q", got, "target.txt")
+	}
+	// It has to resolve, which is what tells a stored string from a working link.
+	if body, err := os.ReadFile(link); err != nil || string(body) != "hi" {
+		t.Errorf("reading through the link: %q, %v", body, err)
+	}
+	// And the helper must report it as a link rather than as its target.
+	if e, err := c.Lstat(ctx, link); err != nil {
+		t.Errorf("lstat: %v", err)
+	} else if !e.IsSymlink() {
+		t.Errorf("Mode = %o, want a symlink", e.Mode)
+	}
+
+	// A target that does not exist is legal; a dangling link is a link.
+	dangling := filepath.Join(root, "dangling")
+	if err := c.Symlink(ctx, dangling, "nothing here"); err != nil {
+		t.Fatalf("symlink to a missing target: %v", err)
+	}
+	if got, err := os.Readlink(dangling); err != nil || got != "nothing here" {
+		t.Errorf("dangling target = %q, %v", got, err)
+	}
+
+	// So is a target with .. in it, which the guard must not touch.
+	updots := filepath.Join(root, "updots")
+	if err := c.Symlink(ctx, updots, "../elsewhere/file"); err != nil {
+		t.Fatalf("symlink to a .. target: %v", err)
+	}
+	if got, err := os.Readlink(updots); err != nil || got != "../elsewhere/file" {
+		t.Errorf(".. target = %q, %v", got, err)
+	}
+
+	// The target travels as a path line, so one with a newline in it has to
+	// survive the escaping the same way any other path does.
+	weird := filepath.Join(root, "weird target")
+	if err := c.Symlink(ctx, weird, "two\nlines"); err != nil {
+		t.Fatalf("symlink to a target with a newline: %v", err)
+	}
+	if got, err := os.Readlink(weird); err != nil || got != "two\nlines" {
+		t.Errorf("newline target = %q, %v", got, err)
+	}
+
+	// An existing link path is refused rather than replaced.
+	if err := c.Symlink(ctx, link, "target.txt"); err == nil {
+		t.Error("creating a link over an existing one succeeded")
+	}
+	// Including when it is a directory, which is the case where ln would
+	// otherwise put the link inside it instead of failing.
+	dir := filepath.Join(root, "a dir")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Symlink(ctx, dir, "target.txt"); err == nil {
+		t.Error("creating a link over an existing directory succeeded")
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "target.txt")); err == nil {
+		t.Error("the link was created inside the directory")
+	}
+
+	// An empty target is unspecified in POSIX, so it is refused here.
+	if err := c.Symlink(ctx, filepath.Join(root, "empty"), ""); err == nil {
+		t.Error("an empty target was accepted")
+	}
+	// And the guard still applies to the link itself.
+	if err := c.Symlink(ctx, "relative/link", "target.txt"); err == nil {
+		t.Error("a relative link path was accepted")
+	}
+
+	// Every refusal above must have left the session usable.
+	if err := c.Session().Noop(ctx); err != nil {
+		t.Errorf("noop after the refusals: %v", err)
+	}
+}

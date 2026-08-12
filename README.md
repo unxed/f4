@@ -1,4 +1,4 @@
-# f4 (an experimental Far Manager / far2l clone in Go)
+# f4 — efficient and cozy file manager in go
 
 ![](https://raw.githubusercontent.com/unxed/f4/refs/heads/main/screenshot.png)
 ### ⚡ Quick Download (Nightly Builds)
@@ -91,6 +91,7 @@ Example:
 6. **Environment Profiles:** The built-in Environment Manager applies ordered, cross-platform environment profiles to f4 and its local workspace shells. See [Environment Manager plugin](plugins/envman/README.md).
 7. **Custom File Highlighting:** Highly flexible file highlighting system supporting glob masks, cross-platform attributes, file sizes, absolute/relative dates, cascade blending, and visual marker glyphs. See [File Highlighting Guide](HIGHLIGHTING.md).
 8. **Declarative Localization:** Flexible i18n system for UI and Help files with a built-in "Ctrl+Alt+RightClick" Translator Tool. See [Localization Guide](I18N.md).
+9. **FUSE Mounts:** Any file system f4 can open — archives, SFTP/FTP hosts, phones — can be mounted as an ordinary directory, so that programs which know nothing about f4 can read it. See [FUSE Mounts](FUSE.md).
 
 ---
 
@@ -215,6 +216,7 @@ f4 is inspired by:
 * [DN (DOS Navigator)](https://www.ritlabs.com/en/products/dn/)
 * [Far Manager 2/3](https://github.com/FarGroup/FarManager), [far2l](https://github.com/elfmz/far2l/), [far2m](https://github.com/shmuz/far2m)
 * [FreeType](https://github.com/freetype/freetype) — auto-hinting
+* [Midnight Commander](https://midnight-commander.org/) — FISH/SHELL protocol concept
 * [Telegram](https://telegram.org/) — single-binary distribution and automatic updates
 * [Turbo Text Editor](https://github.com/magiblot/turbo)
 * [Turbo Vision](https://github.com/magiblot/tvision)

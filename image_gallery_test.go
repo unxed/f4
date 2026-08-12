@@ -121,7 +121,7 @@ func TestImageViewGalleryDrawsATileForEachPicture(t *testing.T) {
 	}
 
 	// Every tile is captioned, whether its thumbnail has arrived or not.
-	row := screenRow(scr, imageTileRows, 0, 79)
+	row := ScreenRow(scr, imageTileRows, 0, 79)
 	for _, name := range []string{"a.png", "b.png", "c.png"} {
 		if !strings.Contains(row, name) {
 			t.Errorf("the caption row is %q, without %s", row, name)

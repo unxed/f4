@@ -69,3 +69,84 @@ func TestCaptureWorkspaceSessionsUsesTabOrderAndActiveIndex(t *testing.T) {
 		t.Fatal("captured panel paths do not belong to their ordered workspaces")
 	}
 }
+
+func TestApplyWorkspaceSessionInitializesFreshPanelsFrame(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+
+	pf := NewPanelsFrame()
+	t.Cleanup(func() { pf.Close() })
+	state := workspaceSessionState{
+		ActivePanel: 0,
+		WidePanel:   -1,
+		ShowPanels:  true,
+		ShowLeft:    true,
+		ShowRight:   true,
+		Left: panelSessionState{
+			ViewMode: int(ViewModeBrief), SortMode: int(SortExt), SortReverse: true,
+		},
+		Right: panelSessionState{
+			ViewMode: int(ViewModeDetailed), SortMode: int(SortTime),
+		},
+	}
+
+	// Background workspaces are restored immediately after construction,
+	// before SetupUI has explicitly resized them.
+	applyWorkspaceSession(pf, state, 80, 25, false)
+
+	left, leftOK := pf.panels[0].(*FileSystemPanel)
+	right, rightOK := pf.panels[1].(*FileSystemPanel)
+	if !leftOK || left == nil || !rightOK || right == nil {
+		t.Fatalf("fresh workspace panels were not initialized: left=%T right=%T", pf.panels[0], pf.panels[1])
+	}
+	if pf.activeIdx != 0 {
+		t.Fatalf("active panel = %d, want 0", pf.activeIdx)
+	}
+	if left.viewMode != ViewModeBrief || left.sortMode != SortExt || !left.sortReverse {
+		t.Fatalf("left panel state was not restored: view=%v sort=%v reverse=%v", left.viewMode, left.sortMode, left.sortReverse)
+	}
+	if right.viewMode != ViewModeDetailed || right.sortMode != SortTime || right.sortReverse {
+		t.Fatalf("right panel state was not restored: view=%v sort=%v reverse=%v", right.viewMode, right.sortMode, right.sortReverse)
+	}
+}
+
+func TestWorkspaceSessionsForRestore(t *testing.T) {
+	states := []workspaceSessionState{{Number: 2}, {Number: 7}, {Number: 9}}
+
+	all, active := workspaceSessionsForRestore(states, 1, true)
+	if !reflect.DeepEqual(all, states) || active != 1 {
+		t.Fatalf("enabled restoration changed sessions: states=%#v active=%d", all, active)
+	}
+
+	one, active := workspaceSessionsForRestore(states, 1, false)
+	if len(one) != 1 || one[0].Number != 7 || active != 0 {
+		t.Fatalf("disabled restoration = %#v, active=%d; want active session 7 only", one, active)
+	}
+
+	one, active = workspaceSessionsForRestore(states, 99, false)
+	if len(one) != 1 || one[0].Number != 2 || active != 0 {
+		t.Fatalf("invalid active index fallback = %#v, active=%d; want first session", one, active)
+	}
+}
+
+func TestRenumberWorkspaceScreensFollowsCurrentOrder(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(func() { vtui.FrameManager.Init(vtui.NewSilentScreenBuf()) })
+	vtui.FrameManager.Screens = []*vtui.AppScreen{
+		{Number: 7},
+		{Number: 2},
+		{Number: 11},
+	}
+
+	renumberWorkspaceScreens()
+
+	got := []int{
+		vtui.FrameManager.Screens[0].Number,
+		vtui.FrameManager.Screens[1].Number,
+		vtui.FrameManager.Screens[2].Number,
+	}
+	want := []int{1, 2, 3}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("renumbered workspace screens = %v, want %v", got, want)
+	}
+}

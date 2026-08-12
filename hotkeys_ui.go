@@ -42,40 +42,22 @@ func (r hotkeyRow) GetCellAttr(col int, def uint64) uint64 {
 
 func actionHotkeyConfig(pf *PanelsFrame) {
 	w, h := 120, 48
-	dlg := vtui.NewCenteredDialog(w, h, Msg("Hotkeys.Title"))
-	dlg.ShowClose = true
-
-	table := vtui.NewTable(0, 0, w-4, h-6, []vtui.TableColumn{
-		{Title: "Command", Width: 20},
-		{Title: "Key", Width: 12},
-		{Title: "Area", Width: 10},
-		{Title: "When", Width: 12},
-		{Title: "Description", Width: 60, Alignment: vtui.AlignFill},
-	})
-	useDialogTableColors(table)
-	table.ShowScrollBar = true
 
 	btnAssign := vtui.NewButton(0, 0, Msg("Hotkeys.BtnAssign"))
 	btnUnbind := vtui.NewButton(0, 0, Msg("Hotkeys.BtnUnbind"))
 	btnClose := vtui.NewButton(0, 0, Msg("Hotkeys.BtnClose"))
 
-	dlg.AddItem(table)
-	dlg.AddItem(btnAssign)
-	dlg.AddItem(btnUnbind)
-	dlg.AddItem(btnClose)
-
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, w-4, h-4)
-	vbox.Add(table, vtui.Margins{Bottom: 1}, vtui.AlignFill)
-
-	hbox := vtui.NewHBoxLayout(0, 0, w-4, 1)
-	hbox.HorizontalAlign = vtui.AlignCenter
-	hbox.Spacing = 2
-	hbox.Add(btnAssign, vtui.Margins{}, vtui.AlignTop)
-	hbox.Add(btnUnbind, vtui.Margins{}, vtui.AlignTop)
-	hbox.Add(btnClose, vtui.Margins{}, vtui.AlignTop)
-
-	vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
-	vbox.Apply()
+	dlg, table := vtui.NewTableDialog(w, h, Msg("Hotkeys.Title"), []vtui.TableColumn{
+		{Title: "Command", Width: 23},
+		{Title: "Key", Width: 14},
+		{Title: "Area", Width: 10},
+		{Title: "When", Width: 17},
+		{Title: "Description", Width: 0},
+	}, btnAssign, btnUnbind, btnClose)
+	useDialogTableColors(table)
+	table.ShowScrollBar = true
+	table.Sortable = true    // click a column header to sort, again to reverse
+	table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
 
 	var rows []vtui.TableRow
 	var hkRows []hotkeyRow

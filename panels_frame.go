@@ -520,11 +520,30 @@ func (pf *PanelsFrame) applyNavigationMode() {
 		}
 	}
 }
+func isAIPanel(panel Panel) bool {
+	if fsp, ok := panel.(*FileSystemPanel); ok && fsp != nil && fsp.vfs != nil {
+		if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+			return tp.GetTitle() == "ai"
+		}
+	}
+	return false
+}
 
 // leftMenu builds the custom side menu for the left panel. View and
 // sort modes act on a fixed side through Cm commands, so they stay
 // command-routed rather than generated from the action registry.
 func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
+	if isAIPanel(pf.panels[0]) {
+		return vtui.MenuBarItem{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
+			{Text: "&1. " + Msg("Action.AI.ViewContext"), Command: CmLeftAIContext, Shortcut: "Ctrl+1"},
+			{Text: "&2. " + Msg("Action.AI.ViewChat"), Command: CmLeftAIChat, Shortcut: "Ctrl+2"},
+			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmLeftAIOut, Shortcut: "Ctrl+3"},
+			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmLeftAIMem, Shortcut: "Ctrl+4"},
+			{Separator: true},
+			{Text: "Bac&kground", Command: CmBackground},
+			{Text: Msg("Menu.Exit"), Command: vtui.CmQuit},
+		}}
+	}
 	return vtui.MenuBarItem{Label: "&" + Msg("Menu.Left"), SubItems: []vtui.MenuItem{
 		{Text: "&" + Msg("Menu.Left.Brief"), Command: CmLeftBrief},
 		{Text: "&" + Msg("Menu.Left.Medium"), Command: CmLeftMedium},
@@ -544,6 +563,14 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 
 // rightMenu builds the custom side menu for the right panel.
 func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
+	if isAIPanel(pf.panels[1]) {
+		return vtui.MenuBarItem{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
+			{Text: "&1. " + Msg("Action.AI.ViewContext"), Command: CmRightAIContext, Shortcut: "Ctrl+1"},
+			{Text: "&2. " + Msg("Action.AI.ViewChat"), Command: CmRightAIChat, Shortcut: "Ctrl+2"},
+			{Text: "&3. " + Msg("Action.AI.ViewOut"), Command: CmRightAIOut, Shortcut: "Ctrl+3"},
+			{Text: "&4. " + Msg("Action.AI.ViewMem"), Command: CmRightAIMem, Shortcut: "Ctrl+4"},
+		}}
+	}
 	return vtui.MenuBarItem{Label: "&" + Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 		{Text: "&" + Msg("Menu.Left.Brief"), Command: CmRightBrief},
 		{Text: "&" + Msg("Menu.Left.Medium"), Command: CmRightMedium},
@@ -875,6 +902,11 @@ func (pf *PanelsFrame) initPTY() {
 }
 
 func (pf *PanelsFrame) Close() {
+	if pf.wide && pf.widePanel >= 0 && pf.widePanel < 2 {
+		if isAIPanel(pf.panels[pf.widePanel]) {
+			pf.exitWide()
+		}
+	}
 	pf.closeProcessEnvironmentShell()
 
 	pf.ptyMutex.Lock()
@@ -1226,8 +1258,12 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 	if (!pf.showPanels && (pf.termView.UseAltScreen || isBusy)) || topType == vtui.TypeUser+2 {
 		pf.cmdLine.SetVisible(false)
 	} else {
+		isChatFocused := false
+		if pf.showPanels && pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "ai_chat" && pf.altPanels[pf.activeIdx].IsFocused() {
+			isChatFocused = true
+		}
 		pf.cmdLine.SetVisible(true)
-		pf.cmdLine.Edit.HideCursor = isFastFind || (pf.searchFirstMode() && pf.showPanels && !pf.commandLineFocused)
+		pf.cmdLine.Edit.HideCursor = isFastFind || isChatFocused || (pf.searchFirstMode() && pf.showPanels && !pf.commandLineFocused)
 		cmdLineY := pf.lastH - 1
 		if pf.showKeyBar {
 			cmdLineY = pf.lastH - 2
@@ -1259,8 +1295,30 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	rctrl := (e.ControlKeyState & vtinput.RightCtrlPressed) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+
+	// RCtrl+A: Toggle AI Panel
+	if e.VirtualKeyCode == 'A' && rctrl && !alt && !shift {
+		aiTogglePanel(pf)
+		return true
+	}
+
+	// Arkanoid easter egg: Ctrl+Alt+A
+	if e.VirtualKeyCode == 'A' && alt && ctrl {
+		for i, s := range vtui.FrameManager.Screens {
+			for _, f := range s.Frames {
+				if f.GetTitle() == "Arkanoid" {
+					vtui.FrameManager.SwitchScreen(i)
+					return true
+				}
+			}
+		}
+		// Запускаем без десктопа, чтобы воркспейс был прозрачным
+		vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
+		return true
+	}
 
 	// Check global hotkeys (ignoring Lock and Enhanced keys)
 	for _, hk := range globalHotkeysSnapshot() {
@@ -1291,8 +1349,44 @@ func (pf *PanelsFrame) InterceptPluginKey(e *vtinput.InputEvent) bool {
 // the key before the global hotkey dispatcher. During fast find,
 // printable characters and the gray selection keys belong to the
 // panel's own search input.
+// commandLineOwnsSelection reports the keys that belong to the command
+// line's own text selection rather than to a panel action: Ctrl+Shift+
+// Left/Right walk the selection word by word there exactly as they do in
+// any other edit field, whether or not the panels are visible. They fall
+// back to the drive menus (far2l's Alt+F1 / Alt+F2 aliases) only while
+// the line is empty and there is nothing to select — the same trade the
+// EmptyCommandLine condition already makes for plain Ctrl+Left/Right.
+func (pf *PanelsFrame) commandLineOwnsSelection(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	if e.VirtualKeyCode != vtinput.VK_LEFT && e.VirtualKeyCode != vtinput.VK_RIGHT {
+		return false
+	}
+	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
+	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
+	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
+	if !ctrl || !shift || alt {
+		return false
+	}
+	return pf.cmdLine != nil && pf.cmdLine.IsVisible() && !pf.cmdLine.IsEmpty()
+}
+
+// VetoActionKey reports modal input states in which the panels must see
+// the key before the global hotkey dispatcher. During fast find,
+// printable characters and the gray selection keys belong to the
+// panel's own search input.
 func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
-	if e.Type != vtinput.KeyEventType || !e.KeyDown || !pf.showPanels {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown {
+		return false
+	}
+	// Checked ahead of the panels-visible guard: the command line keeps
+	// its selection keys in terminal mode too, where the drive menus are
+	// bound in the Terminal area.
+	if pf.commandLineOwnsSelection(e) {
+		return true
+	}
+	if !pf.showPanels {
 		return false
 	}
 	fsp := pf.getActivePanel()
@@ -1309,6 +1403,13 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		if e.VirtualKeyCode == vtinput.VK_F2 && pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
 			if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() {
 				return true
+			}
+		}
+		if pf.activeIdx >= 0 && pf.activeIdx < len(pf.altPanels) {
+			if a := pf.altPanels[pf.activeIdx]; a != nil && a.IsFocused() && a.Kind() == "ai_chat" {
+				if e.Char != 0 || e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_BACK || e.VirtualKeyCode == vtinput.VK_DELETE {
+					return true
+				}
 			}
 		}
 		return false
@@ -1414,21 +1515,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				return fsp.ProcessKey(e)
 			}
 		}
-	}
-
-	// Arkanoid easter egg: Ctrl+Alt+A
-	if e.VirtualKeyCode == 'A' && alt && ctrl && e.KeyDown {
-		for i, s := range vtui.FrameManager.Screens {
-			for _, f := range s.Frames {
-				if f.GetTitle() == "Arkanoid" {
-					vtui.FrameManager.SwitchScreen(i)
-					return true
-				}
-			}
-		}
-		// Запускаем без десктопа, чтобы воркспейс был прозрачным
-		vtui.FrameManager.AddScreenHeadless(NewArkanoidFrame())
-		return true
 	}
 	// Crash test hotkey: Ctrl+Alt+C
 	if e.VirtualKeyCode == vtinput.VK_C && alt && ctrl && e.KeyDown {
@@ -1612,8 +1698,13 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			isFastFind = fsp.fastFindMode
 		}
 
-		// If fast find is active, Vim hotkeys must be ignored to allow searching by 'j', 'k', etc.
-		if !isFastFind {
+		isChatFocused := false
+		if pf.altPanels[pf.activeIdx] != nil && pf.altPanels[pf.activeIdx].Kind() == "ai_chat" && pf.altPanels[pf.activeIdx].IsFocused() {
+			isChatFocused = true
+		}
+
+		// If fast find or chat is active, Vim hotkeys must be ignored to allow typing 'j', 'k', etc.
+		if !isFastFind && !isChatFocused {
 			now := time.Now()
 			key := e.Char
 			cmdLineText := pf.cmdLine.Edit.GetText()
@@ -1663,12 +1754,20 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Enter handling
 	if e.VirtualKeyCode == vtinput.VK_RETURN {
-		// The hotkey filter normally handles Ctrl+Enter. Keep an in-frame
-		// fallback because platform input and injected events can bypass that
-		// filter; under no circumstances should Ctrl+Enter become plain Enter
-		// and enter the selected directory.
-		if ctrl && !alt && !shift && pf.showPanels {
+		// The hotkey filter normally handles Ctrl+Enter and Shift+Enter.
+		// Keep in-frame fallbacks because platform input and injected events
+		// can bypass that filter; under no circumstances should a modified
+		// Enter become plain Enter and enter the selected directory or run
+		// the command line. Hidden panels are included: an AltScreen app or
+		// a busy PTY has already been served by the raw-forwarding returns
+		// at the top of this function, so reaching this point means f4
+		// itself owns the keyboard and the panel cursor is still live.
+		if ctrl && !alt && !shift {
 			pf.insertSelectedFileName()
+			return true
+		}
+		if shift && !ctrl && !alt {
+			RunAction("Panel.SystemExplorer")
 			return true
 		}
 		commandInputActive := !pf.searchFirstMode() || pf.commandLineFocused || !pf.showPanels
@@ -1937,8 +2036,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	// 2. Try global hotkeys handled by PanelsFrame
 	// Ctrl+Shift+Left / Ctrl+Shift+Right open the drive menu for the
-	// corresponding visual panel without changing the active panel.
-	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && shift && e.KeyDown && pf.showPanels {
+	// corresponding visual panel without changing the active panel — but
+	// only while there is no text to select, see commandLineOwnsSelection.
+	if (e.VirtualKeyCode == vtinput.VK_LEFT || e.VirtualKeyCode == vtinput.VK_RIGHT) && ctrl && !alt && shift && e.KeyDown && pf.showPanels &&
+		!pf.commandLineOwnsSelection(e) {
 		panelIdx := 0
 		if e.VirtualKeyCode == vtinput.VK_RIGHT {
 			panelIdx = 1
@@ -1991,6 +2092,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.cmdLine.ProcessKey(e)
 			return true
 		}
+	}
+
+	// Ctrl+Shift+Left/Right extend that selection word by word. This has
+	// to run before the injected-event hotkey lookup below, which would
+	// otherwise reach the drive menu the same way the filter does.
+	if pf.commandLineOwnsSelection(e) {
+		pf.cmdLine.ProcessKey(e)
+		return true
 	}
 
 	// 3. Try Active Panel
@@ -2649,6 +2758,46 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmRightWide:
 		pf.setWidePanel(1)
 		return true
+	case CmLeftAIContext:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://ctx", false)
+		}
+		return true
+	case CmLeftAIChat:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://chat", true)
+		}
+		return true
+	case CmLeftAIOut:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://out", false)
+		}
+		return true
+	case CmLeftAIMem:
+		if aiCmd, ok := pf.panels[0].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://mem", false)
+		}
+		return true
+	case CmRightAIContext:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://ctx", false)
+		}
+		return true
+	case CmRightAIChat:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://chat", true)
+		}
+		return true
+	case CmRightAIOut:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://out", false)
+		}
+		return true
+	case CmRightAIMem:
+		if aiCmd, ok := pf.panels[1].(interface{ AiSetViewMode(string, bool) }); ok {
+			aiCmd.AiSetViewMode("ai://mem", false)
+		}
+		return true
 
 	case CmLeftSortName:
 		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
@@ -3296,10 +3445,7 @@ func (pf *PanelsFrame) GetWorkspaceTabTitle() string {
 		if pf.executing && pf.workspaceCommandTitle != "" {
 			title = pf.workspaceCommandTitle
 		}
-		// U+2328 is measured as one cell by runewidth but is rendered as a
-		// two-cell glyph by the Windows GUI font. Keep an extra spacer so the
-		// visible gap before the title matches the folder icon tabs.
-		return "⌨  " + title
+		return title
 	}
 
 	panelPath := func(panel Panel) string {
@@ -3325,7 +3471,14 @@ func (pf *PanelsFrame) GetWorkspaceTabTitle() string {
 		return path
 	}
 
-	return "📁 " + panelPath(pf.panels[0]) + " ─ " + panelPath(pf.panels[1])
+	return panelPath(pf.panels[0]) + " ─ " + panelPath(pf.panels[1])
+}
+
+func (pf *PanelsFrame) GetWorkspaceTabMarker() string {
+	if pf.showPanels {
+		return "P"
+	}
+	return "T"
 }
 
 // GetWorkspaceMenuInfo supplies the Screens popup with full panel paths. The
@@ -3336,7 +3489,7 @@ func (pf *PanelsFrame) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
 		if pf.executing && pf.workspaceCommandTitle != "" {
 			title = pf.workspaceCommandTitle
 		}
-		return vtui.WorkspaceMenuInfo{Icon: "⌨", Primary: title}
+		return vtui.WorkspaceMenuInfo{Icon: "T", Primary: title}
 	}
 
 	panelPath := func(panel Panel) string {
@@ -3365,7 +3518,7 @@ func (pf *PanelsFrame) GetWorkspaceMenuInfo() vtui.WorkspaceMenuInfo {
 	}
 
 	return vtui.WorkspaceMenuInfo{
-		Icon:      "📁",
+		Icon:      "P",
 		Primary:   panelPath(pf.panels[0]),
 		Secondary: panelPath(pf.panels[1]),
 	}

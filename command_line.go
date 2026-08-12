@@ -21,6 +21,7 @@ func NewCommandLine(prompt string) *CommandLine {
 	}
 	cl.Edit.DeduplicateHistory = true
 	cl.Edit.HistoryLimit = 100
+	cl.Edit.PathHintsEnabled = true
 	cl.Edit.ColorTextIdx = ColCommandLineText
 	cl.Edit.ColorUnchangedIdx = ColCommandLineText
 	cl.Edit.ColorSelectedIdx = ColCommandLineSelectedText

@@ -1030,8 +1030,11 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev1.GetTitle() != "Edit: syslog" {
 		t.Errorf("GetTitle failed for valid path: %s", ev1.GetTitle())
 	}
-	if ev1.GetWorkspaceTabTitle() != "✎ syslog" {
+	if ev1.GetWorkspaceTabTitle() != "syslog" {
 		t.Errorf("GetWorkspaceTabTitle failed for valid path: %s", ev1.GetWorkspaceTabTitle())
+	}
+	if ev1.GetWorkspaceTabMarker() != "E" {
+		t.Errorf("GetWorkspaceTabMarker failed: %s", ev1.GetWorkspaceTabMarker())
 	}
 
 	// Without path
@@ -1040,7 +1043,7 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev2.GetTitle() != "Editor" {
 		t.Errorf("GetTitle failed for empty path: %s", ev2.GetTitle())
 	}
-	if ev2.GetWorkspaceTabTitle() != "✎ Editor" {
+	if ev2.GetWorkspaceTabTitle() != "Editor" {
 		t.Errorf("GetWorkspaceTabTitle failed for empty path: %s", ev2.GetWorkspaceTabTitle())
 	}
 
@@ -1051,7 +1054,7 @@ func TestEditorView_GetTitle(t *testing.T) {
 	if ev3.GetTitle() != "Rename list of files" {
 		t.Errorf("GetTitle ignored DisplayTitle: %s", ev3.GetTitle())
 	}
-	if ev3.GetWorkspaceTabTitle() != "✎ Rename list of files" {
+	if ev3.GetWorkspaceTabTitle() != "Rename list of files" {
 		t.Errorf("GetWorkspaceTabTitle ignored DisplayTitle: %s", ev3.GetWorkspaceTabTitle())
 	}
 }
@@ -4292,6 +4295,115 @@ func TestEditorView_WordJumps_DividerBetweenWords(t *testing.T) {
 	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.LeftCtrlPressed})
 	if ev.CursorPos != 0 {
 		t.Errorf("second Ctrl+Left: expected 0, got %d", ev.CursorPos)
+	}
+}
+
+func TestEditorView_CtrlLeftPastEOL(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pt := piecetable.New([]byte("foo bar"))
+	ev := NewEditorView(pt, nil, "")
+	defer ev.Close()
+	ev.li.Rebuild(pt)
+	ev.SetPosition(0, 0, 40, 10)
+	ev.CursorBeyondEOL = true
+	ev.CursorLine = 0
+	ev.CursorPos = 7
+	ev.CursorVirtualSpaces = 5 // the cursor floats past the end of the line
+	ev.updateDesiredVisualCol()
+
+	ctrlLeft := func() {
+		ev.ProcessKey(keyEvent(vtinput.VK_LEFT, vtinput.LeftCtrlPressed))
+	}
+
+	// Past EOL a word jump behaves as if the cursor stood at the real end of
+	// the line: it lands on the last word, it does not eat virtual spaces
+	// one by one.
+	ctrlLeft()
+	if ev.CursorVirtualSpaces != 0 {
+		t.Errorf("Ctrl+Left should drop the virtual spaces, got %d", ev.CursorVirtualSpaces)
+	}
+	if ev.CursorPos != 4 {
+		t.Errorf("Ctrl+Left past EOL: expected pos 4, got %d", ev.CursorPos)
+	}
+
+	ctrlLeft()
+	if ev.CursorPos != 0 {
+		t.Errorf("second Ctrl+Left: expected pos 0, got %d", ev.CursorPos)
+	}
+
+	// A plain Left still walks back through the virtual spaces.
+	ev.CursorPos = 7
+	ev.CursorVirtualSpaces = 2
+	ev.updateDesiredVisualCol()
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_LEFT})
+	if ev.CursorPos != 7 || ev.CursorVirtualSpaces != 1 {
+		t.Errorf("plain Left past EOL: expected pos 7 / virt 1, got %d / %d", ev.CursorPos, ev.CursorVirtualSpaces)
+	}
+}
+
+func TestEditorView_CtrlUpDownScrollsTextUnderCursor(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	var sb strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&sb, "line %02d\n", i)
+	}
+	pt := piecetable.New([]byte(strings.TrimSuffix(sb.String(), "\n")))
+	ev := NewEditorView(pt, nil, "scroll.txt")
+	defer ev.Close()
+	ev.li.Rebuild(pt)
+	ev.SetPosition(0, 0, 40, 10) // 10 visible text rows
+	ev.CursorLine = 5
+	ev.CursorPos = 0
+	ev.updateDesiredVisualCol()
+	ev.ensureCursorVisible()
+
+	ctrlDown := func() { ev.ProcessKey(keyEvent(vtinput.VK_DOWN, vtinput.LeftCtrlPressed)) }
+	ctrlUp := func() { ev.ProcessKey(keyEvent(vtinput.VK_UP, vtinput.LeftCtrlPressed)) }
+	screenRow := func() int { return ev.CursorLine - ev.ScrollTopRow }
+
+	// 1. The text moves under the cursor: TopScreen and CurLine step
+	// together, so the cursor does not budge on the screen.
+	ctrlDown()
+	if ev.ScrollTopRow != 1 || ev.CursorLine != 6 {
+		t.Errorf("Ctrl+Down: expected top 1 / line 6, got %d / %d", ev.ScrollTopRow, ev.CursorLine)
+	}
+	if screenRow() != 5 {
+		t.Errorf("cursor left its screen row: %d", screenRow())
+	}
+
+	// 2. ...all the way down to the last screenful (30 rows, 10 visible).
+	for i := 0; i < 19; i++ {
+		ctrlDown()
+	}
+	if ev.ScrollTopRow != 20 || ev.CursorLine != 25 || screenRow() != 5 {
+		t.Fatalf("scrolled to the bottom: top %d, line %d, screen row %d", ev.ScrollTopRow, ev.CursorLine, screenRow())
+	}
+
+	// 3. There the view is stuck and the cursor walks on alone until it
+	// reaches the last line (far2l falls back to a bare Down()).
+	ctrlDown()
+	if ev.ScrollTopRow != 20 || ev.CursorLine != 26 {
+		t.Errorf("at EOF the cursor should move alone: top %d, line %d", ev.ScrollTopRow, ev.CursorLine)
+	}
+	for i := 0; i < 10; i++ {
+		ctrlDown()
+	}
+	if ev.ScrollTopRow != 20 || ev.CursorLine != 29 {
+		t.Errorf("expected to stop on the last line: top %d, line %d", ev.ScrollTopRow, ev.CursorLine)
+	}
+
+	// 4. Scrolling back up the cursor rides along again, keeping its row.
+	ctrlUp()
+	if ev.ScrollTopRow != 19 || ev.CursorLine != 28 || screenRow() != 9 {
+		t.Errorf("Ctrl+Up: expected top 19 / line 28, got %d / %d", ev.ScrollTopRow, ev.CursorLine)
+	}
+
+	// 5. At the top of the file it walks alone once more, down to line 0.
+	for i := 0; i < 40; i++ {
+		ctrlUp()
+	}
+	if ev.ScrollTopRow != 0 || ev.CursorLine != 0 {
+		t.Errorf("expected to stop at the top of the file: top %d, line %d", ev.ScrollTopRow, ev.CursorLine)
 	}
 }
 

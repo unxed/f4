@@ -401,6 +401,8 @@ type FileSystemPanel struct {
 	suppressFolderHistoryPath string // one-shot: history/menu navigation must not reorder MRU
 	fastFindMode              bool
 	fastFindStr               string
+	fastFindMatcherKey        string
+	fastFindMatchers          []*vtui.FuzzyMatcher
 	showInactiveCursor        bool
 
 	sortMode    SortMode
@@ -2115,6 +2117,21 @@ func (fp *FileSystemPanel) Refresh() {
 	}
 }
 
+func (fp *FileSystemPanel) cursorSizeOnBottomBorder() string {
+	if AppConfig.ShowPanelFileInfo || (fp.viewMode != ViewModeBrief && fp.viewMode != ViewModeMedium) {
+		return ""
+	}
+	idx := fp.GetCursorIndex()
+	if idx < 0 || idx >= len(fp.entries) {
+		return ""
+	}
+	entry := fp.entries[idx]
+	if entry == nil || entry.IsDir || entry.Name == ".." {
+		return ""
+	}
+	return " " + formatIntWithSpaces(entry.Size) + " B "
+}
+
 func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.frame.Show(scr)
 	titleAttr := vtui.Palette[ColPanelTitle]
@@ -2233,16 +2250,43 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		totalStr = fmt.Sprintf(" "+Msg("Panel.SelectedInfo")+" ", formatIntWithSpaces(selSize), selFiles, selDirs)
 		attrTotal = vtui.Palette[ColPanelSelectedInfo]
 	} else if totCount > 0 {
-		totalStr = fmt.Sprintf(" %s (%d) ", formatSize(totSize), totCount)
+		totalStr = fmt.Sprintf(" %s (%d) ", formatIntWithSpaces(totSize), totCount)
 		attrTotal = vtui.Palette[ColPanelTotalInfo]
 	}
 
+	totalStart := fp.X2
 	if totalStr != "" {
 		totalW := runewidth.StringWidth(totalStr)
 		availBottom := fp.X2 - fp.X1 - 1
 		if totalW < availBottom {
+			totalStart = fp.X1 + 1 + (availBottom-totalW)/2
 			p := vtui.NewPainter(scr)
-			p.DrawString(fp.X1+1+(availBottom-totalW)/2, fp.Y2, totalStr, attrTotal)
+			p.DrawString(totalStart, fp.Y2, totalStr, attrTotal)
+		}
+	}
+
+	// The bottom frame now carries two numbers, so they must not read as one.
+	// The panel total keeps the centre and its own colour; the entry under
+	// the cursor is pinned to the left corner behind a ▸ marker. Both are in
+	// exact bytes, the way far2l and the Size column spell them, and so is
+	// the selected-files line. Directories say <DIR>/UP-DIR instead. When
+	// the far2l status line is switched on it already states all of this
+	// right above, so the marker steps aside.
+	if !AppConfig.ShowPanelFileInfo && fp.gridColumnCount() > 1 {
+		if idx := fp.GetCursorIndex(); idx >= 0 && idx < len(fp.entries) {
+			e := fp.entries[idx]
+			curStr := formatIntWithSpaces(e.Size)
+			if e.IsDir && !e.SizeCalculated {
+				curStr = "<DIR>"
+				if e.Name == ".." {
+					curStr = "UP-DIR"
+				}
+			}
+			curStr = " ▸ " + curStr + " "
+			if curW := runewidth.StringWidth(curStr); fp.X1+1+curW < totalStart {
+				p := vtui.NewPainter(scr)
+				p.DrawString(fp.X1+1, fp.Y2, curStr, vtui.Palette[ColPanelText])
+			}
 		}
 	}
 
@@ -2304,20 +2348,35 @@ func (fp *FileSystemPanel) fastFindMatch(name string) (startRunes, matchedRunes 
 	if queryText == "" {
 		return 0, 0, anywhere
 	}
-	nameLower := strings.ToLower(name)
-	for _, query := range []string{
-		strings.ToLower(queryText),
-		strings.ToLower(vtui.GlobalXlator.TranscodeString(queryText)),
-	} {
-		if query == "" {
-			continue
-		}
-		byteOffset := strings.Index(nameLower, query)
-		if byteOffset >= 0 && (anywhere || byteOffset == 0) {
-			return len([]rune(nameLower[:byteOffset])), len([]rune(query)), true
+	// Matchers are cached per query text: the needle tables are built once
+	// per keystroke, not once per visible row per redraw.
+	if fp.fastFindMatcherKey != queryText {
+		fp.fastFindMatcherKey = queryText
+		fp.fastFindMatchers = fp.fastFindMatchers[:0]
+		for _, query := range []string{
+			queryText,
+			vtui.GlobalXlator.TranscodeString(queryText),
+		} {
+			if m := vtui.NewFuzzyMatcher(query, false); m != nil {
+				fp.fastFindMatchers = append(fp.fastFindMatchers, m)
+			}
 		}
 	}
-	return 0, 0, false
+	bestScore := -1
+	bestStart, bestEnd := 0, -1
+	for _, m := range fp.fastFindMatchers {
+		score, start, end, found := m.Match(name)
+		if !found || (!anywhere && start != 0) {
+			continue
+		}
+		if bestScore < 0 || score < bestScore || (score == bestScore && start < bestStart) {
+			bestScore, bestStart, bestEnd = score, start, end
+		}
+	}
+	if bestScore < 0 {
+		return 0, 0, false
+	}
+	return bestStart, bestEnd - bestStart + 1, true
 }
 
 func (fp *FileSystemPanel) fastFindHasMatches() bool {
@@ -2867,9 +2926,12 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 	if e.WheelDirection != 0 {
 		// Determine direction: up is -1, down is 1
 		direction := 1
+		speed := AppConfig.WheelPanelDown
 		if e.WheelDirection > 0 {
 			direction = -1
+			speed = AppConfig.WheelPanelUp
 		}
+		step := direction * wheelScrollLines(speed)
 
 		H := fp.table.ViewHeight
 		if H <= 0 {
@@ -2879,7 +2941,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		if fp.gridColumnCount() == 1 {
 			// Detailed view (1-column)
 			idx := fp.GetCursorIndex()
-			newIdx := idx + direction
+			newIdx := idx + step
 			if newIdx < 0 {
 				newIdx = 0
 			}
@@ -2888,7 +2950,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Scroll the list if possible, keeping the cursor visually stable
-			newTop := fp.table.TopPos + direction
+			newTop := fp.table.TopPos + step
 			maxTop := len(fp.entries) - H
 			if maxTop < 0 {
 				maxTop = 0
@@ -2907,7 +2969,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		} else {
 			// Medium/Brief grid view.
 			idx := fp.GetCursorIndex()
-			newIdx := idx + direction
+			newIdx := idx + step
 			if newIdx < 0 {
 				newIdx = 0
 			}
@@ -2916,7 +2978,7 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 			}
 
 			// Scroll the list if possible, keeping the cursor visually stable
-			newTop := fp.table.TopPos + direction
+			newTop := fp.table.TopPos + step
 			maxTop := len(fp.entries) - fp.gridColumnCount()*H
 			if maxTop < 0 {
 				maxTop = 0

@@ -36,7 +36,7 @@ func TestHelpSystem_Initialization(t *testing.T) {
 		t.Fatal("README lines are empty")
 	}
 
-	expectedStickyHeader := "f4 (an experimental Far Manager / far2l clone in Go)"
+	expectedStickyHeader := "f4 — efficient and cozy file manager in go"
 	if !strings.Contains(readme.Lines[0], expectedStickyHeader) {
 		t.Errorf("Expected sticky header %q, got %q", expectedStickyHeader, readme.Lines[0])
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -99,6 +100,29 @@ func TestAction_PanelCopyPath_CursorOnParentUsesCurrentFolderPath(t *testing.T) 
 	}
 	if got := waitForCopyNameClipboard(t, inner); got != inner {
 		t.Errorf("cursor-on-.. clipboard = %q, want %q", got, inner)
+	}
+}
+
+func TestAction_PanelInsertPath_CursorOnFile(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	pf := seedPanelForCopyName(t, tmp)
+	fsp := pf.getActivePanel()
+	fsp.SetCursorIndex(1) // "a.txt"
+	pf.cmdLine.Edit.SetText("echo")
+
+	if !RunAction("Panel.InsertPath") {
+		t.Fatal("Panel.InsertPath did not run")
+	}
+	path := filepath.Join(tmp, "a.txt")
+	want := "echo " + path
+	if runtime.GOOS == "windows" {
+		want = `echo "` + path + `"`
+	}
+	if got := pf.cmdLine.Edit.GetText(); got != want {
+		t.Errorf("command line = %q, want %q", got, want)
 	}
 }
 

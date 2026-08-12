@@ -396,6 +396,7 @@ func (v *OSVFS) GetCapabilities() VFSCapabilities {
 		HasSearch:                false,
 		HasUnixPermissions:       runtime.GOOS != "windows",
 		HasAtomicNoReplaceRename: true,
+		HasWrite:                 true,
 	}
 }
 

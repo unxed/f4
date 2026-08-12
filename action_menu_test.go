@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/unxed/vtui"
 )
 
 func TestBuildMenuBarItems_Editor(t *testing.T) {
@@ -108,6 +110,37 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 	}
 	if !sawSeparator {
 		t.Error("Expected at least one separator in the Options menu")
+	}
+
+	var pluginConfiguration *vtui.MenuItem
+	for i := range items[2].SubItems {
+		item := &items[2].SubItems[i]
+		if item.Text == Msg("Menu.PluginConfiguration") {
+			pluginConfiguration = item
+			break
+		}
+	}
+	if pluginConfiguration == nil {
+		t.Fatal("Plugin Configuration is missing from the Options menu")
+	}
+	if pluginConfiguration.Shortcut != "Shift+F11" {
+		t.Errorf("Plugin Configuration shortcut = %q, want Shift+F11", pluginConfiguration.Shortcut)
+	}
+
+	wantCommandShortcuts := map[string]string{
+		Msg("Action.Panel.CopyPath"):   "Ctrl+D",
+		Msg("Action.Panel.InsertPath"): "Ctrl+F",
+	}
+	for _, item := range items[1].SubItems {
+		if want, ok := wantCommandShortcuts[item.Text]; ok {
+			if item.Shortcut != want {
+				t.Errorf("%q shortcut = %q, want %q", item.Text, item.Shortcut, want)
+			}
+			delete(wantCommandShortcuts, item.Text)
+		}
+	}
+	for label := range wantCommandShortcuts {
+		t.Errorf("Commands menu is missing %q", label)
 	}
 }
 

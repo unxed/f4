@@ -70,25 +70,53 @@ func panelsFrameOnScreen(screen *vtui.AppScreen) *PanelsFrame {
 }
 
 func captureWorkspaceSession(pf *PanelsFrame) workspaceSessionState {
+	activePanel := pf.activeIdx
+	for idx, p := range pf.panels {
+		if isAIPanel(p) {
+			activePanel = 1 - idx
+			break
+		}
+	}
+
 	state := workspaceSessionState{
-		ActivePanel: pf.activeIdx,
+		ActivePanel: activePanel,
 		WidePanel:   -1,
 		ShowPanels:  pf.showPanels,
 		ShowLeft:    pf.showLeftPanel,
 		ShowRight:   pf.showRightPanel,
 	}
 	if pf.wide {
-		state.WidePanel = pf.widePanel
+		if pf.widePanel >= 0 && pf.widePanel < 2 && !isAIPanel(pf.panels[pf.widePanel]) {
+			state.WidePanel = pf.widePanel
+		}
 	}
 	if left, ok := pf.panels[0].(*FileSystemPanel); ok {
+		path := left.vfs.GetPath()
+		cursor := left.GetSelectedName()
+		if isAIPanel(left) {
+			path = aiPrevPath[0]
+			if path == "" {
+				path = "."
+			}
+			cursor = ""
+		}
 		state.Left = panelSessionState{
-			Path: left.vfs.GetPath(), Cursor: left.GetSelectedName(), ViewMode: int(left.viewMode),
+			Path: path, Cursor: cursor, ViewMode: int(left.viewMode),
 			SortMode: int(left.sortMode), SortReverse: left.sortReverse,
 		}
 	}
 	if right, ok := pf.panels[1].(*FileSystemPanel); ok {
+		path := right.vfs.GetPath()
+		cursor := right.GetSelectedName()
+		if isAIPanel(right) {
+			path = aiPrevPath[1]
+			if path == "" {
+				path = "."
+			}
+			cursor = ""
+		}
 		state.Right = panelSessionState{
-			Path: right.vfs.GetPath(), Cursor: right.GetSelectedName(), ViewMode: int(right.viewMode),
+			Path: path, Cursor: cursor, ViewMode: int(right.viewMode),
 			SortMode: int(right.sortMode), SortReverse: right.sortReverse,
 		}
 	}
@@ -101,10 +129,16 @@ func captureWorkspaceSessions() ([]workspaceSessionState, int) {
 	}
 	states := make([]workspaceSessionState, 0, len(vtui.FrameManager.Screens))
 	active := 0
+	lastNonAIActive := 0
+
 	for screenIdx, screen := range vtui.FrameManager.Screens {
 		pf := panelsFrameOnScreen(screen)
 		if pf == nil {
 			continue
+		}
+		hasAI := isAIPanel(pf.panels[0]) || isAIPanel(pf.panels[1])
+		if !hasAI {
+			lastNonAIActive = len(states)
 		}
 		if screenIdx == vtui.FrameManager.ActiveIdx {
 			active = len(states)
@@ -115,6 +149,13 @@ func captureWorkspaceSessions() ([]workspaceSessionState, int) {
 	}
 	if active >= len(states) {
 		active = 0
+	}
+	if active < len(vtui.FrameManager.Screens) {
+		if pf := panelsFrameOnScreen(vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx]); pf != nil {
+			if isAIPanel(pf.panels[0]) || isAIPanel(pf.panels[1]) {
+				active = lastNonAIActive
+			}
+		}
 	}
 	return states, active
 }
@@ -173,6 +214,27 @@ func loadWorkspaceSessions(ini *IniFile) ([]workspaceSessionState, int) {
 	return states, active
 }
 
+func workspaceSessionsForRestore(states []workspaceSessionState, active int, restoreTabs bool) ([]workspaceSessionState, int) {
+	if restoreTabs || len(states) == 0 {
+		return states, active
+	}
+	if active < 0 || active >= len(states) {
+		active = 0
+	}
+	return []workspaceSessionState{states[active]}, 0
+}
+
+func renumberWorkspaceScreens() {
+	if vtui.FrameManager == nil {
+		return
+	}
+	for i, screen := range vtui.FrameManager.Screens {
+		if screen != nil {
+			screen.Number = i + 1
+		}
+	}
+}
+
 func writePanelSession(sb *strings.Builder, section string, state panelSessionState) {
 	fmt.Fprintf(sb, "\n[%s]\n", section)
 	fmt.Fprintf(sb, "Folder = %s\n", state.Path)
@@ -207,8 +269,23 @@ func validSessionViewMode(mode int) ViewMode {
 }
 
 func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, height int, restorePaths bool) {
-	left := pf.panels[0].(*FileSystemPanel)
-	right := pf.panels[1].(*FileSystemPanel)
+	if pf == nil {
+		return
+	}
+	left, leftOK := pf.panels[0].(*FileSystemPanel)
+	right, rightOK := pf.panels[1].(*FileSystemPanel)
+	if !leftOK || left == nil || !rightOK || right == nil {
+		// A freshly constructed background workspace has not been laid out yet,
+		// so ResizeConsole must create its file panels before session state can
+		// be applied. The first workspace is already resized by SetupUI, while
+		// restored background workspaces reach this function directly.
+		pf.ResizeConsole(width, height)
+		left, leftOK = pf.panels[0].(*FileSystemPanel)
+		right, rightOK = pf.panels[1].(*FileSystemPanel)
+		if !leftOK || left == nil || !rightOK || right == nil {
+			return
+		}
+	}
 	if restorePaths {
 		left.pendingSelection, right.pendingSelection = state.Left.Cursor, state.Right.Cursor
 	}

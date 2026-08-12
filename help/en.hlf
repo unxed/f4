@@ -1,9 +1,10 @@
 @Contents
 $f4 Help Index (Version: %Ver)
-f4 is an experimental Far Manager / far2l clone in Go.
+f4 — efficient and cozy file manager in go
 
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
+~Mouse wheel settings~MouseWheel@
 ~Visual File Renamer (VisRen)~VisRen@
 ~View README.md~README@
 
@@ -719,6 +720,11 @@ never changed.
   Shift+F3 / Shift+F4        View or edit the complete process environment
   F2                         Configure ignored variables and editor preference
 
+On Windows, the configuration dialog can import the Environment Manager data
+stored by Far Manager 3. It checks the 64-bit and 32-bit registry views and
+offers to append the imported profiles or replace the current list. The Far
+registry is only read and is never modified.
+
 An ampersand before a character in a profile name assigns that manager hotkey;
 use && for a literal ampersand. Moving an edge profile again with Ctrl+Up or
 Ctrl+Down creates a group separator. The Always use editor setting makes plain
@@ -742,3 +748,17 @@ import the delta as an enabled profile, ignore its names, or cancel.
 Macros can call f4.envman, envman, 4D766E45, or 0x4D766E45 with one profile or
 file operation string. Opening the manager or full editor is intentionally not
 supported from a macro call.
+
+@MouseWheel
+$Mouse wheel settings
+
+Options - Mouse wheel settings opens a dialog that controls how many lines
+one wheel notch scrolls, separately for the file panels, the editor, the
+viewer, menus, and tables and lists; up and down are set independently.
+
+A value of 0 follows the operating system's wheel setting (this is the
+default). Any positive value overrides it and scrolls exactly that many
+lines per notch.
+
+Other scrolling surfaces (the help viewer, multi-line edits in dialogs)
+always follow the system setting.

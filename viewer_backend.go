@@ -156,6 +156,25 @@ func (b *ViewerBackend) SearchFrom(ctx context.Context, pattern string, off int6
 	return -1, true
 }
 
+// SearchBefore asks a searchable file system for the last occurrence strictly
+// before off. It mirrors SearchFrom for reverse repeat-search.
+func (b *ViewerBackend) SearchBefore(ctx context.Context, pattern string, off int64) (int64, bool) {
+	if b.owner == nil || pattern == "" || !b.owner.GetCapabilities().HasSearch {
+		return 0, false
+	}
+	matches, err := b.owner.Search(ctx, b.path, pattern)
+	if err != nil || matches == nil {
+		return 0, false
+	}
+	last := int64(-1)
+	for at := range matches {
+		if at < off && at > last {
+			last = at
+		}
+	}
+	return last, true
+}
+
 // LineStart reports the byte offset where the given one-based line begins.
 // A file system that can index lines answers it without moving the file; one
 // that cannot is scanned here, which for a remote file means downloading it,

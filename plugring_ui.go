@@ -111,42 +111,23 @@ func BuildPlugRingRows(items []PlugRingItem, installed map[string]PlugRingItem) 
 
 func actionPlugRing(pf *PanelsFrame) {
 	w, h := 76, 22
-	dlg := vtui.NewCenteredDialog(w, h, Msg("PlugRing.Title"))
-	dlg.ShowClose = true
-
-	table := vtui.NewTable(0, 0, w-4, h-6, []vtui.TableColumn{
-		{Title: "Name", Width: 16},
-		{Title: "Version", Width: 8},
-		{Title: "Status", Width: 13},
-		{Title: "Author", Width: 10},
-		{Title: "Description", Width: w - 4 - 16 - 8 - 13 - 10 - 5}, // 5 is for borders and scrollbar
-	})
-	useDialogTableColors(table)
-	table.ShowScrollBar = true
 
 	btnInstall := vtui.NewButton(0, 0, Msg("PlugRing.BtnInstall"))
 	btnRemove := vtui.NewButton(0, 0, Msg("PlugRing.BtnRemove"))
 	btnRefresh := vtui.NewButton(0, 0, Msg("PlugRing.BtnRefresh"))
 	btnClose := vtui.NewButton(0, 0, Msg("PlugRing.BtnClose"))
 
-	dlg.AddItem(table)
-	dlg.AddItem(btnInstall)
-	dlg.AddItem(btnRemove)
-	dlg.AddItem(btnRefresh)
-	dlg.AddItem(btnClose)
-
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, w-4, h-4)
-	vbox.Add(table, vtui.Margins{Bottom: 1}, vtui.AlignFill)
-
-	hbox := vtui.NewHBoxLayout(0, 0, w-4, 1)
-	hbox.HorizontalAlign = vtui.AlignCenter
-	hbox.Spacing = 2
-	hbox.Add(btnInstall, vtui.Margins{}, vtui.AlignTop)
-	hbox.Add(btnRemove, vtui.Margins{}, vtui.AlignTop)
-	hbox.Add(btnRefresh, vtui.Margins{}, vtui.AlignTop)
-	hbox.Add(btnClose, vtui.Margins{}, vtui.AlignTop)
-	vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
-	vbox.Apply()
+	dlg, table := vtui.NewTableDialog(w, h, Msg("PlugRing.Title"), []vtui.TableColumn{
+		{Title: "Name", Width: 16},
+		{Title: "Version", Width: 8},
+		{Title: "Status", Width: 13},
+		{Title: "Author", Width: 10},
+		{Title: "Description", Width: 0},
+	}, btnInstall, btnRemove, btnRefresh, btnClose)
+	useDialogTableColors(table)
+	table.Sortable = true    // click a column header to sort, again to reverse
+	table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
+	table.ShowScrollBar = true
 
 	btnClose.OnClick = func() { dlg.Close() }
 

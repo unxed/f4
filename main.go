@@ -338,6 +338,9 @@ func SetupUI() {
 
 	SetDefaultF4Palette()
 	LoadConfig()
+	applyWheelSettings()
+	vtui.PathHintProvider = pathHintProvider
+	applyPathHintSettings()
 	ctrlTabMode := vtui.WorkspaceCtrlTabDirect
 	if AppConfig.CtrlTabShowsMenu {
 		ctrlTabMode = vtui.WorkspaceCtrlTabMenu
@@ -408,7 +411,9 @@ func SetupUI() {
 
 	panels := NewPanelsFrame()
 	panels.ResizeConsole(width, height)
-	states := LastWorkspaceSessions
+	states, activeWorkspace := workspaceSessionsForRestore(
+		LastWorkspaceSessions, LastActiveWorkspace, AppConfig.RestoreWorkspaceTabs,
+	)
 	if len(states) == 0 && AppConfig.SavePanelPaths {
 		states = []workspaceSessionState{legacyWorkspaceSession()}
 	}
@@ -416,24 +421,28 @@ func SetupUI() {
 		applyWorkspaceSession(panels, states[0], width, height, AppConfig.SavePanelPaths)
 	}
 	vtui.FrameManager.Push(panels)
-	if len(LastWorkspaceSessions) > 1 {
+	if len(states) > 1 {
 		// AddScreenBackground inserts immediately after the active workspace;
 		// restore from right to left to preserve the saved tab order.
-		for i := len(LastWorkspaceSessions) - 1; i >= 1; i-- {
-			state := LastWorkspaceSessions[i]
+		for i := len(states) - 1; i >= 1; i-- {
+			state := states[i]
 			extra := NewPanelsFrame()
 			applyWorkspaceSession(extra, state, width, height, AppConfig.SavePanelPaths)
 			vtui.FrameManager.AddScreenBackground(extra)
 		}
 	}
-	if len(LastWorkspaceSessions) > 0 {
-		numbers := make([]int, len(LastWorkspaceSessions))
-		for i, state := range LastWorkspaceSessions {
-			numbers[i] = state.Number
+	if len(states) > 0 {
+		if AppConfig.WorkspaceTabNumbering == WorkspaceTabNumbersAlways {
+			numbers := make([]int, len(states))
+			for i, state := range states {
+				numbers[i] = state.Number
+			}
+			vtui.FrameManager.RestoreScreenNumbers(numbers)
+		} else {
+			renumberWorkspaceScreens()
 		}
-		vtui.FrameManager.RestoreScreenNumbers(numbers)
-		if LastActiveWorkspace > 0 && LastActiveWorkspace < len(vtui.FrameManager.Screens) {
-			vtui.FrameManager.SwitchScreen(LastActiveWorkspace)
+		if activeWorkspace > 0 && activeWorkspace < len(vtui.FrameManager.Screens) {
+			vtui.FrameManager.SwitchScreen(activeWorkspace)
 		}
 	}
 	previousEventFilter := vtui.FrameManager.EventFilter
@@ -450,6 +459,9 @@ func SetupUI() {
 	vtui.FrameManager.MenuBar = panels.menuBar
 	vtui.FrameManager.KeyBar = panels.keyBar
 	vtui.FrameManager.OnRender = func(scr *vtui.ScreenBuf) {
+		if AppConfig.WorkspaceTabNumbering == WorkspaceTabNumbersOrder {
+			renumberWorkspaceScreens()
+		}
 		UpdateWindowTitle(scr)
 		renderHelpSearch(scr)
 	}

@@ -343,7 +343,7 @@ for f4c in sha256sum sha1sum md5sum cksum; do
 done
 
 F4FEATS=
-for f4c in cp dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
+for f4c in cp ln dd base64 readlink du grep sed awk wc head tail stty truncate chown touch date sha256sum; do
  f4_have $f4c && F4FEATS="$F4FEATS $f4c"
 done
 [ -n "$F4MODE" ] && F4FEATS="$F4FEATS $F4MODE"
@@ -962,6 +962,33 @@ f4_cmd_utime() {
  f4_end_rv $F4RV "$F4OUT"
 }
 
+# mklink: create a symbolic link. The first path is the link, which is guarded
+# like any other mutation; the second is the target, which is not a path on
+# this host at all but a string to store in the link. A target may be
+# relative, may point at nothing yet, and may contain .. on purpose, so
+# guarding it would refuse the ordinary case rather than catch a mistake.
+f4_cmd_mklink() {
+ if ! f4_have ln; then
+  f4_end err "no ln on remote host"
+  return
+ fi
+ f4_guard "$F4SRC" || return
+ if [ -z "$F4DST" ]; then
+  f4_end err "empty symlink target"
+  return
+ fi
+ # ln -s TARGET DIR puts the link inside DIR rather than failing, which turns
+ # a name collision into a link in a place nobody asked for. The same goes for
+ # a link path that is itself a symlink to a directory. Refusing up front keeps
+ # the answer the same whatever the link path happens to be, and -L catches a
+ # dangling link that -e does not see.
+ if [ -e "$F4SRC" ] || [ -L "$F4SRC" ]; then
+  f4_end err "already exists"
+  return
+ fi
+ f4_do ln -s -- "$F4DST" "$F4SRC"
+}
+
 f4_cmd_chown() {
  f4_path
  f4_guard "$F4PATH" || return
@@ -1463,6 +1490,10 @@ while :; do
   cp )
    f4_paths2
    f4_guard "$F4SRC" && f4_guard "$F4DST" && f4_do cp -R -f -- "$F4SRC" "$F4DST"
+   ;;
+  mklink )
+   f4_paths2
+   f4_cmd_mklink
    ;;
   chmod )
    f4_path

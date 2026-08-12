@@ -37,6 +37,11 @@ func TestUpdateWindowTitle(t *testing.T) {
 	desktop := vtui.NewDesktop()
 	vtui.FrameManager.Push(desktop)
 
+	// A transient menu is the top frame, but it must not leak into the host
+	// terminal tab title.
+	menu := vtui.NewVMenu("Commands")
+	vtui.FrameManager.Push(menu)
+
 	tests := []struct {
 		name     string
 		template string

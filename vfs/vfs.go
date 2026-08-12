@@ -110,6 +110,12 @@ type VFSCapabilities struct {
 	// DestinationOverwrite=false decision cannot replace an existing target,
 	// including one created concurrently after a caller's Stat.
 	HasAtomicNoReplaceRename bool
+	// HasWrite says the backend can be written through at all. It is the
+	// gate a writable FUSE mount asks before it comes up: refusing --rw for
+	// a backend that cannot do it is a message, while discovering it in the
+	// middle of a cp is a half-copied file. Default false, so a backend
+	// opts in only once its write path has actually been exercised.
+	HasWrite bool
 }
 
 // VFS is the core interface for file operations in f4.

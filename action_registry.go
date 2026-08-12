@@ -136,6 +136,24 @@ func cursorOnParent(fsp *FileSystemPanel) bool {
 	return idx >= 0 && idx < len(fsp.entries) && fsp.entries[idx].Name == ".."
 }
 
+// currentPanelEntryPath returns the full path represented by the panel cursor.
+// As in Far, the parent entry represents the current directory for path-copy
+// and path-insertion commands.
+func currentPanelEntryPath(fsp *FileSystemPanel) string {
+	if fsp == nil || fsp.vfs == nil {
+		return ""
+	}
+	idx := fsp.GetCursorIndex()
+	if idx < 0 || idx >= len(fsp.entries) {
+		return ""
+	}
+	base := fsp.vfs.GetPath()
+	if fsp.entries[idx].Name == ".." {
+		return base
+	}
+	return fsp.vfs.Join(base, fsp.entries[idx].Name)
+}
+
 // plainLabel strips hotkey markers ('&') from a menu label for contexts
 // that cannot render them (keybar, plain lists). '&&' unescapes to '&'.
 func plainLabel(s string) string {
@@ -155,6 +173,32 @@ func plainLabel(s string) string {
 		b.WriteByte(s[i])
 	}
 	return b.String()
+}
+
+// isAIPanelActive returns true if the currently active panel is an AI panel.
+// Used to dynamically show/hide specific menu items.
+func isAIPanelActive() bool {
+	pf := findPanelsFrameAnyScreen()
+	if pf == nil {
+		return false
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return false
+	}
+	if tp, ok := fsp.vfs.(vfs.TitleProvider); ok {
+		return tp.GetTitle() == "ai"
+	}
+	return false
+}
+
+func repeatEditorSearchDirection(ev *EditorView, reverse bool) {
+	if LastEditorSearch == "" {
+		return
+	}
+	rememberedDirection := LastEditorSearchReverse
+	ev.Search(LastEditorSearch, LastEditorSearchCase, reverse, LastEditorSearchRegexp, LastEditorSearchWholeWord, true)
+	LastEditorSearchReverse = rememberedDirection
 }
 
 func init() {
@@ -403,8 +447,13 @@ func init() {
 		LabelKey:    "Action.Panel.SystemExplorer",
 		Description: "Open current file in the system file manager",
 		DescKey:     "Action.Panel.SystemExplorer.Desc",
-		DefaultKeys: []string{"ShiftEnter"},
-		MenuPath:    "Files",
+		// Same reasoning as Panel.InsertFileName: the panel cursor
+		// survives Ctrl+O, so Shift+Enter keeps working with the panels
+		// hidden, but yields to a child process that is using the
+		// terminal (many REPLs read Shift+Enter themselves).
+		DefaultKeys:  []string{"ShiftEnter:NoTerminalApp"},
+		DefaultAreas: []string{"Terminal"},
+		MenuPath:     "Files",
 		Handler: withPF(func(pf *PanelsFrame) {
 			fsp := pf.getActivePanel()
 			if fsp == nil {
@@ -574,6 +623,7 @@ func init() {
 		LabelKey:    "Menu.Commands.Bookmarks",
 		Description: "Show folder bookmarks dialog",
 		DescKey:     "Action.Panel.Bookmarks.Desc",
+		DefaultKeys: []string{"CtrlShiftVK_DC"},
 		MenuPath:    "Commands",
 		Handler:     withPF(func(pf *PanelsFrame) { ShowBookmarksDialog(pf) }),
 	})
@@ -721,22 +771,28 @@ func init() {
 		LabelKey:    "Action.Panel.CopyPath",
 		Description: "Copy the full path of the current file to clipboard",
 		DescKey:     "Action.Panel.CopyPath.Desc",
-		DefaultKeys: []string{"CtrlF:EmptyCommandLine"},
+		DefaultKeys: []string{"CtrlD"},
 		MenuPath:    "Commands",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
-				idx := fsp.GetCursorIndex()
-				if idx < 0 || idx >= len(fsp.entries) {
-					return
+				if path := currentPanelEntryPath(fsp); path != "" {
+					vtui.SetClipboard(path)
 				}
-				base := fsp.vfs.GetPath()
-				if entry := fsp.entries[idx]; entry.Name == ".." {
-					// far2l: cursor on ".." acts as the current folder itself
-					// (matches CreateFullPathName(".", …) in far2l's KEY_CTRLF branch).
-					vtui.SetClipboard(base)
-				} else {
-					vtui.SetClipboard(fsp.vfs.Join(base, entry.Name))
-				}
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.InsertPath",
+		Area:        "Shell",
+		Label:       "Insert Path into Command Line",
+		LabelKey:    "Action.Panel.InsertPath",
+		Description: "Insert the full path of the current file into the command line",
+		DescKey:     "Action.Panel.InsertPath.Desc",
+		DefaultKeys: []string{"CtrlF"},
+		MenuPath:    "Commands",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				pf.insertPathToCmdLine(currentPanelEntryPath(fsp))
 			}
 		}),
 	})
@@ -938,6 +994,26 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionConfirmationsSettings(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Settings.MouseWheel",
+		Area:        "Shell",
+		Label:       "Mouse Wheel Settings",
+		LabelKey:    "Menu.MouseWheelSettings",
+		Description: "Open mouse wheel scroll speed settings dialog",
+		DescKey:     "Action.Settings.MouseWheel.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionMouseWheelSettings(pf) }),
+	})
+	RegisterAction(Action{
+		Name:        "Settings.PathHints",
+		Area:        "Shell",
+		Label:       "Path Hints Settings",
+		LabelKey:    "Menu.PathHintSettings",
+		Description: "Open path hints settings dialog",
+		DescKey:     "Action.Settings.PathHints.Desc",
+		MenuPath:    "Options",
+		Handler:     withPF(func(pf *PanelsFrame) { actionPathHintSettings(pf) }),
+	})
+	RegisterAction(Action{
 		Name:                "Settings.Hotkeys",
 		Area:                "Shell",
 		Label:               "Hotkey Configuration",
@@ -966,6 +1042,7 @@ func init() {
 		LabelKey:            "Menu.PluginConfiguration",
 		Description:         "Configure loaded plugins",
 		DescKey:             "Action.Settings.PluginConfiguration.Desc",
+		DefaultKeys:         []string{"ShiftF11"},
 		MenuPath:            "Options",
 		MenuSeparatorBefore: true,
 		Handler:             withPF(func(pf *PanelsFrame) { actionPluginConfiguration(pf) }),
@@ -1074,7 +1151,6 @@ func init() {
 		DefaultKeys:  []string{"CtrlO:NoAltScreenApp", "Esc:EscToggle", "Del:EscToggle", "NumDel:EscToggle"},
 		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *PanelsFrame) {
-			pf.exitWide()
 			pf.showPanels = !pf.showPanels
 			if pf.showPanels && !pf.showLeftPanel && !pf.showRightPanel {
 				pf.showLeftPanel = true
@@ -1359,6 +1435,7 @@ func init() {
 		Description: "Set active panel to brief mode",
 		DescKey:     "Action.Panel.ViewBrief.Desc",
 		DefaultKeys: []string{"Ctrl1"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeBrief) }),
 	})
 	RegisterAction(Action{
@@ -1368,6 +1445,7 @@ func init() {
 		Description: "Set active panel to medium mode",
 		DescKey:     "Action.Panel.ViewMedium.Desc",
 		DefaultKeys: []string{"Ctrl2"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeMedium) }),
 	})
 	RegisterAction(Action{
@@ -1377,6 +1455,7 @@ func init() {
 		Description: "Set active panel to detailed mode",
 		DescKey:     "Action.Panel.ViewDetailed.Desc",
 		DefaultKeys: []string{"Ctrl3"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setPanelViewMode(pf.activeIdx, ViewModeDetailed) }),
 	})
 	RegisterAction(Action{
@@ -1386,6 +1465,7 @@ func init() {
 		Description: "Set active panel to wide mode",
 		DescKey:     "Action.Panel.ViewWide.Desc",
 		DefaultKeys: []string{"Ctrl4"},
+		Visible:     func() bool { return !isAIPanelActive() },
 		Handler:     withPF(func(pf *PanelsFrame) { pf.setWidePanel(pf.activeIdx) }),
 	})
 	RegisterAction(Action{
@@ -1487,7 +1567,13 @@ func init() {
 		Label:       "Insert File Name",
 		Description: "Insert the current file name into the command line",
 		DescKey:     "Action.Panel.InsertFileName.Desc",
-		DefaultKeys: []string{"CtrlEnter"},
+		// Hiding the panels does not drop the panel cursor: the command
+		// line is still on screen and Ctrl+Enter still pastes the current
+		// file name into it, as in far2l. NoTerminalApp keeps the key out
+		// of the way of a running child process, which owns Ctrl+Enter and
+		// leaves the command line hidden anyway.
+		DefaultKeys:  []string{"CtrlEnter:NoTerminalApp"},
+		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *PanelsFrame) {
 			pf.insertSelectedFileName()
 		}),
@@ -1752,6 +1838,26 @@ func init() {
 			}
 		}),
 	})
+	RegisterAction(Action{
+		Name:        "Editor.SearchForward",
+		Area:        "Editor",
+		Label:       "Search Next",
+		LabelKey:    "Action.Editor.SearchNext",
+		Description: "Continue search forwards",
+		DescKey:     "Action.Editor.SearchNext.Desc",
+		DefaultKeys: []string{"CtrlEnter"},
+		Handler:     withEditor(func(ev *EditorView) { repeatEditorSearchDirection(ev, false) }),
+	})
+	RegisterAction(Action{
+		Name:        "Editor.SearchPrevious",
+		Area:        "Editor",
+		Label:       "Search Backwards",
+		LabelKey:    "Action.Editor.SearchPrevious",
+		Description: "Continue search backwards",
+		DescKey:     "Action.Editor.SearchPrevious.Desc",
+		DefaultKeys: []string{"CtrlShiftEnter"},
+		Handler:     withEditor(func(ev *EditorView) { repeatEditorSearchDirection(ev, true) }),
+	})
 
 	RegisterAction(Action{
 		Name:        "Editor.WordWrap",
@@ -1859,7 +1965,6 @@ func init() {
 		LabelKey:    "Action.Editor.InsertActivePanelFileName",
 		Description: "Insert the active panel's current file name at cursor",
 		DescKey:     "Action.Editor.InsertActivePanelFileName.Desc",
-		DefaultKeys: []string{"CtrlEnter"},
 		MenuPath:    "Insert",
 		Handler: withEditor(func(ev *EditorView) {
 			if s := activePanelNameForEditor(); s != "" {
@@ -1943,6 +2048,28 @@ func init() {
 		DefaultKeys: []string{"F7"},
 		MenuPath:    "Search",
 		Handler:     withViewer(func(vv *ViewerView) { vtui.FrameManager.EmitCommand(CmSearch, nil) }),
+	})
+	RegisterAction(Action{
+		Name:        "Viewer.SearchNext",
+		Area:        "Viewer",
+		Label:       "Search Next",
+		LabelKey:    "Action.Viewer.SearchNext",
+		Description: "Continue search forwards",
+		DescKey:     "Action.Viewer.SearchNext.Desc",
+		DefaultKeys: []string{"CtrlEnter"},
+		MenuPath:    "Search",
+		Handler:     withViewer(func(vv *ViewerView) { actionViewerSearchAgain(vv, false) }),
+	})
+	RegisterAction(Action{
+		Name:        "Viewer.SearchPrevious",
+		Area:        "Viewer",
+		Label:       "Search Backwards",
+		LabelKey:    "Action.Viewer.SearchPrevious",
+		Description: "Continue search backwards",
+		DescKey:     "Action.Viewer.SearchPrevious.Desc",
+		DefaultKeys: []string{"CtrlShiftEnter"},
+		MenuPath:    "Search",
+		Handler:     withViewer(func(vv *ViewerView) { actionViewerSearchAgain(vv, true) }),
 	})
 
 	RegisterAction(Action{

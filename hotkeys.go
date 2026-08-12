@@ -52,6 +52,18 @@ var conditionRegistry = map[string]func() bool{
 		}
 		return false
 	},
+	// noterminalapp is the stricter sibling of noaltscreenapp: it also
+	// stands down for a plain child process that is merely busy (a shell
+	// command, a REPL). With the panels hidden such a process owns the
+	// keyboard and the command line is not even drawn, so actions that
+	// type into it must not fire. With the panels shown nothing is in the
+	// way, which keeps the Shell binding of such a key unconditional.
+	"noterminalapp": func() bool {
+		if pf := findPanelsFrameAnyScreen(); pf != nil {
+			return pf.showPanels || (!pf.termView.UseAltScreen && !pf.isPtyBusy())
+		}
+		return false
+	},
 	// terminalquiet reports a hidden-panels terminal with no AltScreen app
 	// and no busy PTY, so F3/F4 may open the terminal log instead of
 	// being forwarded to the running application.
@@ -77,7 +89,7 @@ var conditionRegistry = map[string]func() bool{
 
 // GetConditions returns the user-friendly names of all registered conditions.
 func GetConditions() []string {
-	return []string{"None", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle", "TerminalQuiet", "AltPanelVisible", "NoAltScreenApp"}
+	return []string{"None", "EmptyCommandLine", "CommandLineNotEmpty", "EscToggle", "TerminalQuiet", "AltPanelVisible", "NoAltScreenApp", "NoTerminalApp"}
 }
 
 // RegisterCondition adds a dynamic boolean check accessible by hotkey bindings.

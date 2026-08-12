@@ -53,6 +53,9 @@ func TestPanelsFrame_WorkspaceTabTitleUsesFolderNames(t *testing.T) {
 	pf := &PanelsFrame{showPanels: true}
 	pf.panels[0] = &FileSystemPanel{vfs: vfs.NewOSVFS(leftPath)}
 	pf.panels[1] = &FileSystemPanel{vfs: vfs.NewOSVFS(rightPath)}
+	if marker := pf.GetWorkspaceTabMarker(); marker != "P" {
+		t.Fatalf("panel workspace marker = %q, want P", marker)
+	}
 	title := pf.GetWorkspaceTabTitle()
 	if !strings.Contains(title, "left-leaf ─ right-leaf") {
 		t.Fatalf("workspace tab title = %q, want both leaf folder names", title)
@@ -77,7 +80,7 @@ func TestPanelsFrame_WorkspaceMenuInfoUsesFullPanelPaths(t *testing.T) {
 	pf.panels[0] = &FileSystemPanel{vfs: vfs.NewOSVFS(leftPath)}
 	pf.panels[1] = &FileSystemPanel{vfs: vfs.NewOSVFS(rightPath)}
 	info := pf.GetWorkspaceMenuInfo()
-	if info.Icon != "📁" || info.Primary != leftPath || info.Secondary != rightPath {
+	if info.Icon != "P" || info.Primary != leftPath || info.Secondary != rightPath {
 		t.Fatalf("workspace menu info = %#v, want full left/right paths", info)
 	}
 
@@ -85,7 +88,7 @@ func TestPanelsFrame_WorkspaceMenuInfoUsesFullPanelPaths(t *testing.T) {
 	pf.executing = true
 	pf.workspaceCommandTitle = "Python"
 	info = pf.GetWorkspaceMenuInfo()
-	if info.Icon != "⌨" || info.Primary != "Python" || info.Secondary != "" {
+	if info.Icon != "T" || info.Primary != "Python" || info.Secondary != "" {
 		t.Fatalf("terminal workspace menu info = %#v", info)
 	}
 }
@@ -97,19 +100,22 @@ func TestPanelsFrame_WorkspaceTabTitleTracksTerminalTitle(t *testing.T) {
 		workspaceCommandTitle: workspaceCommandName("python script.py"),
 		termView:              &TerminalView{Title: "Administrator: C:\\Windows\\System32\\cmd.exe - Python"},
 	}
-	if got := pf.GetWorkspaceTabTitle(); got != "⌨  Python" {
-		t.Fatalf("terminal workspace tab title = %q, want %q", got, "⌨  Python")
+	if got := pf.GetWorkspaceTabTitle(); got != "Python" {
+		t.Fatalf("terminal workspace tab title = %q, want %q", got, "Python")
+	}
+	if marker := pf.GetWorkspaceTabMarker(); marker != "T" {
+		t.Fatalf("terminal workspace marker = %q, want T", marker)
 	}
 	pf.executing = false
 	pf.workspaceCommandTitle = ""
-	if got := pf.GetWorkspaceTabTitle(); got != "⌨  Terminal" {
-		t.Fatalf("manually revealed terminal tab title = %q, want %q", got, "⌨  Terminal")
+	if got := pf.GetWorkspaceTabTitle(); got != "Terminal" {
+		t.Fatalf("manually revealed terminal tab title = %q, want %q", got, "Terminal")
 	}
 	pf.showPanels = true
 	pf.panels[0] = &FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())}
 	pf.panels[1] = &FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())}
-	if got := pf.GetWorkspaceTabTitle(); strings.HasPrefix(got, "⌨") {
-		t.Fatalf("panel workspace kept terminal icon after returning to panels: %q", got)
+	if marker := pf.GetWorkspaceTabMarker(); marker != "P" {
+		t.Fatalf("panel workspace kept terminal marker after returning to panels: %q", marker)
 	}
 }
 
@@ -3232,11 +3238,11 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		t.Fatalf("Ctrl+Ins failed: expected 'target.txt', got %q", got)
 	}
 
-	// 2. Test Ctrl+F (Full Path)
+	// 2. Test Ctrl+D (copy full path)
 	vtui.SetClipboard("")
 	pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
+		VirtualKeyCode: 'D', ControlKeyState: vtinput.LeftCtrlPressed,
 	})
 	expectedPath := fsp.vfs.Join(fsp.vfs.GetPath(), "target.txt")
 
@@ -3247,7 +3253,21 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if got := vtui.GetClipboard(); got != expectedPath {
-		t.Fatalf("Ctrl+F failed: expected %q, got %q", expectedPath, got)
+		t.Fatalf("Ctrl+D failed: expected %q, got %q", expectedPath, got)
+	}
+
+	// 3. Test Ctrl+F (insert full path into the command line)
+	pf.cmdLine.Edit.SetText("")
+	pressKey(pf, &vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: 'F', ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	expectedCommand := expectedPath
+	if runtime.GOOS == "windows" {
+		expectedCommand = `"` + expectedPath + `"`
+	}
+	if got := pf.cmdLine.Edit.GetText(); got != expectedCommand {
+		t.Fatalf("Ctrl+F failed: expected command line %q, got %q", expectedCommand, got)
 	}
 }
 func TestLayout_F4ActionDialogs_Validity(t *testing.T) {
@@ -4765,6 +4785,17 @@ func TestPanelsFrame_CtrlP_TogglesPassivePanel(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_AICmds(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+
+	handled := pf.HandleCommand(CmLeftAIChat, nil)
+	// It should gracefully handle these even if no AI panel is there
+	if !handled {
+		t.Error("CmLeftAIChat should be handled")
+	}
+}
+
 func panelWidth(p Panel) int  { x1, _, x2, _ := p.GetPosition(); return x2 - x1 + 1 }
 func panelHeight(p Panel) int { _, y1, _, y2 := p.GetPosition(); return y2 - y1 + 1 }
 
@@ -5257,5 +5288,53 @@ func TestPanelsFrame_ProcessMouse_HoverWheel_Detailed_Boundaries(t *testing.T) {
 	// Cursor should remain at the last item
 	if lp.GetCursorIndex() != lastIdx {
 		t.Errorf("Expected cursor to remain at the last item %d, got %d", lastIdx, lp.GetCursorIndex())
+	}
+}
+
+func TestFilePanel_WheelScrollSpeed(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldCfg := AppConfig
+	defer func() { AppConfig = oldCfg }()
+	AppConfig.WheelPanelUp = 2
+	AppConfig.WheelPanelDown = 3
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	p := pf.panels[0].(*FileSystemPanel)
+	if p.cancelLoad != nil {
+		p.cancelLoad()
+	}
+	p.isLoading = false
+
+	for i := 0; i < 10; i++ {
+		p.entries = append(p.entries, &fileEntry{VFSItem: vfs.VFSItem{Name: fmt.Sprintf("f%d", i)}})
+	}
+	p.Refresh()
+	p.SetCursorIndex(0)
+
+	x1, y1, _, _ := p.GetPosition()
+	wheel := func(dir int) {
+		ev := &vtinput.InputEvent{
+			Type:           vtinput.MouseEventType,
+			MouseX:         int16(x1 + 2),
+			MouseY:         int16(y1 + 2),
+			WheelDirection: dir,
+		}
+		if !p.ProcessMouse(ev) {
+			t.Fatal("Mouse wheel event was not handled")
+		}
+	}
+
+	wheel(-1) // down: 3 lines
+	if got := p.GetCursorIndex(); got != 3 {
+		t.Errorf("Expected cursor at 3 after wheel down, got %d", got)
+	}
+	wheel(1) // up: 2 lines
+	if got := p.GetCursorIndex(); got != 1 {
+		t.Errorf("Expected cursor at 1 after wheel up, got %d", got)
 	}
 }

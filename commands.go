@@ -40,6 +40,14 @@ const (
 	CmRightSortUnsorted
 	CmSwapPanels
 	CmAddArchive
+	CmLeftAIContext
+	CmLeftAIChat
+	CmLeftAIOut
+	CmLeftAIMem
+	CmRightAIContext
+	CmRightAIChat
+	CmRightAIOut
+	CmRightAIMem
 	CmExtractArchive
 	CmPanelSettings
 	CmEditorSettings

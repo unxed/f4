@@ -1665,6 +1665,83 @@ func TestActionAppearanceSettingsSavesSystemMonospace(t *testing.T) {
 	}
 }
 
+func TestActionAppearanceSettingsSavesWorkspaceTabRestoration(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldConfig := AppConfig
+	oldPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return filepath.Join(t.TempDir(), "settings.ini") }
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldPath
+	}()
+	AppConfig.RestoreWorkspaceTabs = true
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var restoreTabs *vtui.Checkbox
+	for _, child := range top.GetChildren() {
+		checkbox, ok := child.(*vtui.Checkbox)
+		if ok && checkbox.GetText() == Msg("AppearanceSettings.RestoreWorkspaceTabs") {
+			restoreTabs = checkbox
+			break
+		}
+	}
+	if restoreTabs == nil {
+		t.Fatal("workspace tab restoration checkbox not found in Appearance Settings")
+	}
+	if restoreTabs.State != 1 {
+		t.Fatal("workspace tab restoration must be enabled by default")
+	}
+	restoreTabs.Toggle()
+	clickDialogButton(t, top, "Ok")
+	if AppConfig.RestoreWorkspaceTabs {
+		t.Fatal("disabled workspace tab restoration setting was not saved")
+	}
+}
+
+func TestActionAppearanceSettingsSavesWorkspaceTabNumbering(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	oldConfig := AppConfig
+	oldPath := getUserConfigIniPath
+	getUserConfigIniPath = func() string { return filepath.Join(t.TempDir(), "settings.ini") }
+	defer func() {
+		AppConfig = oldConfig
+		getUserConfigIniPath = oldPath
+	}()
+	AppConfig.WorkspaceTabNumbering = WorkspaceTabNumbersAlways
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionAppearanceSettings(pf)
+	top := vtui.FrameManager.GetTopFrame().(vtui.Container)
+
+	var numbering *vtui.ComboBox
+	for _, child := range top.GetChildren() {
+		combo, ok := child.(*vtui.ComboBox)
+		if ok && combo.Edit.GetText() == Msg("AppearanceSettings.WorkspaceNumbersAlways") {
+			numbering = combo
+			break
+		}
+	}
+	if numbering == nil {
+		t.Fatal("workspace tab numbering combobox not found in Appearance Settings")
+	}
+	numbering.Menu.SetSelectPos(int(WorkspaceTabNumbersOrder))
+	clickDialogButton(t, top, "Ok")
+	if AppConfig.WorkspaceTabNumbering != WorkspaceTabNumbersOrder {
+		t.Fatalf("workspace tab numbering = %v, want order", AppConfig.WorkspaceTabNumbering)
+	}
+}
+
 // TestActionAppearanceSettings_CancelPreservesPalette locks in the
 // fix: farcolors.ini overrides applied at startup were wiped when
 // the user opened Appearance settings and pressed Cancel, because

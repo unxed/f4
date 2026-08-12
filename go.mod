@@ -11,6 +11,7 @@ require (
 	github.com/danielpaulus/go-ios v1.2.2-0.20260805152531-ebec9a0b076c
 	github.com/ebitengine/purego v0.11.0-alpha.8
 	github.com/google/uuid v1.6.0
+	github.com/hanwen/go-fuse/v2 v2.11.0
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/mattn/go-runewidth v0.0.15
 	github.com/mholt/archives v0.1.5
@@ -125,8 +126,10 @@ require (
 	software.sslmate.com/src/go-pkcs12 v0.7.2 // indirect
 )
 
-replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.13
+replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.14
+
+replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 
-// replace github.com/unxed/colorer4go => ../../../dev/vtui
+// replace github.com/unxed/vtui => ../../../dev/vtui

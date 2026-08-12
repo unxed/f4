@@ -170,7 +170,7 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 
 	state := "Panels"
 	if len(vtui.FrameManager.Screens) > 0 {
-		state = vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx].GetTitle()
+		state = stableWorkspaceTitle(vtui.FrameManager.Screens[vtui.FrameManager.ActiveIdx])
 	}
 
 	template := AppConfig.ConsoleTitleTemplate
@@ -196,6 +196,23 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 	if MacroMgr != nil && MacroMgr.Recording {
 		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
 	}
+}
+
+func stableWorkspaceTitle(screen *vtui.AppScreen) string {
+	// Keep compatibility while the corresponding VTUI API is being reviewed.
+	// Once available, the structural assertion starts using it automatically.
+	if provider, ok := any(screen).(interface{ GetWorkspaceTitle() string }); ok {
+		return provider.GetWorkspaceTitle()
+	}
+	for i := len(screen.Frames) - 1; i >= 0; i-- {
+		if screen.Frames[i].IsModal() {
+			continue
+		}
+		if title := strings.TrimSpace(screen.Frames[i].GetTitle()); title != "" {
+			return title
+		}
+	}
+	return screen.GetTitle()
 }
 
 func getBackendName() string {

@@ -2,9 +2,13 @@ package fishplus
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 )
+
+// ErrNoSymlink is returned when the remote host cannot create symbolic links.
+var ErrNoSymlink = errors.New("fishplus: the remote host cannot create symlinks")
 
 // MkDir creates a directory and any missing parent of it, so a caller does
 // not pay a round trip per level.
@@ -64,6 +68,35 @@ func (c *Client) Copy(ctx context.Context, from, to string) error {
 	}
 	return resp.Err("cp " + from)
 }
+
+// Symlink creates a symbolic link at linkPath pointing at target.
+//
+// The target is stored verbatim and is never resolved here: a relative
+// target, a target that does not exist yet, and a target containing ".." are
+// all ordinary and all meaningful, so only linkPath is subject to the path
+// guard the remote host applies to every mutation.
+//
+// A linkPath that already exists is refused rather than replaced. That is not
+// only about not losing data: ln -s TARGET DIR silently creates the link
+// inside DIR instead of failing, so a name collision would otherwise put a
+// link somewhere nobody asked for.
+func (c *Client) Symlink(ctx context.Context, linkPath, target string) error {
+	if !c.CanSymlink() {
+		return ErrNoSymlink
+	}
+	resp, err := c.sess.ExecPaths(ctx, "mklink", []string{linkPath, target})
+	if err != nil {
+		return err
+	}
+	return resp.Err("mklink " + linkPath)
+}
+
+// CanSymlink reports whether the remote host can create symbolic links.
+//
+// The banner lists ln among its tools only from the helper revision that
+// implements mklink, so its presence answers both questions at once: the
+// tool is there and the helper knows the command.
+func (c *Client) CanSymlink() bool { return c.sess.Features().Has("ln") }
 
 // Chmod sets the permission, setuid, setgid and sticky bits; the file type
 // bits of a raw st_mode are ignored, so an Entry.Mode can be passed as is.

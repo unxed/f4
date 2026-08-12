@@ -1073,70 +1073,152 @@ func openViewerInternal(pf *PanelsFrame, v vfs.VFS, path string) {
 }
 
 func actionViewerSearch(vv *ViewerView) {
-	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", "", func(pattern string) {
+	actionViewerSearchDirection(vv, false)
+}
+
+func actionViewerSearchDirection(vv *ViewerView, reverse bool) {
+	vtui.InputBox(Msg("Viewer.SearchTitle"), "Search for:", vv.lastSearch, func(pattern string) {
 		if pattern == "" {
 			return
 		}
-		vtui.FrameManager.PostTask(func() {
-			runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
-				foundOffset := int64(-1)
-				currOff := vv.TopOffset + 1
-				fileSize := vv.backend.Size()
-				patternLower := strings.ToLower(pattern)
+		if pattern != vv.lastSearch {
+			vv.lastSearchFound = false
+		}
+		vv.lastSearch = pattern
+		runViewerSearch(vv, pattern, reverse)
+	})
+}
 
-				// A file system that can search its own copy answers in one round
-				// trip. Scanning here would mean reading the whole file, which
-				// for a remote one means downloading it.
-				if at, searched := vv.backend.SearchFrom(ctx.Context, pattern, currOff); searched {
-					foundOffset = at
-					currOff = fileSize
+func actionViewerSearchAgain(vv *ViewerView, reverse bool) {
+	if vv.lastSearch == "" {
+		actionViewerSearchDirection(vv, reverse)
+		return
+	}
+	runViewerSearch(vv, vv.lastSearch, reverse)
+}
+
+func runViewerSearch(vv *ViewerView, pattern string, reverse bool) {
+	vtui.FrameManager.PostTask(func() {
+		runSearchWithProgress(pattern, func(ctx *vtui.TaskContext, dlg *vtui.Window) {
+			start := vv.TopOffset + 1
+			if reverse {
+				start = vv.TopOffset
+			}
+			if vv.lastSearchFound && vv.TopOffset == vv.lastSearchTopOffset {
+				start = vv.lastSearchOffset + 1
+				if reverse {
+					start = vv.lastSearchOffset
 				}
+			}
+			foundOffset := viewerSearchOffset(ctx.Context, vv.backend, pattern, start, reverse, func(percent int) {
+				ctx.RunOnUI(func() { dlg.SetProgress(percent) })
+			})
 
-				for currOff < fileSize {
-					if ctx.Err() != nil {
-						return
-					}
-					percent := int((currOff * 100) / fileSize)
-					ctx.RunOnUI(func() { dlg.SetProgress(percent) })
-
-					data, err := vv.backend.ReadAt(currOff, 256*1024)
-					if err == piecetable.ErrLoading {
-						time.Sleep(20 * time.Millisecond)
-						continue
-					}
-					if err != nil || len(data) == 0 {
-						break
-					}
-
-					idx := strings.Index(strings.ToLower(string(data)), patternLower)
-					if idx != -1 {
-						foundOffset = currOff + int64(idx)
-						break
-					}
-					currOff += int64(len(data)) - int64(len(patternLower))
-					if currOff < 0 {
-						currOff = 0
-					}
+			ctx.RunOnUI(func() {
+				canceled := ctx.Err() != nil
+				dlg.Close()
+				if canceled {
+					return
 				}
-
-				ctx.RunOnUI(func() {
-					// Closing the dialog cancels the task via OnResult; read
-					// the state before Close so completions still deliver.
-					canceled := ctx.Err() != nil
-					dlg.Close()
-					if canceled {
-						return
-					}
-					if foundOffset != -1 {
-						vv.TopOffset = vv.backend.FindLineStart(foundOffset)
-						vtui.FrameManager.Redraw()
-					} else {
-						vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
-					}
-				})
+				if foundOffset != -1 {
+					vv.TopOffset = vv.backend.FindLineStart(foundOffset)
+					vv.lastSearchOffset = foundOffset
+					vv.lastSearchTopOffset = vv.TopOffset
+					vv.lastSearchFound = true
+					vtui.FrameManager.Redraw()
+				} else {
+					vtui.ShowMessage(" Search ", "Pattern not found.", []string{"&Ok"})
+				}
 			})
 		})
 	})
+}
+
+func viewerSearchOffset(ctx context.Context, backend *ViewerBackend, pattern string, start int64, reverse bool, progress func(int)) int64 {
+	if backend == nil || pattern == "" {
+		return -1
+	}
+	fileSize := backend.Size()
+	if fileSize <= 0 {
+		return -1
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start > fileSize {
+		start = fileSize
+	}
+	patternLower := strings.ToLower(pattern)
+	chunkSize := int64(256 * 1024)
+	if int64(len(patternLower)) > chunkSize {
+		chunkSize = int64(len(patternLower))
+	}
+	overlap := int64(len(patternLower) - 1)
+
+	if reverse {
+		if at, searched := backend.SearchBefore(ctx, pattern, start); searched {
+			return at
+		}
+		end := start
+		for end > 0 {
+			if ctx.Err() != nil {
+				return -1
+			}
+			begin := end - chunkSize
+			if begin < 0 {
+				begin = 0
+			}
+			if progress != nil {
+				progress(int(((fileSize - end) * 100) / fileSize))
+			}
+			data, err := backend.ReadAt(begin, int(end-begin))
+			if err == piecetable.ErrLoading {
+				time.Sleep(20 * time.Millisecond)
+				continue
+			}
+			if err != nil || len(data) == 0 {
+				return -1
+			}
+			if idx := strings.LastIndex(strings.ToLower(string(data)), patternLower); idx >= 0 {
+				return begin + int64(idx)
+			}
+			if begin == 0 {
+				break
+			}
+			end = begin + overlap
+		}
+		return -1
+	}
+
+	if at, searched := backend.SearchFrom(ctx, pattern, start); searched {
+		return at
+	}
+	current := start
+	for current < fileSize {
+		if ctx.Err() != nil {
+			return -1
+		}
+		if progress != nil {
+			progress(int((current * 100) / fileSize))
+		}
+		data, err := backend.ReadAt(current, int(chunkSize))
+		if err == piecetable.ErrLoading {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		if err != nil || len(data) == 0 {
+			break
+		}
+		if idx := strings.Index(strings.ToLower(string(data)), patternLower); idx >= 0 {
+			return current + int64(idx)
+		}
+		advance := int64(len(data)) - overlap
+		if advance < 1 {
+			advance = 1
+		}
+		current += advance
+	}
+	return -1
 }
 
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
@@ -1458,6 +1540,7 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	dlg.AddItem(promptLbl)
 
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
+	editDest.PathHintsEnabled = true
 	dlg.AddItem(editDest)
 
 	modes := []string{Msg("Op.Queue"), Msg("Op.Background"), Msg("Op.Foreground")}
@@ -2543,6 +2626,239 @@ func actionConfirmationsSettings(pf *PanelsFrame) {
 
 	vtui.FrameManager.Push(dlg)
 }
+func actionMouseWheelSettings(pf *PanelsFrame) {
+	const width, height = 56, 17
+	dlg := vtui.NewCenteredDialog(width, height, Msg("MouseWheel.Title"))
+	dlg.ShowClose = true
+
+	// 1. Initialize Widgets
+	lblHint := vtui.NewText(0, 0, Msg("MouseWheel.Hint"), 0)
+
+	lblPanels := vtui.NewText(0, 0, Msg("MouseWheel.Panels"), 0)
+	editPanelUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelUp))
+	editPanelDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelPanelDown))
+	lblPanelUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editPanelUp)
+	lblPanelDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editPanelDown)
+
+	lblEditor := vtui.NewText(0, 0, Msg("MouseWheel.Editor"), 0)
+	editEditorUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorUp))
+	editEditorDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelEditorDown))
+	lblEditorUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editEditorUp)
+	lblEditorDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editEditorDown)
+
+	lblViewer := vtui.NewText(0, 0, Msg("MouseWheel.Viewer"), 0)
+	editViewerUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerUp))
+	editViewerDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelViewerDown))
+	lblViewerUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editViewerUp)
+	lblViewerDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editViewerDown)
+
+	lblMenus := vtui.NewText(0, 0, Msg("MouseWheel.Menus"), 0)
+	editMenuUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuUp))
+	editMenuDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelMenuDown))
+	lblMenuUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editMenuUp)
+	lblMenuDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editMenuDown)
+
+	lblTables := vtui.NewText(0, 0, Msg("MouseWheel.Tables"), 0)
+	editTableUp := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableUp))
+	editTableDown := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.WheelTableDown))
+	lblTableUp := vtui.NewLabel(0, 0, Msg("MouseWheel.Up"), editTableUp)
+	lblTableDown := vtui.NewLabel(0, 0, Msg("MouseWheel.Down"), editTableDown)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	// 2. Add to Dialog
+	dlg.AddItem(lblHint)
+	dlg.AddItem(lblPanels)
+	dlg.AddItem(lblPanelUp)
+	dlg.AddItem(editPanelUp)
+	dlg.AddItem(lblPanelDown)
+	dlg.AddItem(editPanelDown)
+	dlg.AddItem(lblEditor)
+	dlg.AddItem(lblEditorUp)
+	dlg.AddItem(editEditorUp)
+	dlg.AddItem(lblEditorDown)
+	dlg.AddItem(editEditorDown)
+	dlg.AddItem(lblViewer)
+	dlg.AddItem(lblViewerUp)
+	dlg.AddItem(editViewerUp)
+	dlg.AddItem(lblViewerDown)
+	dlg.AddItem(editViewerDown)
+	dlg.AddItem(lblMenus)
+	dlg.AddItem(lblMenuUp)
+	dlg.AddItem(editMenuUp)
+	dlg.AddItem(lblMenuDown)
+	dlg.AddItem(editMenuDown)
+	dlg.AddItem(lblTables)
+	dlg.AddItem(lblTableUp)
+	dlg.AddItem(editTableUp)
+	dlg.AddItem(lblTableDown)
+	dlg.AddItem(editTableDown)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	// 3. Layout Configuration
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(lblHint, vtui.Margins{}, vtui.AlignLeft)
+
+	addWheelRow := func(area *vtui.Text, lblUp, lblDown *vtui.Text, editUp, editDown *vtui.Edit) {
+		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		row.Add(area, vtui.Margins{Right: 2}, vtui.AlignLeft)
+		row.Add(lblUp, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(editUp, vtui.Margins{Right: 2}, vtui.AlignLeft)
+		row.Add(lblDown, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		row.Add(editDown, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(row, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
+	addWheelRow(lblPanels, lblPanelUp, lblPanelDown, editPanelUp, editPanelDown)
+	addWheelRow(lblEditor, lblEditorUp, lblEditorDown, editEditorUp, editEditorDown)
+	addWheelRow(lblViewer, lblViewerUp, lblViewerDown, editViewerUp, editViewerDown)
+	addWheelRow(lblMenus, lblMenuUp, lblMenuDown, editMenuUp, editMenuDown)
+	addWheelRow(lblTables, lblTableUp, lblTableDown, editTableUp, editTableDown)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	// 4. Logic
+	parseWheel := func(e *vtui.Edit) int {
+		n := 0
+		fmt.Sscanf(e.GetText(), "%d", &n)
+		if n < 0 {
+			n = 0
+		}
+		return n
+	}
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.WheelPanelUp = parseWheel(editPanelUp)
+		AppConfig.WheelPanelDown = parseWheel(editPanelDown)
+		AppConfig.WheelEditorUp = parseWheel(editEditorUp)
+		AppConfig.WheelEditorDown = parseWheel(editEditorDown)
+		AppConfig.WheelViewerUp = parseWheel(editViewerUp)
+		AppConfig.WheelViewerDown = parseWheel(editViewerDown)
+		AppConfig.WheelMenuUp = parseWheel(editMenuUp)
+		AppConfig.WheelMenuDown = parseWheel(editMenuDown)
+		AppConfig.WheelTableUp = parseWheel(editTableUp)
+		AppConfig.WheelTableDown = parseWheel(editTableDown)
+		applyWheelSettings()
+		SaveConfig()
+		dlg.Close()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
+func actionPathHintSettings(pf *PanelsFrame) {
+	const width, height = 56, 18
+	dlg := vtui.NewCenteredDialog(width, height, Msg("PathHints.Title"))
+	dlg.ShowClose = true
+
+	// 1. Initialize Widgets
+	chkFullPath := vtui.NewCheckbox(0, 0, Msg("PathHints.FullPath"), false)
+	if AppConfig.PathHintFullPath {
+		chkFullPath.State = 1
+	}
+
+	sources := []string{Msg("PathHints.SourceActive"), Msg("PathHints.SourcePassive"), Msg("PathHints.SourceBoth")}
+	comboSource := vtui.NewComboBox(0, 0, 24, sources)
+	comboSource.DropdownOnly = true
+	if AppConfig.PathHintSource >= 0 && AppConfig.PathHintSource < len(sources) {
+		comboSource.Menu.SetSelectPos(AppConfig.PathHintSource)
+		comboSource.Edit.SetText(sources[AppConfig.PathHintSource])
+	}
+	lblSource := vtui.NewLabel(0, 0, Msg("PathHints.Source"), comboSource)
+
+	editTimeout := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.PathHintTimeout))
+	lblTimeout := vtui.NewLabel(0, 0, Msg("PathHints.Timeout"), editTimeout)
+
+	editMaxVisible := vtui.NewEdit(0, 0, 5, strconv.Itoa(AppConfig.PathHintMaxVisible))
+	lblMaxVisible := vtui.NewLabel(0, 0, Msg("PathHints.MaxVisible"), editMaxVisible)
+
+	chkPerCategory := vtui.NewCheckbox(0, 0, Msg("PathHints.PerCategory"), false)
+	if AppConfig.PathHintPerCategory {
+		chkPerCategory.State = 1
+	}
+
+	lblNote := vtui.NewText(0, 0, Msg("PathHints.MarkersNote"), 0)
+
+	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
+	btnOk.IsDefault = true
+	btnCancel := vtui.NewButton(0, 0, Msg("vtui.Cancel"))
+
+	// 2. Add to Dialog
+	dlg.AddItem(chkFullPath)
+	dlg.AddItem(lblSource)
+	dlg.AddItem(comboSource)
+	dlg.AddItem(lblTimeout)
+	dlg.AddItem(editTimeout)
+	dlg.AddItem(lblMaxVisible)
+	dlg.AddItem(editMaxVisible)
+	dlg.AddItem(chkPerCategory)
+	dlg.AddItem(lblNote)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
+
+	// 3. Layout Configuration
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+	vbox.Add(chkFullPath, vtui.Margins{}, vtui.AlignLeft)
+
+	rowSource := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowSource.Add(lblSource, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowSource.Add(comboSource, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowSource, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	rowTimeout := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowTimeout.Add(lblTimeout, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowTimeout.Add(editTimeout, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowTimeout, vtui.Margins{}, vtui.AlignFill)
+
+	rowMaxVisible := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowMaxVisible.Add(lblMaxVisible, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowMaxVisible.Add(editMaxVisible, vtui.Margins{}, vtui.AlignLeft)
+	vbox.Add(rowMaxVisible, vtui.Margins{}, vtui.AlignFill)
+
+	vbox.Add(chkPerCategory, vtui.Margins{}, vtui.AlignLeft)
+
+	vbox.Add(lblNote, vtui.Margins{Top: 1}, vtui.AlignLeft)
+
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	hbox.HorizontalAlign = vtui.AlignCenter
+	hbox.Spacing = 2
+	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Apply()
+
+	// 4. Logic
+	btnCancel.OnClick = func() { dlg.Close() }
+	btnOk.OnClick = func() {
+		AppConfig.PathHintFullPath = chkFullPath.State == 1
+		AppConfig.PathHintSource = comboSource.Menu.SelectPos
+		timeout := 2
+		fmt.Sscanf(editTimeout.GetText(), "%d", &timeout)
+		if timeout < 1 {
+			timeout = 1
+		}
+		AppConfig.PathHintTimeout = timeout
+		maxVisible := 5
+		fmt.Sscanf(editMaxVisible.GetText(), "%d", &maxVisible)
+		if maxVisible < 1 {
+			maxVisible = 1
+		}
+		AppConfig.PathHintMaxVisible = maxVisible
+		AppConfig.PathHintPerCategory = chkPerCategory.State == 1
+		applyPathHintSettings()
+		SaveConfig()
+		dlg.Close()
+	}
+
+	vtui.FrameManager.Push(dlg)
+}
 func actionUpdateSettings(pf *PanelsFrame) {
 	width, height := 54, 11
 	dlg := vtui.NewCenteredDialog(width, height, Msg("UpdateSettings.Title"))
@@ -2756,9 +3072,7 @@ func actionImportFar2lHistory(pf *PanelsFrame) {
 }
 
 func actionAppearanceSettings(pf *PanelsFrame) {
-	// One row shaved by dropping the blank between the two trailing
-	// checkboxes (see #298).
-	const width, height = 64, 26
+	const width, height = 64, 28
 	dlg := vtui.NewCenteredDialog(width, height, Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
@@ -2820,6 +3134,7 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		Msg("AppearanceSettings.WorkspaceTabsAlways"),
 		Msg("AppearanceSettings.WorkspaceTabsMultiple"),
 		Msg("AppearanceSettings.WorkspaceTabsCtrl"),
+		Msg("AppearanceSettings.WorkspaceTabsNever"),
 	}
 	comboWorkspaceTabs := vtui.NewComboBox(0, 0, 30, workspaceTabModes)
 	comboWorkspaceTabs.DropdownOnly = true
@@ -2849,6 +3164,24 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	if AppConfig.AltNumberSwitchesTabs {
 		chkAltNumberTabs.State = 1
 	}
+	chkRestoreWorkspaceTabs := vtui.NewCheckbox(0, 0, Msg("AppearanceSettings.RestoreWorkspaceTabs"), AppConfig.RestoreWorkspaceTabs)
+	if AppConfig.RestoreWorkspaceTabs {
+		chkRestoreWorkspaceTabs.State = 1
+	}
+	workspaceNumberingModes := []string{
+		Msg("AppearanceSettings.WorkspaceNumbersAlways"),
+		Msg("AppearanceSettings.WorkspaceNumbersSession"),
+		Msg("AppearanceSettings.WorkspaceNumbersOrder"),
+	}
+	comboWorkspaceNumbering := vtui.NewComboBox(0, 0, 30, workspaceNumberingModes)
+	comboWorkspaceNumbering.DropdownOnly = true
+	workspaceNumberingSelection := int(AppConfig.WorkspaceTabNumbering)
+	if workspaceNumberingSelection < 0 || workspaceNumberingSelection >= len(workspaceNumberingModes) {
+		workspaceNumberingSelection = int(WorkspaceTabNumbersAlways)
+	}
+	comboWorkspaceNumbering.Menu.SetSelectPos(workspaceNumberingSelection)
+	comboWorkspaceNumbering.Edit.SetText(workspaceNumberingModes[workspaceNumberingSelection])
+	lblWorkspaceNumbering := vtui.NewLabel(0, 0, Msg("AppearanceSettings.WorkspaceNumbers"), comboWorkspaceNumbering)
 
 	chkCursor := vtui.NewCheckbox(0, 0, Msg("PanelSettings.KeepCursor"), false)
 	chkCursor.State = 0
@@ -2881,6 +3214,9 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblCtrlTab)
 	dlg.AddItem(comboCtrlTab)
 	dlg.AddItem(chkAltNumberTabs)
+	dlg.AddItem(chkRestoreWorkspaceTabs)
+	dlg.AddItem(lblWorkspaceNumbering)
+	dlg.AddItem(comboWorkspaceNumbering)
 	dlg.AddItem(chkCursor)
 	dlg.AddItem(chkContrast)
 	dlg.AddItem(btnOk)
@@ -2915,6 +3251,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 	rowCtrlTab.Add(comboCtrlTab, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(rowCtrlTab, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(chkAltNumberTabs, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(chkRestoreWorkspaceTabs, vtui.Margins{}, vtui.AlignLeft)
+	rowWorkspaceNumbering := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowWorkspaceNumbering.Add(lblWorkspaceNumbering, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowWorkspaceNumbering.Add(comboWorkspaceNumbering, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(rowWorkspaceNumbering, vtui.Margins{Top: 1}, vtui.AlignFill)
 
 	vbox.Add(chkCursor, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkContrast, vtui.Margins{}, vtui.AlignLeft)
@@ -2960,6 +3301,11 @@ func actionAppearanceSettings(pf *PanelsFrame) {
 		AppConfig.WorkspaceTabMode = comboWorkspaceTabs.Menu.SelectPos
 		AppConfig.CtrlTabShowsMenu = comboCtrlTab.Menu.SelectPos == 1
 		AppConfig.AltNumberSwitchesTabs = chkAltNumberTabs.State == 1
+		AppConfig.RestoreWorkspaceTabs = chkRestoreWorkspaceTabs.State == 1
+		AppConfig.WorkspaceTabNumbering = WorkspaceTabNumberingMode(comboWorkspaceNumbering.Menu.SelectPos)
+		if AppConfig.WorkspaceTabNumbering == WorkspaceTabNumbersOrder {
+			renumberWorkspaceScreens()
+		}
 		SaveConfig()
 
 		dlg.SetExitCode(1)
@@ -3085,6 +3431,7 @@ func showPluginFileDialog(parent *vtui.Window, startPath string, onSelect func(s
 
 	lbl := vtui.NewLabel(0, 0, Msg("Plugins.SelectFilePrompt"), nil)
 	edit := vtui.NewEdit(0, 0, w-4, startPath)
+	edit.PathHintsEnabled = true
 	lb := vtui.NewListBox(0, 0, w-4, h-10, nil)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))

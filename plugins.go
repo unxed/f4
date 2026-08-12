@@ -8,6 +8,7 @@ import (
 	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/plugins/chroma"
 	"github.com/unxed/f4/plugins/dummy_internal"
+	"github.com/unxed/f4/plugins/envman"
 	"github.com/unxed/f4/plugins/id3editor"
 	iosfs "github.com/unxed/f4/plugins/ios"
 	"github.com/unxed/f4/plugins/netfox"
@@ -177,6 +178,7 @@ func (pm *PluginManager) loadInternal() {
 		&netfox.NetFoxPlugin{},
 		&visren.Plugin{},
 		&id3editor.ID3EditorPlugin{},
+		envman.NewPlugin(GetF4ConfigDir()),
 	}
 
 	for _, p := range plugins {

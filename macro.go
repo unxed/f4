@@ -131,7 +131,10 @@ func EventToFarString(e *vtinput.InputEvent) string {
 func ParseFarKey(s string) *vtinput.InputEvent {
 	e := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true}
 	orig := s
-	if strings.HasPrefix(s, "Ctrl") {
+	if strings.HasPrefix(s, "RCtrl") {
+		e.ControlKeyState |= vtinput.RightCtrlPressed
+		s = strings.TrimPrefix(s, "RCtrl")
+	} else if strings.HasPrefix(s, "Ctrl") {
 		e.ControlKeyState |= vtinput.LeftCtrlPressed
 		s = strings.TrimPrefix(s, "Ctrl")
 	}

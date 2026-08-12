@@ -255,6 +255,12 @@ func TestViewerBackendSearchFrom(t *testing.T) {
 	if remote.calls != 3 {
 		t.Errorf("the file system was asked %d times, want 3", remote.calls)
 	}
+	if at, searched := vb.SearchBefore(context.Background(), "needle", 16); !searched || at != 0 {
+		t.Errorf("SearchBefore(16) = %d, %v; want 0, true", at, searched)
+	}
+	if at, searched := vb.SearchBefore(context.Background(), "needle", 100); !searched || at != 16 {
+		t.Errorf("SearchBefore(100) = %d, %v; want 16, true", at, searched)
+	}
 
 	// A file system that cannot search says so, and the viewer scans.
 	local, err := NewViewerBackend(context.Background(), vfs.NewOSVFS(dir), tmp)
@@ -275,6 +281,31 @@ func TestViewerBackendSearchFrom(t *testing.T) {
 	defer vb2.Close()
 	if _, searched := vb2.SearchFrom(context.Background(), "needle", 0); searched {
 		t.Error("a failed search was taken for an answer")
+	}
+}
+
+func TestViewerSearchOffsetBothDirections(t *testing.T) {
+	data := []byte("zero needle middle needle end")
+	vb := &ViewerBackend{
+		file:         &vfs.MemoryReadAtCloser{Data: data},
+		size:         int64(len(data)),
+		cacheOff:     0,
+		cacheData:    data,
+		totalLines:   -1,
+		totalForSize: -1,
+	}
+
+	if got := viewerSearchOffset(context.Background(), vb, "needle", 0, false, nil); got != 5 {
+		t.Fatalf("forward first offset = %d, want 5", got)
+	}
+	if got := viewerSearchOffset(context.Background(), vb, "needle", 6, false, nil); got != 19 {
+		t.Fatalf("forward next offset = %d, want 19", got)
+	}
+	if got := viewerSearchOffset(context.Background(), vb, "needle", int64(len(data)), true, nil); got != 19 {
+		t.Fatalf("backward last offset = %d, want 19", got)
+	}
+	if got := viewerSearchOffset(context.Background(), vb, "needle", 19, true, nil); got != 5 {
+		t.Fatalf("backward previous offset = %d, want 5", got)
 	}
 }
 func TestViewerBackendLineStart(t *testing.T) {

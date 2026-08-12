@@ -217,7 +217,7 @@ jobs:
         # This file is generated automatically by CI on each tagged release.
         # Do not edit by hand — changes will be overwritten.
         class F4 < Formula
-          desc "Experimental Far Manager / far2l clone in Go"
+          desc "# f4 — efficient and cozy file manager in go"
           homepage "https://github.com/${GITHUB_REPOSITORY}"
           version "${VERSION}"
           license "BSD-3-Clause"

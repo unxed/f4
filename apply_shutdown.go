@@ -1,6 +1,10 @@
 package main
 
-import "time"
+import (
+	"time"
+
+	"github.com/unxed/f4/fusefs"
+)
 
 func cancelOperationsForShutdown() {
 	cancelAllForegroundApplyCommands()
@@ -25,4 +29,9 @@ func cancelOperationsForShutdown() {
 		time.Sleep(10 * time.Millisecond)
 	}
 	cleanupAllApplyCommandResources()
+	// FUSE mounts created from the panels belong to this process, and the
+	// kernel connection dies with it: leaving them up would strand a mount
+	// point that hangs every program walking into it. Mounts started with
+	// --daemon live in a process of their own and are not in this list.
+	fusefs.UnmountAll()
 }
