@@ -125,6 +125,8 @@ func DownloadColorerSchemas(pf *PanelsFrame, onComplete func(success bool)) {
 			vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to download Colorer schemas:\n%v\n\nFalling back to Chroma.", err), []string{"&Ok"})
 			onComplete(false)
 		} else {
+			// The cached scheme list predates the download — invalidate it.
+			ResetColorerSchemesCache()
 			vtui.ShowMessage(" Success ", "Colorer schemas downloaded and installed successfully!", []string{"&Ok"})
 			onComplete(true)
 		}
