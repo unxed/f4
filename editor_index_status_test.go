@@ -26,6 +26,29 @@ func pumpUntil(t *testing.T, what string, cond func() bool) {
 	}
 }
 
+// A fully read file (non-UTF-8) has no scan at all — the restore must still
+// resolve, or Loading stays on screen until a key press aborts it.
+func TestIndexRestore_ResolvesForFullyReadFile(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	drainPendingTasks()
+
+	pt := piecetable.New([]byte("line one\nline two\nline three\nline four\nline five\n"))
+	ev := newEditorView(pt, nil, "", false)
+	ev.targetLine = 3
+	ev.targetPos = 2
+	ev.targetTopRow = 3
+	ev.targetLeft = 0
+
+	ev.StartIndexing()
+
+	if ev.targetLine != -1 {
+		t.Fatalf("StartIndexing on a fully read file must resolve the restore, targetLine = %d", ev.targetLine)
+	}
+	if ev.CursorLine != 3 || ev.CursorPos != 2 || ev.ScrollTopRow != 3 {
+		t.Errorf("restore = line %d pos %d top %d, want 3, 2, 3", ev.CursorLine, ev.CursorPos, ev.ScrollTopRow)
+	}
+}
+
 // TestIndexStatus_ReachesCompleteAndNotifies covers the state machine end to
 // end: a scan announces itself, reports progress, and settles on complete,
 // telling subscribers about every phase it passes through.

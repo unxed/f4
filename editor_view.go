@@ -2634,6 +2634,26 @@ func (ev *EditorView) scrollViewBy(delta int) {
 	vtui.FrameManager.Redraw()
 }
 
+// restoreTargetPos applies the saved position once the line it targets is
+// indexed; the indexer's batches call it, and so does StartIndexing's early
+// return for fully read files where no scan will ever run.
+func (ev *EditorView) restoreTargetPos() bool {
+	if ev.targetLine == -1 {
+		return false
+	}
+	ev.CursorLine = max(min(ev.targetLine, ev.li.LineCount()-1), 0)
+	if ev.asyncBuf != nil && ev.targetPos >= 0 {
+		_, _ = ev.asyncBuf.Read(ev.li.GetLineOffset(ev.CursorLine)+ev.targetPos, 4096)
+	}
+	ev.CursorPos = ev.targetPos
+	ev.ScrollTopRow = ev.targetTopRow
+	ev.ScrollLeft = max(ev.targetLeft, 0)
+	ev.targetLine = -1
+	ev.ensureCursorVisible()
+	ev.updateDesiredVisualCol()
+	return true
+}
+
 func (ev *EditorView) ensureCursorVisible() {
 	if ev.targetLine != -1 {
 		return // Skip clamping and scrolling while waiting for the target line to be indexed
@@ -2894,6 +2914,9 @@ func (ev *EditorView) StartIndexing() {
 	// A mapped file has no chunk buffer and needs indexing just the same, so
 	// the question is whether there is any text at all, not how it is backed.
 	if ev.asyncBuf == nil && ev.mapped == nil {
+		// Fully read files (non-UTF-8 codepages) have a complete index and no
+		// scan; resolve a pending restore here or Loading waits forever.
+		ev.restoreTargetPos()
 		return
 	}
 	if ev.indexCancel != nil {
@@ -2987,28 +3010,7 @@ func (ev *EditorView) StartIndexing() {
 						li.AppendOffsets(batchOffsets, maxSize)
 
 						if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || len(res.Offsets) < batchSize) {
-							ev.CursorLine = ev.targetLine
-							if ev.CursorLine >= li.LineCount() {
-								ev.CursorLine = li.LineCount() - 1
-							}
-							if ev.CursorLine < 0 {
-								ev.CursorLine = 0
-							}
-
-							targetOff := li.GetLineOffset(ev.CursorLine) + ev.targetPos
-							if targetOff >= 0 && ev.asyncBuf != nil {
-								_, _ = ev.asyncBuf.Read(targetOff, 4096)
-							}
-
-							ev.CursorPos = ev.targetPos
-							ev.ScrollTopRow = ev.targetTopRow
-							ev.ScrollLeft = ev.targetLeft
-							if ev.ScrollLeft < 0 {
-								ev.ScrollLeft = 0
-							}
-							ev.targetLine = -1
-							ev.ensureCursorVisible()
-							ev.updateDesiredVisualCol()
+							ev.restoreTargetPos()
 						}
 
 						ev.engine.InvalidateFrom(lastLineBefore)
@@ -3032,27 +3034,7 @@ func (ev *EditorView) StartIndexing() {
 				scannedTo.Store(int64(maxSize))
 				vtui.FrameManager.PostTask(func() {
 					if ctx.Err() == nil && ev.editSession == sessionID {
-						if ev.targetLine != -1 {
-							ev.CursorLine = ev.targetLine
-							if ev.CursorLine >= li.LineCount() {
-								ev.CursorLine = li.LineCount() - 1
-							}
-							if ev.CursorLine < 0 {
-								ev.CursorLine = 0
-							}
-							targetOff := li.GetLineOffset(ev.CursorLine) + ev.targetPos
-							if targetOff >= 0 && ev.asyncBuf != nil {
-								_, _ = ev.asyncBuf.Read(targetOff, 4096)
-							}
-							ev.CursorPos = ev.targetPos
-							ev.ScrollTopRow = ev.targetTopRow
-							ev.ScrollLeft = ev.targetLeft
-							if ev.ScrollLeft < 0 {
-								ev.ScrollLeft = 0
-							}
-							ev.targetLine = -1
-							ev.ensureCursorVisible()
-							ev.updateDesiredVisualCol()
+						if ev.restoreTargetPos() {
 							vtui.FrameManager.Redraw()
 						}
 						if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
@@ -3155,22 +3137,7 @@ func (ev *EditorView) StartIndexing() {
 					li.AppendOffsets(currentBatch, maxSize)
 
 					if ev.targetLine != -1 && (li.LineCount() > ev.targetLine || batchEnd >= maxSize) {
-						ev.CursorLine = ev.targetLine
-						if ev.CursorLine >= li.LineCount() {
-							ev.CursorLine = li.LineCount() - 1
-						}
-						if ev.CursorLine < 0 {
-							ev.CursorLine = 0
-						}
-						ev.CursorPos = ev.targetPos
-						ev.ScrollTopRow = ev.targetTopRow
-						ev.ScrollLeft = ev.targetLeft
-						if ev.ScrollLeft < 0 {
-							ev.ScrollLeft = 0
-						}
-						ev.targetLine = -1
-						ev.ensureCursorVisible()
-						ev.updateDesiredVisualCol()
+						ev.restoreTargetPos()
 					}
 
 					ev.engine.InvalidateFrom(lastLineBefore)
@@ -3184,23 +3151,7 @@ func (ev *EditorView) StartIndexing() {
 
 		vtui.FrameManager.PostTask(func() {
 			if ctx.Err() == nil && ev.editSession == sessionID {
-				if ev.targetLine != -1 {
-					ev.CursorLine = ev.targetLine
-					if ev.CursorLine >= li.LineCount() {
-						ev.CursorLine = li.LineCount() - 1
-					}
-					if ev.CursorLine < 0 {
-						ev.CursorLine = 0
-					}
-					ev.CursorPos = ev.targetPos
-					ev.ScrollTopRow = ev.targetTopRow
-					ev.ScrollLeft = ev.targetLeft
-					if ev.ScrollLeft < 0 {
-						ev.ScrollLeft = 0
-					}
-					ev.targetLine = -1
-					ev.ensureCursorVisible()
-					ev.updateDesiredVisualCol()
+				if ev.restoreTargetPos() {
 					vtui.FrameManager.Redraw()
 				}
 				if ev.highlighter != nil && !ev.highlighting && len(ev.lineStates) < li.LineCount() {
