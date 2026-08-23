@@ -690,11 +690,11 @@ jobs:
         # One hosted runner per native os/arch cell, labeled to match the
         # build matrix.
         include:
-          - { os: ubuntu-latest,    target: linux/amd64 }
+          - { os: ubuntu-latest,    target: linux/amd64, cover: linux }
           - { os: ubuntu-24.04-arm, target: linux/arm64 }
-          - { os: macos-latest,     target: darwin/arm64 }
+          - { os: macos-latest,     target: darwin/arm64, cover: macos }
           - { os: macos-15-intel,   target: darwin/amd64 }
-          - { os: windows-latest,   target: windows/amd64 }
+          - { os: windows-latest,   target: windows/amd64, cover: windows }
           - { os: windows-11-arm,   target: windows/arm64 }
     env:
       CGO_ENABLED: 0
@@ -712,12 +712,34 @@ jobs:
 
     - name: Run Tests
       shell: bash
+      env:
+        # Coverage comes from one cell per OS: which files compile is gated by
+        # GOOS, so the arm64 twins would report the same lines twice. -coverpkg
+        # counts hits across package boundaries, without which a project that
+        # keeps most of its tests in cmd/f4 reports every other package as
+        # nearly untested.
+        COVER: ${{ matrix.cover && '-coverpkg=./... -coverprofile=cover.out' || '' }}
       run: |
-        go test -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
+        go test $COVER -timeout 15m -skip '^TestAllDialogs_LayoutValidation$' ./...
         # Layout validation mutates shared UI registries from parallel
         # subtests. Go 1.26 schedules them aggressively enough to expose the
         # upstream race, so isolate that test in a single-threaded process.
         GOMAXPROCS=1 go test -timeout 15m -run '^TestAllDialogs_LayoutValidation$' ./cmd/f4
+
+    - name: Upload coverage to Codecov
+      if: matrix.cover
+      uses: codecov/codecov-action@v7
+      with:
+        files: cover.out
+        # Without this the uploader also sweeps the tree for anything that
+        # looks like a report and picks up cmd/f4/lang/coverage_baseline.txt,
+        # which counts translation keys, not statements.
+        disable_search: true
+        flags: ${{ matrix.cover }}
+        token: ${{ secrets.CODECOV_TOKEN }}
+        # Coverage is a report, not a gate: a failed upload (or a repository
+        # with no token yet) must not turn the test run red.
+        fail_ci_if_error: false
 
     - name: Dump crash reports on failure
       if: failure()

@@ -1,0 +1,21 @@
+# Coverage here is a report, never a gate: both checks are informational, so a
+# pull request is never blocked by the number moving.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# One upload per OS (linux, macos, windows). Carrying flags forward keeps the
+# other two reports alive when a single cell is re-run, instead of reporting
+# their lines as suddenly uncovered.
+flag_management:
+  default_rules:
+    carryforward: true
+
+ignore:
+  - "tools/**"
+  - "**/generated/**"
