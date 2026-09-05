@@ -119,14 +119,33 @@ func (p *PTY) SetSize(cols, rows int) {
 	// A minimized window reports 0x0; ConPTY does not survive being told so
 	// (TERMINAL.md, rule 4). Nor does it need a height it cannot use.
 	if cols <= 0 || rows <= 0 {
+		vtui.DebugLog("PTY_WIN_SIZE: resize to %dx%d ignored (non-positive)", cols, rows)
+		return
+	}
+	// COORD carries int16; anything above that cannot be what the host
+	// window measures, and silently truncating it would hand the child a
+	// different width than the one f4 lays its own screen out for (#907).
+	if cols > 0x7FFF || rows > 0x7FFF {
+		vtui.DebugLog("PTY_WIN_SIZE: resize to %dx%d ignored (exceeds COORD)", cols, rows)
 		return
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.consoleClosed {
+		vtui.DebugLog("PTY_WIN_SIZE: resize to %dx%d ignored (console closed)", cols, rows)
 		return
 	}
-	windows.ResizePseudoConsole(p.console, windows.Coord{X: int16(cols), Y: int16(rows)})
+	// The child wraps its output at the width recorded here, so when its
+	// lines break earlier than the window edge (#907) this is the line to
+	// compare against REFLOW_PTY and FM_RESIZE. The HRESULT used to be
+	// dropped on the floor; a refused resize left the pseudoconsole at its
+	// previous size with nothing in the log to say so.
+	err := windows.ResizePseudoConsole(p.console, windows.Coord{X: int16(cols), Y: int16(rows)})
+	if err != nil {
+		vtui.DebugLog("PTY_WIN_SIZE: ResizePseudoConsole(%dx%d) failed: %v", cols, rows, err)
+		return
+	}
+	vtui.DebugLog("PTY_WIN_SIZE: ResizePseudoConsole(%dx%d) ok", cols, rows)
 }
 
 func (p *PTY) Run(name string, args ...string) error {
