@@ -28,7 +28,6 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
-import "golang.org/x/arch/x86/x86asm"
 
 var (
 	LastEditorSearch          string
@@ -60,7 +59,7 @@ type EditorView struct {
 	DecodeMode         bool
 	HexTopOffset       int
 	HexNibble          int // 0 = high nibble, 1 = low nibble
-	DisasmMode         int // 16, 32, or 64
+	DisasmMode         int // 16, 32 or 64; 0 while undecided (see disasm.go)
 	overtype           bool
 	modified           bool
 	closeDlg           *vtui.Window
@@ -1048,39 +1047,22 @@ func (ev *EditorView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 			}
 		}
 
-		take := 15
-		if currOffset+take > ev.pt.Size() {
-			take = ev.pt.Size() - currOffset
-		}
-
-		var data []byte
-		if take > 0 {
-			var err error
-			data, err = ev.pt.GetRange(currOffset, take)
-			if err == piecetable.ErrLoading {
-				scr.Write(ev.X1, ev.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
-				break
-			}
+		data, err := ev.decodeBytes(currOffset, disasmMaxInstLen)
+		if err == piecetable.ErrLoading {
+			scr.Write(ev.X1, ev.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
+			break
 		}
 
 		if len(data) == 0 && currOffset < ev.pt.Size() {
 			break
 		}
 
-		if ev.DisasmMode == 0 {
-			header, _ := ev.pt.GetRange(0, 1024)
-			ev.DisasmMode = detectX86Mode(header)
-		}
-
+		// Bytes the piece table would not hand over still take a line one
+		// byte wide, so the walk cannot stall on them.
 		instLen := 1
 		asmStr := ""
 		if len(data) > 0 {
-			inst, err := x86asm.Decode(data, ev.DisasmMode)
-			asmStr = fmt.Sprintf("db 0x%02X", data[0])
-			if err == nil {
-				instLen = inst.Len
-				asmStr = x86asm.IntelSyntax(inst, nonNegativeUint64(int64(currOffset)), nil)
-			}
+			asmStr, instLen = disasmInstruction(data, ev.disasmMode(), int64(currOffset))
 		}
 
 		line := fmt.Sprintf("%010X: ", currOffset)
@@ -1117,27 +1099,50 @@ func (ev *EditorView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 	}
 }
 
-func detectX86Mode(data []byte) int {
-	if len(data) >= 6 && bytes.HasPrefix(data, []byte("\x7fELF")) {
-		if data[4] == 1 {
-			return 32
-		}
-		return 64
+// decodeBytes reads up to n bytes at off for the decode view. GetRange
+// answers a range that runs past the end of the buffer with nothing at
+// all, so the request is cut to what is there first: an instruction
+// window at the last bytes of a file must still see those bytes.
+func (ev *EditorView) decodeBytes(off, n int) ([]byte, error) {
+	if size := ev.pt.Size(); off+n > size {
+		n = size - off
 	}
-	if len(data) >= 0x40 && bytes.HasPrefix(data, []byte("MZ")) {
-		peOff := int(data[0x3C]) | (int(data[0x3D]) << 8) | (int(data[0x3E]) << 16) | (int(data[0x3F]) << 24)
-		if peOff > 0 && peOff+6 <= len(data) && bytes.Equal(data[peOff:peOff+4], []byte("PE\x00\x00")) {
-			machine := uint16(data[peOff+4]) | (uint16(data[peOff+5]) << 8)
-			if machine == 0x014C { // IMAGE_FILE_MACHINE_I386
-				return 32
-			}
-			if machine == 0x8664 { // IMAGE_FILE_MACHINE_AMD64
-				return 64
-			}
-		}
+	if n <= 0 {
+		return nil, nil
 	}
-	return 64 // Default
+	return ev.pt.GetRange(off, n)
 }
+
+// disasmMode returns the processor mode the decode view uses. An editor
+// opened without a header (showEditor reads one) decides it here, from the
+// buffer's first bytes, the first time an instruction is needed.
+func (ev *EditorView) disasmMode() int {
+	if !disasmModeValid(ev.DisasmMode) {
+		header, _ := ev.decodeBytes(0, 1024)
+		ev.DisasmMode = detectX86Mode(header)
+	}
+	return ev.DisasmMode
+}
+
+// cycleDisasmMode switches the decode view to the next processor mode in
+// the 64 -> 32 -> 16 -> 64 cycle and returns the mode now in effect. The
+// cursor keeps its byte offset; the line it lands on is whatever
+// instruction the new mode reads there.
+func (ev *EditorView) cycleDisasmMode() int {
+	ev.DisasmMode = nextDisasmMode(ev.disasmMode())
+	ev.ensureCursorVisible()
+	return ev.DisasmMode
+}
+
+// decodeStep returns how many bytes the instruction at off occupies in the
+// current mode: the distance to the next line of the decode view. It is
+// zero at the end of the buffer or while the bytes at off are still being
+// fetched.
+func (ev *EditorView) decodeStep(off int) int {
+	data, _ := ev.decodeBytes(off, disasmMaxInstLen)
+	return disasmInstLen(data, ev.disasmMode())
+}
+
 func hexCharToByte(c rune) byte {
 	if c >= '0' && c <= '9' {
 		return byte(c - '0')
@@ -1209,19 +1214,7 @@ func (ev *EditorView) processKeyHex(e *vtinput.InputEvent) bool {
 		return true
 	case vtinput.VK_DOWN:
 		if ev.DecodeMode {
-			data, _ := ev.pt.GetRange(absPos, 15)
-			if len(data) > 0 {
-				if ev.DisasmMode == 0 {
-					header, _ := ev.pt.GetRange(0, 1024)
-					ev.DisasmMode = detectX86Mode(header)
-				}
-				inst, err := x86asm.Decode(data, ev.DisasmMode)
-				if err == nil {
-					absPos += int(inst.Len)
-				} else {
-					absPos += 1
-				}
-			}
+			absPos += ev.decodeStep(absPos)
 		} else {
 			absPos += 16
 		}
@@ -2803,17 +2796,9 @@ func (ev *EditorView) ensureCursorVisible() {
 				if curr >= ev.pt.Size() {
 					break
 				}
-				data, _ := ev.pt.GetRange(curr, 15)
-				instLen := 1
-				if len(data) > 0 {
-					if ev.DisasmMode == 0 {
-						header, _ := ev.pt.GetRange(0, 1024)
-						ev.DisasmMode = detectX86Mode(header)
-					}
-					inst, err := x86asm.Decode(data, ev.DisasmMode)
-					if err == nil {
-						instLen = inst.Len
-					}
+				instLen := ev.decodeStep(curr)
+				if instLen == 0 {
+					instLen = 1
 				}
 				if absPos >= curr && absPos < curr+instLen {
 					visible = true

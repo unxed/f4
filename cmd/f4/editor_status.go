@@ -99,11 +99,7 @@ func (ev *EditorView) editorStatusText() string {
 
 	if ev.DecodeMode {
 		absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
-		modeBits := ev.DisasmMode
-		if modeBits == 0 {
-			modeBits = 64
-		}
-		return fmt.Sprintf("%sDec:%d │ 0x%08X     ", prefix, modeBits, absPos)
+		return fmt.Sprintf("%s%s │ 0x%08X     ", prefix, disasmModeLabel(ev.disasmMode()), absPos)
 	}
 	if ev.HexMode {
 		absPos := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos

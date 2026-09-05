@@ -2308,6 +2308,24 @@ func init() {
 		}),
 	})
 	RegisterAction(Action{
+		Name:        "Editor.DisasmMode",
+		Area:        "Editor",
+		Label:       "Disassembler mode",
+		LabelKey:    "Action.Editor.DisasmMode",
+		Description: "Cycle the decode view between 64-, 32- and 16-bit x86 code",
+		DescKey:     "Action.Editor.DisasmMode.Desc",
+		DefaultKeys: []string{"ShiftF4"},
+		MenuPath:    "Options",
+		Handler: withEditor(func(ev *EditorView) {
+			// The mode is a property of the file, not of the view, so it
+			// is switched wherever the editor is: the toast says what the
+			// decode view will read the bytes as.
+			mode := ev.cycleDisasmMode()
+			showToast(fmt.Sprintf(Msg("Viewer.DisasmBits"), mode), time.Second)
+			vtui.FrameManager.Redraw()
+		}),
+	})
+	RegisterAction(Action{
 		Name:        "Editor.ShowWhitespaces",
 		Area:        "Editor",
 		Label:       "Show Whitespaces",
@@ -2472,6 +2490,21 @@ func init() {
 			} else {
 				vv.DecodeMode = false
 			}
+			vtui.FrameManager.Redraw()
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Viewer.DisasmMode",
+		Area:        "Viewer",
+		Label:       "Disassembler mode",
+		LabelKey:    "Action.Viewer.DisasmMode",
+		Description: "Cycle the decode view between 64-, 32- and 16-bit x86 code",
+		DescKey:     "Action.Viewer.DisasmMode.Desc",
+		DefaultKeys: []string{"ShiftF4"},
+		MenuPath:    "View",
+		Handler: withViewer(func(vv *ViewerView) {
+			mode := vv.cycleDisasmMode()
+			showToast(fmt.Sprintf(Msg("Viewer.DisasmBits"), mode), time.Second)
 			vtui.FrameManager.Redraw()
 		}),
 	})

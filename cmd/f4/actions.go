@@ -774,6 +774,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	cpID := AppConfig.EditorDefaultCodePage
 	binary := false
 	dataOffset := int64(0)
+	var header []byte
 
 	if f != nil {
 		size := f.Size()
@@ -781,7 +782,7 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 		if int64(detectLen) > size {
 			detectLen = int(size)
 		}
-		header := make([]byte, detectLen)
+		header = make([]byte, detectLen)
 		n, _ := f.ReadAt(context.Background(), header, 0)
 		// Unread bytes stay zero and would look like NULs, so only inspect
 		// what was actually read.
@@ -848,6 +849,10 @@ func showEditor(pf *PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtCloser) {
 	editor.Codepage = cpID
 	editor.binaryFile = binary
 	editor.utf8BOM = cpID == 65001 && dataOffset != 0
+	// The decode view's processor mode comes off the header read above,
+	// like the codepage: the buffer behind a lazily loaded file may not
+	// have its first bytes when the mode is first wanted.
+	editor.DisasmMode = detectX86Mode(header)
 	// StartIndexing skips hex, so binary files open without a line scan.
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks || binary {
 		editor.HexMode = true
@@ -1142,7 +1147,12 @@ func actionSwitchEditorToViewer(ev *EditorView) {
 		viewer.ReloadWithCodepage(ev.Codepage)
 		viewer.HexMode = ev.HexMode
 		viewer.DecodeMode = ev.DecodeMode
-		viewer.DisasmMode = ev.DisasmMode
+		// A decided mode travels with the switch, whether the header or
+		// the user decided it; an undecided one must not undo the
+		// viewer's own detection.
+		if ev.DisasmMode != 0 {
+			viewer.DisasmMode = ev.DisasmMode
+		}
 		viewer.WrapMode = ev.WordWrap
 		if viewer.HexMode {
 			viewer.TopOffset = targetOffset &^ 0xF

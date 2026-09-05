@@ -13,7 +13,6 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 // ViewerView is a high-performance file viewer component.
@@ -32,7 +31,9 @@ type ViewerView struct {
 	hexAuto    bool
 	DecodeMode bool
 	WrapMode   bool
-	DisasmMode int   // 16, 32, or 64
+	// DisasmMode is the processor mode the decode view disassembles in:
+	// 16, 32 or 64, or 0 while undecided. See disasm.go.
+	DisasmMode int
 	TopOffset  int64 // Current byte offset of the first visible line
 
 	// For Text mode: offsets of lines currently on screen
@@ -98,7 +99,12 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 		HexMode:  binary,
 		hexAuto:  binary,
 		WrapMode: true,
-		Codepage: cpID,
+		// The decode view's processor mode is read off the same header the
+		// binary check used, here where the whole header is in hand: the
+		// backend serves the decode view through a moving cache window,
+		// which need not cover offset 0 by the time the mode is wanted.
+		DisasmMode: detectX86Mode(header),
+		Codepage:   cpID,
 	}
 	vv.scrollBar = vtui.NewScrollBar(0, 0, 0)
 	vv.scrollBar.ColorIdx = ColViewerScrollbar
@@ -163,11 +169,7 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 			}
 			mode := Msg("Viewer.ModeText")
 			if vv.DecodeMode {
-				modeBits := vv.DisasmMode
-				if modeBits == 0 {
-					modeBits = 64
-				}
-				mode = fmt.Sprintf("Dec:%d", modeBits)
+				mode = disasmModeLabel(vv.disasmMode())
 			} else if vv.HexMode {
 				mode = Msg("Viewer.ModeHex")
 			}
@@ -379,7 +381,7 @@ func (vv *ViewerView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 			break
 		}
 
-		data, err := vv.backend.ReadAt(currOffset, 15)
+		data, err := vv.backend.ReadAt(currOffset, disasmMaxInstLen)
 		if err == piecetable.ErrLoading {
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
 			break
@@ -389,18 +391,7 @@ func (vv *ViewerView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 			break
 		}
 
-		if vv.DisasmMode == 0 {
-			header, _ := vv.backend.ReadAt(0, 1024)
-			vv.DisasmMode = detectX86Mode(header)
-		}
-
-		instLen := 1
-		asmStr := fmt.Sprintf("db 0x%02X", data[0])
-		inst, err := x86asm.Decode(data, vv.DisasmMode)
-		if err == nil {
-			instLen = inst.Len
-			asmStr = x86asm.IntelSyntax(inst, nonNegativeUint64(currOffset), nil)
-		}
+		asmStr, instLen := disasmInstruction(data, vv.disasmMode(), currOffset)
 
 		line := fmt.Sprintf("%010X: ", currOffset)
 		scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(line, offAttr))
@@ -415,6 +406,32 @@ func (vv *ViewerView) renderDecode(scr *vtui.ScreenBuf, width, contentHeight int
 		currOffset += int64(instLen)
 	}
 	vv.eofVisible = (currOffset >= vv.backend.Size())
+}
+
+// disasmMode returns the processor mode the decode view uses. A view built
+// without a header (NewViewerView reads one) decides it here, from the
+// file's first bytes, the first time an instruction is needed.
+func (vv *ViewerView) disasmMode() int {
+	if !disasmModeValid(vv.DisasmMode) {
+		header, _ := vv.backend.ReadAt(0, 1024)
+		vv.DisasmMode = detectX86Mode(header)
+	}
+	return vv.DisasmMode
+}
+
+// cycleDisasmMode switches the decode view to the next processor mode in
+// the 64 -> 32 -> 16 -> 64 cycle and returns the mode now in effect.
+func (vv *ViewerView) cycleDisasmMode() int {
+	vv.DisasmMode = nextDisasmMode(vv.disasmMode())
+	return vv.DisasmMode
+}
+
+// decodeStep returns how many bytes the instruction at off occupies in the
+// current mode: the distance to the next line of the decode view. It is
+// zero while the bytes at off are still being fetched.
+func (vv *ViewerView) decodeStep(off int64) int64 {
+	data, _ := vv.backend.ReadAt(off, disasmMaxInstLen)
+	return int64(disasmInstLen(data, vv.disasmMode()))
 }
 
 func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) {
@@ -541,19 +558,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			return true // Prevent scrolling past End of File
 		}
 		if vv.DecodeMode {
-			data, _ := vv.backend.ReadAt(vv.TopOffset, 15)
-			if len(data) > 0 {
-				if vv.DisasmMode == 0 {
-					header, _ := vv.backend.ReadAt(0, 1024)
-					vv.DisasmMode = detectX86Mode(header)
-				}
-				inst, err := x86asm.Decode(data, vv.DisasmMode)
-				if err == nil {
-					vv.TopOffset += int64(inst.Len)
-				} else {
-					vv.TopOffset += 1
-				}
-			}
+			vv.TopOffset += vv.decodeStep(vv.TopOffset)
 		} else if vv.HexMode {
 			if vv.TopOffset+16 < vv.backend.Size() {
 				vv.TopOffset += 16
@@ -597,15 +602,7 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_NEXT: // PgDn
 		if vv.DecodeMode {
 			for i := 0; i < int(contentHeight); i++ {
-				data, _ := vv.backend.ReadAt(vv.TopOffset, 15)
-				if len(data) > 0 {
-					inst, err := x86asm.Decode(data, 64)
-					if err == nil {
-						vv.TopOffset += int64(inst.Len)
-					} else {
-						vv.TopOffset += 1
-					}
-				}
+				vv.TopOffset += vv.decodeStep(vv.TopOffset)
 			}
 			if vv.TopOffset >= vv.backend.Size() {
 				vv.TopOffset = vv.backend.Size() - 1

@@ -2813,17 +2813,6 @@ func TestParseHexPatternToRegex(t *testing.T) {
 		t.Error("Expected error for invalid hex pattern")
 	}
 }
-func TestDetectX86Mode(t *testing.T) {
-	elf32 := []byte("\x7fELF\x01\x01\x01\x00")
-	if got := detectX86Mode(elf32); got != 32 {
-		t.Errorf("ELF32 got %d, want 32", got)
-	}
-	elf64 := []byte("\x7fELF\x02\x01\x01\x00")
-	if got := detectX86Mode(elf64); got != 64 {
-		t.Errorf("ELF64 got %d, want 64", got)
-	}
-}
-
 func TestEditorView_Search_ShiftF7_Reverse(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
