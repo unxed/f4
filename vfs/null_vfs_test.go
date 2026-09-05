@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -306,22 +307,39 @@ func TestNullVFS_MetadataMutationLatency(t *testing.T) {
 
 func TestNullVFS_MetadataCancellation(t *testing.T) {
 	v := NewNullVFS(0)
-	ctx, cancel := context.WithCancel(context.Background())
 
-	// Trigger cancellation while the simulated latency is active
+	// A context that is already cancelled must not wait out the simulated
+	// latency at all. This does not depend on goroutine scheduling, so it
+	// is the check that proves the throttle selects on ctx.Done().
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	_ = v.MkDir(ctx, "/scenarios/slow/cancelled_op")
+	if dur := time.Since(start); dur >= 80*time.Millisecond {
+		t.Errorf("Metadata operation ignored an already cancelled context, took %v", dur)
+	}
+
+	// Cancellation while the simulated latency is active. The wait must end
+	// promptly after the cancel, measured from when the cancel actually
+	// happened: on a loaded CI runner the cancelling goroutine can be
+	// scheduled tens of milliseconds late, and measuring from the start of
+	// the operation turned that into a false failure (darwin/amd64 CI took
+	// 126ms end to end with a cancel that simply came late).
+	ctx, cancel = context.WithCancel(context.Background())
+	var cancelledAt atomic.Int64
 	go func() {
 		time.Sleep(20 * time.Millisecond)
+		cancelledAt.Store(time.Now().UnixNano())
 		cancel()
 	}()
-
-	start := time.Now()
-	// This would normally take 100ms
 	_ = v.MkDir(ctx, "/scenarios/slow/cancelled_op")
-	dur := time.Since(start)
-
-	if dur >= 80*time.Millisecond {
-		t.Errorf("Metadata operation did not respect context cancellation, took %v", dur)
+	end := time.Now()
+	if at := cancelledAt.Load(); at != 0 {
+		if since := end.Sub(time.Unix(0, at)); since >= 80*time.Millisecond {
+			t.Errorf("Metadata operation did not respect context cancellation, returned %v after cancel", since)
+		}
 	}
+	cancel()
 }
 func TestNullVFS_OpenCreateMetadataLatency(t *testing.T) {
 	v := NewNullVFS(0)
