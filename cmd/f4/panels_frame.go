@@ -253,6 +253,7 @@ type PanelsFrame struct {
 	activeIdx             int    // 0 for left, 1 for right
 	folderHistoryPos      [2]int // position in provider's newest-first folder history
 	executing             bool
+	afterExecution        func() // run once by endExecution; queues the next user-menu step
 	shellPromptReady      bool
 	ignoreNextPrompt      bool
 	returnToPanels        bool
@@ -1007,6 +1008,9 @@ func (pf *PanelsFrame) localShellGone(p PtyBackend) {
 		return
 	}
 	vtui.DebugLog("PTY: local shell exited on its own; ending the command and starting a fresh shell")
+	// Whatever was queued behind the running command belongs to the shell
+	// that just died; it is not replayed into the fresh one.
+	pf.afterExecution = nil
 	if pf.executing {
 		pf.endExecution()
 	}
@@ -1069,6 +1073,7 @@ func (pf *PanelsFrame) restartLocalShell(keepScreen bool) bool {
 	_ = pty.Close()
 
 	pf.executing = false
+	pf.afterExecution = nil
 	pf.termView.ResetKeyboardProtocols()
 	pf.shellPromptReady = false
 	pf.ignoreNextPrompt = false
@@ -1603,6 +1608,10 @@ func (pf *PanelsFrame) endExecution() {
 		}
 		pf.RefreshAll()
 		vtui.FrameManager.Redraw()
+	}
+	if next := pf.afterExecution; next != nil {
+		pf.afterExecution = nil
+		next()
 	}
 }
 
@@ -2354,9 +2363,6 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 				return true
 			}
-			isDirChange := false
-			targetPath := ""
-
 			if lowerCmd == "exit f4" {
 				pf.cmdLine.Clear()
 				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
@@ -2366,39 +2372,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				return true
 			}
 
-			// Intercept drive letter changes (e.g., "C:", "D:\") on Windows
-			if runtime.GOOS == "windows" && len(trimmedCmd) >= 2 && len(trimmedCmd) <= 3 && trimmedCmd[1] == ':' {
-				if lowerCmd[0] >= 'a' && lowerCmd[0] <= 'z' {
-					isDirChange = true
-					targetPath = trimmedCmd
-					if len(trimmedCmd) == 2 {
-						targetPath += string(os.PathSeparator)
-					}
-				}
-				// Intercept standard 'cd' commands
-			} else if strings.HasPrefix(lowerCmd, "cd ") || strings.HasPrefix(lowerCmd, "chdir ") || (runtime.GOOS == "windows" && strings.HasPrefix(lowerCmd, "cd /d ")) {
-				prefixLen := 3
-				if strings.HasPrefix(lowerCmd, "cd /d ") {
-					prefixLen = 6
-				} else if strings.HasPrefix(lowerCmd, "chdir ") {
-					prefixLen = 6
-				}
-				isDirChange = true
-				targetPath = strings.TrimSpace(trimmedCmd[prefixLen:])
-				// Remove quotes if user typed: cd "C:\My Folder" or cd '/tmp/a b'
-				if len(targetPath) >= 2 && targetPath[0] == '\'' && targetPath[len(targetPath)-1] == '\'' {
-					targetPath = targetPath[1 : len(targetPath)-1]
-					targetPath = strings.ReplaceAll(targetPath, "'\\''", "'")
-				} else if len(targetPath) >= 2 && targetPath[0] == '"' && targetPath[len(targetPath)-1] == '"' {
-					targetPath = targetPath[1 : len(targetPath)-1]
-				}
-			} else if lowerCmd == "cd.." || lowerCmd == "cd .." {
-				isDirChange = true
-				targetPath = ".."
-			} else if lowerCmd == "cd\\" || lowerCmd == "cd/" {
-				isDirChange = true
-				targetPath = string(os.PathSeparator)
-			} else if lowerCmd == "exit" {
+			// Intercept directory changes (cd, chdir, drive letters on
+			// Windows) so the panel follows them instead of the shell.
+			targetPath, isDirChange := parseDirChangeCommand(trimmedCmd)
+			if !isDirChange && lowerCmd == "exit" {
 				pf.cmdLine.Clear()
 				if pf.searchFirstMode() && !AppConfig.SearchCommandStayFocused {
 					pf.setCommandLineFocus(false)
@@ -5324,6 +5301,54 @@ func (pf *PanelsFrame) moveFolderHistory(fsp *FileSystemPanel, direction int) bo
 		step = 1
 	}
 	return pf.navigateAvailableFolderHistory(fsp, history, targetPos, step)
+}
+
+// parseDirChangeCommand recognizes the directory-change commands the command
+// line intercepts itself rather than handing to the shell: "cd <path>",
+// "chdir <path>", "cd /d <path>" (Windows), "cd..", "cd\\", "cd/" and bare
+// drive letters ("C:", "D:\\") on Windows. It returns the target path with
+// surrounding quotes removed. The user menu uses the same test so that a
+// "cd" line inside a multi-command menu item moves the panel exactly like a
+// "cd" typed on the command line.
+func parseDirChangeCommand(trimmedCmd string) (targetPath string, ok bool) {
+	lowerCmd := strings.ToLower(trimmedCmd)
+
+	// Drive letter changes (e.g., "C:", "D:\") on Windows
+	if runtime.GOOS == "windows" && len(trimmedCmd) >= 2 && len(trimmedCmd) <= 3 && trimmedCmd[1] == ':' {
+		if lowerCmd[0] >= 'a' && lowerCmd[0] <= 'z' {
+			targetPath = trimmedCmd
+			if len(trimmedCmd) == 2 {
+				targetPath += string(os.PathSeparator)
+			}
+			return targetPath, true
+		}
+		return "", false
+	}
+
+	if strings.HasPrefix(lowerCmd, "cd ") || strings.HasPrefix(lowerCmd, "chdir ") || (runtime.GOOS == "windows" && strings.HasPrefix(lowerCmd, "cd /d ")) {
+		prefixLen := 3
+		if strings.HasPrefix(lowerCmd, "cd /d ") {
+			prefixLen = 6
+		} else if strings.HasPrefix(lowerCmd, "chdir ") {
+			prefixLen = 6
+		}
+		targetPath = strings.TrimSpace(trimmedCmd[prefixLen:])
+		// Remove quotes if user typed: cd "C:\My Folder" or cd '/tmp/a b'
+		if len(targetPath) >= 2 && targetPath[0] == '\'' && targetPath[len(targetPath)-1] == '\'' {
+			targetPath = targetPath[1 : len(targetPath)-1]
+			targetPath = strings.ReplaceAll(targetPath, "'\\''", "'")
+		} else if len(targetPath) >= 2 && targetPath[0] == '"' && targetPath[len(targetPath)-1] == '"' {
+			targetPath = targetPath[1 : len(targetPath)-1]
+		}
+		return targetPath, true
+	}
+	if lowerCmd == "cd.." || lowerCmd == "cd .." {
+		return "..", true
+	}
+	if lowerCmd == "cd\\" || lowerCmd == "cd/" {
+		return string(os.PathSeparator), true
+	}
+	return "", false
 }
 
 func expandPathEnv(s string) string {

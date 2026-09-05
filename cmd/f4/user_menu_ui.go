@@ -1109,21 +1109,72 @@ func executeMenuCommandsWithResult(pf *PanelsFrame, commands []string) bool {
 		lines = []string{command}
 	}
 
-	// Join so multiple commands run sequentially in one shell.
-	// We lose the panel-follows-cd nicety that far2l gets from intercepting
-	// each cd in cmdline, but the user can still use a single "cd" command
-	// per menu item to get that effect.
-	separator := "; "
-	if runtime.GOOS == "windows" {
-		separator = " & "
-	}
-	joined := strings.Join(lines, separator)
-	pf.cmdLine.Edit.SetText(joined)
-	pf.ProcessKey(&vtinput.InputEvent{
-		Type: vtinput.KeyEventType, KeyDown: true,
-		VirtualKeyCode: vtinput.VK_RETURN,
-	})
+	// far2l feeds every line of a menu item through the command line one
+	// after another, so a "cd" line moves the panel and the lines after it
+	// run in the new directory (issue #893). f4 keeps that behaviour while
+	// still running the ordinary shell lines as one joined command: the
+	// item is split into steps at each directory change, and the steps are
+	// dispatched sequentially, each one waiting for the previous shell
+	// command to finish.
+	pf.runMenuCommandSteps(splitMenuCommandSteps(lines, menuCommandSeparator()))
 	return true
+}
+
+// menuCommandSeparator joins the shell lines of one step so that they run
+// sequentially in a single shell invocation.
+func menuCommandSeparator() string {
+	if runtime.GOOS == "windows" {
+		return " & "
+	}
+	return "; "
+}
+
+// splitMenuCommandSteps groups the expanded lines of a menu item into the
+// strings that will be typed on the command line. Consecutive shell lines
+// are joined with separator; a directory-change line (as recognized by the
+// command line itself) becomes a step of its own so that the panel follows
+// it and the remaining lines run in the new directory.
+func splitMenuCommandSteps(lines []string, separator string) []string {
+	var steps []string
+	var shell []string
+	flush := func() {
+		if len(shell) > 0 {
+			steps = append(steps, strings.Join(shell, separator))
+			shell = nil
+		}
+	}
+	for _, line := range lines {
+		if _, isDirChange := parseDirChangeCommand(strings.TrimSpace(line)); isDirChange {
+			flush()
+			steps = append(steps, line)
+			continue
+		}
+		shell = append(shell, line)
+	}
+	flush()
+	return steps
+}
+
+// runMenuCommandSteps types the steps on the command line one by one, as
+// if the user had entered them and pressed Enter. A step that starts a
+// command in the terminal leaves the rest of the chain pending until that
+// command reports completion (endExecution); a step that completes
+// synchronously, such as a panel directory change, continues at once.
+func (pf *PanelsFrame) runMenuCommandSteps(steps []string) {
+	for i, step := range steps {
+		if pf.cmdLine == nil {
+			return
+		}
+		pf.cmdLine.Edit.SetText(step)
+		pf.ProcessKey(&vtinput.InputEvent{
+			Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode: vtinput.VK_RETURN,
+		})
+		if rest := steps[i+1:]; len(rest) > 0 && pf.isPtyBusy() {
+			pf.afterExecution = func() { pf.runMenuCommandSteps(rest) }
+			return
+		}
+	}
 }
 
 func isMenuComment(line string) bool {

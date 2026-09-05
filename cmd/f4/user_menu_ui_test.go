@@ -481,3 +481,145 @@ func TestUserMenu_EditItemStripsBlankLines(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitMenuCommandSteps(t *testing.T) {
+	sep := "; "
+	cases := []struct {
+		name  string
+		lines []string
+		want  []string
+	}{
+		{"shell only", []string{"echo 1", "echo 2"}, []string{"echo 1; echo 2"}},
+		{"trailing cd", []string{"rm -rf _build", "mkdir -p _build", "cd _build/"}, []string{"rm -rf _build; mkdir -p _build", "cd _build/"}},
+		{"cd in the middle", []string{"mkdir -p out", "cd out", "touch a", "touch b"}, []string{"mkdir -p out", "cd out", "touch a; touch b"}},
+		{"leading cd", []string{"cd /tmp", "ls"}, []string{"cd /tmp", "ls"}},
+		{"cd dotdot", []string{"cd ..", "cd..", "chdir /tmp"}, []string{"cd ..", "cd..", "chdir /tmp"}},
+		{"cd only", []string{"cd /tmp"}, []string{"cd /tmp"}},
+		{"not a cd", []string{"cdparanoia -B", "echo cd x"}, []string{"cdparanoia -B; echo cd x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := splitMenuCommandSteps(tc.lines, sep)
+			if len(got) != len(tc.want) {
+				t.Fatalf("splitMenuCommandSteps(%q) = %q, want %q", tc.lines, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("splitMenuCommandSteps(%q) = %q, want %q", tc.lines, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// Issue #893: the last "cd" line of a multi-command menu item must move the
+// panel, and it must do so only after the shell lines before it finished.
+func TestUserMenu_TrailingCdFollowsPanelAfterShellCommands(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := setupMockPanelsFrame(t)
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pty := pf.pty.(*mockPty)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmpDir := t.TempDir()
+	if err := fsp.vfs.SetPath(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	pty.written = nil
+
+	executeMenuCommands(pf, []string{
+		"rm -rf _build",
+		"mkdir -p _build",
+		"cd _build/",
+	})
+
+	written := string(pty.written)
+	wantJoined := "rm -rf _build; mkdir -p _build"
+	if runtime.GOOS == "windows" {
+		wantJoined = "rm -rf _build & mkdir -p _build"
+	}
+	if !strings.Contains(written, wantJoined) {
+		t.Fatalf("shell lines before cd must be sent as one joined command %q, got: %q", wantJoined, written)
+	}
+	if strings.Contains(written, "cd _build/") {
+		t.Fatalf("the cd line must not be sent to the shell as part of the joined command: %q", written)
+	}
+	if !pf.executing {
+		t.Fatal("the joined shell command must be running before the cd step is applied")
+	}
+	if pf.afterExecution == nil {
+		t.Fatal("the cd step must be queued behind the running shell command")
+	}
+	if got := fsp.vfs.GetPath(); got != tmpDir {
+		t.Fatalf("panel must not move before the shell command completes; path = %q", got)
+	}
+
+	// The shell finishes and, by then, mkdir has created the directory.
+	buildDir := filepath.Join(tmpDir, "_build")
+	if err := os.Mkdir(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pf.endExecution()
+
+	if pf.afterExecution != nil {
+		t.Fatal("no step must remain queued after the chain finished")
+	}
+	if got := fsp.vfs.GetPath(); filepath.Clean(got) != filepath.Clean(buildDir) {
+		t.Fatalf("panel must follow the trailing cd; path = %q, want %q", got, buildDir)
+	}
+}
+
+// A "cd" in the middle of an item runs the lines after it in the new
+// directory, like far2l does when it feeds every line to the command line.
+func TestUserMenu_MiddleCdRunsRemainingCommandsInNewDir(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	SetDefaultF4Palette()
+
+	pf := setupMockPanelsFrame(t)
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pty := pf.pty.(*mockPty)
+
+	fsp := pf.panels[pf.activeIdx].(*FileSystemPanel)
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "sub")
+	if err := os.Mkdir(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsp.vfs.SetPath(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	pty.written = nil
+
+	executeMenuCommands(pf, []string{
+		"cd sub",
+		"echo one",
+		"echo two",
+	})
+
+	// The cd completes synchronously, so the shell lines follow at once,
+	// with the PTY synced to the new panel directory first.
+	if got := fsp.vfs.GetPath(); filepath.Clean(got) != filepath.Clean(subDir) {
+		t.Fatalf("panel must follow the leading cd; path = %q, want %q", got, subDir)
+	}
+	written := string(pty.written)
+	wantJoined := "echo one; echo two"
+	if runtime.GOOS == "windows" {
+		wantJoined = "echo one & echo two"
+	}
+	if !strings.Contains(written, wantJoined) {
+		t.Fatalf("shell lines after cd must be sent joined %q, got: %q", wantJoined, written)
+	}
+	if !strings.Contains(written, "sub") {
+		t.Fatalf("PTY must be moved to the new directory before the shell lines run, got: %q", written)
+	}
+	if syncIdx, cmdIdx := strings.Index(written, "sub"), strings.Index(written, wantJoined); syncIdx > cmdIdx {
+		t.Fatalf("directory sync must precede the shell command, got: %q", written)
+	}
+	if pf.afterExecution != nil {
+		t.Fatal("no step must remain queued after the last shell command was sent")
+	}
+}
