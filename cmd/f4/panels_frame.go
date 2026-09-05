@@ -987,6 +987,37 @@ var newLocalPTY = func() (PtyBackend, error) {
 // is deliberately explicit so a plain `exit` can clear all shell-local state
 // without asking the parent process that launched f4 to do anything.
 func (pf *PanelsFrame) resetLocalShell() bool {
+	return pf.restartLocalShell(false)
+}
+
+// localShellGone is what the read loop reports when the local shell's output
+// ends: the shell process has exited on its own. On Windows that is what
+// `exit` inside a batch file does -- cmd runs batch files in-process, so the
+// exit ends cmd itself, not just the batch (issue #409; `exit /b` ends only
+// the batch). Nothing can come back from that shell: no prompt to end the
+// command, no process for Ctrl+C or Ctrl+Break to reach. So the execution is
+// ended here, the panels come back, and a fresh shell is started with the
+// screen left as the old one left it, so the batch's output stays readable.
+//
+// Runs on the UI goroutine. A shell that was replaced deliberately
+// (resetLocalShell) or taken by shutdown is no longer the local PTY by the
+// time its read loop ends, and is left alone.
+func (pf *PanelsFrame) localShellGone(p PtyBackend) {
+	if !pf.isLocalPTY(p) {
+		return
+	}
+	vtui.DebugLog("PTY: local shell exited on its own; ending the command and starting a fresh shell")
+	if pf.executing {
+		pf.endExecution()
+	}
+	pf.restartLocalShell(true)
+}
+
+// restartLocalShell replaces the local shell. keepScreen leaves the terminal
+// contents in place (with the cursor moved to a fresh line) instead of
+// clearing them; a typed `exit` wants a clean screen, a shell that died under
+// a batch file wants the batch's output kept.
+func (pf *PanelsFrame) restartLocalShell(keepScreen bool) bool {
 	pf.processEnvironmentWriteMu.Lock()
 	pty := pf.localPTY()
 	if pty == nil {
@@ -1052,7 +1083,16 @@ func (pf *PanelsFrame) resetLocalShell() bool {
 	if pf.termView != nil {
 		pf.termView.SetMuted(false)
 		pf.termView.pty = nil
-		pf.termView.ResetBuffer(pf.termView.Width, pf.termView.Height)
+		if keepScreen {
+			if pf.termView.UseAltScreen {
+				pf.termView.ResetBuffer(pf.termView.Width, pf.termView.Height)
+			} else if pf.termView.CursorX != 0 {
+				parser := NewAnsiParser(pf.termView, nil)
+				parser.Process([]byte("\r\n"))
+			}
+		} else {
+			pf.termView.ResetBuffer(pf.termView.Width, pf.termView.Height)
+		}
 	}
 	pf.parser = NewAnsiParser(pf.termView, nil)
 	pf.parser.replyTo = pf.activeReplyPTY
@@ -1137,12 +1177,8 @@ func (pf *PanelsFrame) initPTY() {
 			if err != nil {
 				vtui.DebugLog("PTY: Local read loop exited: %v", err)
 				// A shell that is gone cannot print the prompt that would
-				// end the command; do not leave the panels hidden for it.
-				uiFrames.PostTask(func() {
-					if pf.executing && pf.isLocalPTY(p) {
-						pf.endExecution()
-					}
-				})
+				// end the command, and cannot take another one either.
+				uiFrames.PostTask(func() { pf.localShellGone(p) })
 				return
 			}
 			pf.consumeLocalOutput(p, buf[:n])

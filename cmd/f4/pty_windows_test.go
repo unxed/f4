@@ -25,49 +25,69 @@ func TestConPTYAvailable_DoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
+// startLocalConPTY brings up a PanelsFrame on a real ConPTY and waits until
+// cmd.exe has printed its first prompt. Starting a command before that races
+// the prompt-driven completion guard: the startup prompt may be delivered
+// after the command has armed ignoreNextPrompt. That ordering is covered by
+// the state-machine tests; the integration tests here focus on completion.
+func startLocalConPTY(t *testing.T) *PanelsFrame {
+	t.Helper()
 	if !conPTYAvailable() {
 		t.Skip("ConPTY unavailable")
 	}
 
 	oldSpawn := spawnLocalShellPTY
 	oldConfig := AppConfig
-	defer func() {
+	t.Cleanup(func() {
 		spawnLocalShellPTY = oldSpawn
 		AppConfig = oldConfig
-	}()
+	})
 	spawnLocalShellPTY = true
 	AppConfig.ConsoleMode = "own"
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
-	defer pf.Close()
+	t.Cleanup(pf.Close)
 	pf.ResizeConsole(80, 25)
+	waitForLocalConPTYPrompt(t, pf, nil)
+	return pf
+}
 
+// waitForLocalConPTYPrompt waits until a local shell other than previous is
+// published and has printed its first prompt.
+func waitForLocalConPTYPrompt(t *testing.T, pf *PanelsFrame, previous PtyBackend) {
+	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for pf.getActivePTY() == nil {
+	for pf.getActivePTY() == nil || pf.getActivePTY() == previous {
+		drainFrameTasks()
 		if time.Now().After(deadline) {
 			t.Fatal("local ConPTY did not start")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	// Publishing the PTY is not the same as having received cmd.exe's first
-	// prompt. Starting the command in between those events races the prompt
-	// driven completion guard: the startup prompt may be delivered after the
-	// command has armed ignoreNextPrompt. That ordering is covered by the
-	// state-machine tests; this integration test focuses on batch completion.
 	promptDeadline := time.Now().Add(5 * time.Second)
 	for !pf.shellPromptReady {
-		select {
-		case task := <-vtui.FrameManager.TaskChan:
-			task()
-		default:
-		}
+		drainFrameTasks()
 		if time.Now().After(promptDeadline) {
 			t.Fatal("local ConPTY startup prompt did not arrive")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func drainFrameTasks() {
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		default:
+			return
+		}
+	}
+}
+
+func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
+	pf := startLocalConPTY(t)
 
 	dir := t.TempDir()
 	finished := filepath.Join(dir, "finished.marker")
@@ -83,18 +103,8 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 
 	actionExecute(pf, vfs.NewOSVFS(dir), dir, filepath.Base(script), script)
 	start := time.Now()
-	drainTasks := func() {
-		for {
-			select {
-			case task := <-vtui.FrameManager.TaskChan:
-				task()
-			default:
-				return
-			}
-		}
-	}
 	for pf.showPanels {
-		drainTasks()
+		drainFrameTasks()
 		if time.Since(start) > 5*time.Second {
 			t.Fatal("actionExecute did not hide panels")
 		}
@@ -103,7 +113,7 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 	panelsReturned := time.Duration(0)
 	completionDeadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(completionDeadline) {
-		drainTasks()
+		drainFrameTasks()
 		if pf.showPanels {
 			panelsReturned = time.Since(start)
 			break
@@ -120,4 +130,56 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 		t.Fatalf("panels returned after %v before batch finished: %v", panelsReturned, err)
 	}
 	t.Logf("panels returned after batch completion in %v", panelsReturned)
+}
+
+// `exit` inside a batch file ends cmd.exe itself (only `exit /b` ends just
+// the batch), and ConPTY keeps its output pipe open after the client is gone
+// until the pseudoconsole is closed. f4 used to sit on that pipe forever: no
+// prompt could arrive, the panels stayed hidden, Ctrl+C and Ctrl+Break had
+// no process to reach (#409). The shell's exit must now end the command,
+// bring the panels back and start a fresh shell that reaches its prompt.
+func TestActionExecuteBatchExitRestartsShell(t *testing.T) {
+	pf := startLocalConPTY(t)
+	oldPTY := pf.getActivePTY()
+
+	dir := t.TempDir()
+	after := filepath.Join(dir, "after.marker")
+	script := filepath.Join(dir, "f4-batch-exit.cmd")
+	content := "echo started>started.marker\r\nexit\r\necho after>after.marker\r\n"
+	if err := os.WriteFile(script, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	actionExecute(pf, vfs.NewOSVFS(dir), dir, filepath.Base(script), script)
+	start := time.Now()
+	for pf.showPanels {
+		drainFrameTasks()
+		if time.Since(start) > 5*time.Second {
+			t.Fatal("actionExecute did not hide panels")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for !pf.showPanels {
+		drainFrameTasks()
+		if time.Now().After(deadline) {
+			t.Fatalf("panels did not return after the batch exited the shell (executing=%v)", pf.executing)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if pf.executing {
+		t.Fatal("execution still marked running after the shell exited")
+	}
+	if _, err := os.Stat(after); err == nil {
+		t.Fatal("the line after exit ran: exit did not end the shell, the test proves nothing")
+	}
+
+	waitForLocalConPTYPrompt(t, pf, oldPTY)
+	if pf.getActivePTY() == oldPTY {
+		t.Fatal("the dead shell was not replaced")
+	}
+	if pf.isPtyBusy() {
+		t.Fatal("the fresh shell reports busy at its prompt")
+	}
+	t.Logf("panels returned and the shell was replaced in %v", time.Since(start))
 }

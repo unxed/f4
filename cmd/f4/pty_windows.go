@@ -50,6 +50,10 @@ type PTY struct {
 	lastBusyCheck time.Time
 	lastBusyState bool
 
+	// consoleClosed records that ClosePseudoConsole has run, whether from
+	// Close or from the exit watcher, so the two never close it twice.
+	consoleClosed bool
+
 	Cmd *exec.Cmd //for interface compatability with Pty_unix, DO NOT USE
 }
 
@@ -119,6 +123,9 @@ func (p *PTY) SetSize(cols, rows int) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.consoleClosed {
+		return
+	}
 	windows.ResizePseudoConsole(p.console, windows.Coord{X: int16(cols), Y: int16(rows)})
 }
 
@@ -158,7 +165,52 @@ func (p *PTY) Run(name string, args ...string) error {
 	}
 
 	p.process = pi
+	p.watchExit(pi.Process)
 	return nil
+}
+
+// watchExit closes the pseudoconsole once the shell process is gone, so that
+// Read returns EOF the way a Unix pty master does when its shell exits.
+//
+// ConPTY does not do this by itself: conhost keeps the output pipe open after
+// the client process has exited, until ClosePseudoConsole is called. Without
+// the watcher, `exit` inside a batch file (which ends cmd.exe itself, unlike
+// `exit /b`) left f4 reading a pipe that would never deliver another byte:
+// no prompt could arrive, the panels stayed hidden behind a shell that no
+// longer existed, and neither Ctrl+C nor Ctrl+Break had anyone to reach
+// (issue #409).
+//
+// The watcher waits on its own duplicate of the process handle, so Close
+// releasing the original cannot pull the handle out from under the wait.
+func (p *PTY) watchExit(process windows.Handle) {
+	var dup windows.Handle
+	self := windows.CurrentProcess()
+	if err := windows.DuplicateHandle(self, process, self, &dup, 0, false, windows.DUPLICATE_SAME_ACCESS); err != nil {
+		vtui.DebugLog("PTY_WIN: cannot watch the shell process for exit: %v", err)
+		return
+	}
+	go func() {
+		defer windows.CloseHandle(dup)
+		if _, err := windows.WaitForSingleObject(dup, windows.INFINITE); err != nil {
+			vtui.DebugLog("PTY_WIN: waiting for the shell process failed: %v", err)
+			return
+		}
+		vtui.DebugLog("PTY_WIN: shell process exited, closing the pseudoconsole")
+		p.closeConsole()
+	}()
+}
+
+// closeConsole runs ClosePseudoConsole once. The read loop must keep
+// draining the output pipe meanwhile: ClosePseudoConsole flushes conhost's
+// remaining output and does not return until it has been read.
+func (p *PTY) closeConsole() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.consoleClosed {
+		return
+	}
+	p.consoleClosed = true
+	windows.ClosePseudoConsole(p.console)
 }
 
 func (p *PTY) Close() error {
@@ -170,7 +222,10 @@ func (p *PTY) Close() error {
 		windows.CloseHandle(p.process.Thread)
 		p.process = nil
 	}
-	windows.ClosePseudoConsole(p.console)
+	if !p.consoleClosed {
+		p.consoleClosed = true
+		windows.ClosePseudoConsole(p.console)
+	}
 	p.inWriter.Close()
 	p.outReader.Close()
 	return nil

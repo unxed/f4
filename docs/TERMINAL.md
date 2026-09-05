@@ -226,6 +226,8 @@ Do not attempt to "optimize" or change the following behaviors without consultin
     When a shell starts, it often issues a `clear` command (`\e[2J`), causing the terminal to scroll. If the log is empty, **do not** extrude empty lines into the `PieceTable`. This prevents the log from starting with 23 blank lines.
 *   **Rule 4: Ignore 0x0 Resizes.** 
     If the window is minimized, Windows may send a resize event for `0x0`. Passing this to ConPTY will crash it or corrupt its internal state.
+*   **Rule 5: The Shell's Exit Is Not an EOF.**
+    ConPTY keeps the output pipe open after the client process has exited; it only closes when `ClosePseudoConsole` is called. A read loop that waits for EOF to learn that the shell is gone waits forever. `f4` therefore waits on the shell's process handle (`PTY.watchExit`) and closes the pseudoconsole itself when the process ends, while the read loop keeps draining the pipe (`ClosePseudoConsole` flushes the last output and does not return until it is read). The case that found this: `exit` inside a batch file ends `cmd.exe` itself (only `exit /b` ends just the batch), and until the watcher existed `f4` sat behind a dead shell with the panels hidden and nothing for Ctrl+C or Ctrl+Break to reach (#409). When the read loop does end, `PanelsFrame.localShellGone` ends the command, brings the panels back and starts a fresh shell, keeping what the old one left on screen.
 
 ## 6. Inspiring Features for Future Implementation
 
