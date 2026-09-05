@@ -149,6 +149,9 @@ type EditorView struct {
 	// utf8BOM records that the source file had a UTF-8 BOM. The marker is
 	// hidden from the logical editor buffer but is preserved when saving.
 	utf8BOM bool
+	// omitUnicodeBOM is the Save As dialog's BOM checkbox turned off for a
+	// UTF-16/UTF-32 codepage, whose encoders otherwise always write one.
+	omitUnicodeBOM bool
 
 	// Autocomplete state
 	acEnabled    bool
@@ -4700,6 +4703,16 @@ func editorTempSibling(filesystem vfs.VFS, filePath string) (string, error) {
 }
 
 func (ev *EditorView) SaveToFile(afterSave func()) {
+	ev.saveToFile(afterSave, false)
+}
+
+// saveToFile writes the buffer to ev.filePath. fullWrite disables the
+// in-place and delta paths that describe the edit as pieces of the file on
+// disk: after Save As (#899) the pieces still point into the file that was
+// opened, while ev.filePath is a different file, or the same file that is
+// about to change codepage or BOM. Sending such pieces to the destination
+// would assemble it from the wrong bytes.
+func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 	if ev.filePath == "" || ev.vfs == nil || ev.saving {
 		return
 	}
@@ -4773,7 +4786,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		// disk, which is only true for a raw UTF-8 load.
 		saved := false
 		if err == nil {
-			if patcher, ok := ev.vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !ev.utf8BOM && !createNewTarget {
+			if patcher, ok := ev.vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !ev.utf8BOM && !createNewTarget && !fullWrite {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
 					perr := patcher.PatchInPlace(ctx.Context, ev.filePath, pieces)
 					if perr == nil {
@@ -4794,7 +4807,7 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 		}
 
 		if !saved && err == nil {
-			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 && !ev.utf8BOM {
+			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 && !ev.utf8BOM && !fullWrite {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
 					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), ev.filePath, tempPath, pieces)
 					if perr == nil {
@@ -4884,6 +4897,9 @@ func (ev *EditorView) SaveToFile(afterSave func()) {
 				if errEnc != nil {
 					saveErr = errEnc
 				} else {
+					if ev.omitUnicodeBOM {
+						encoded = stripEncodedBOM(encoded, ev.Codepage)
+					}
 					_, saveErr = f.Write(encoded)
 				}
 			}

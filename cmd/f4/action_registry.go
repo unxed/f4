@@ -2010,6 +2010,17 @@ func init() {
 		Handler:     withEditor(func(ev *EditorView) { ev.SaveToFile(nil) }),
 	})
 	RegisterAction(Action{
+		Name:        "Editor.SaveAs",
+		Area:        "Editor",
+		Label:       "Save as...",
+		LabelKey:    "Action.Editor.SaveAs",
+		Description: "Write the text under another name, codepage or line breaks",
+		DescKey:     "Action.Editor.SaveAs.Desc",
+		DefaultKeys: []string{"ShiftF2"},
+		MenuPath:    "File",
+		Handler:     withEditor(func(ev *EditorView) { ev.showSaveAsDialog() }),
+	})
+	RegisterAction(Action{
 		Name:        "Editor.SwitchToViewer",
 		Area:        "Editor",
 		Label:       "Switch to Viewer",

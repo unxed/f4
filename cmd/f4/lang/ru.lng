@@ -150,6 +150,8 @@ Action.Debug.ScreenDump=&Дамп экрана
 Action.Debug.ScreenDump.Desc=Записать текущий экранный буфер в vtui.screen.log
 Action.Editor.Save=&Сохранить
 Action.Editor.Save.Desc=Сохранить файл
+Action.Editor.SaveAs=Сохранить &как...
+Action.Editor.SaveAs.Desc=Сохранить файл под другим именем, в другой кодировке или с другими переводами строк
 Action.Editor.SwitchToViewer=Перейти в &просмотр
 Action.Editor.SwitchToViewer.Desc=Переключиться в режим просмотра
 Action.Editor.Quit=В&ыход
@@ -1306,6 +1308,19 @@ Replace.Replaced=Заменено вхождений: %d
 
 Codepage.Title= Кодировки
 Codepage.ConvertTitle= Конвертировать кодировку
+
+SaveAs.Title= Сохранить файл как 
+SaveAs.Path=Сохранить &файл как:
+SaveAs.Codepage=&Кодировка:
+SaveAs.BOM=Добавить &сигнатуру (BOM)
+SaveAs.LineBreaks=Переводы строк:
+SaveAs.EOLKeep=Не изменять
+SaveAs.EOLDos=Dos/Windows (CR LF)
+SaveAs.EOLUnix=Unix (LF)
+SaveAs.EOLMac=Mac (CR)
+SaveAs.BtnSave=&Сохранить
+SaveAs.EmptyPath=Введите имя файла.
+SaveAs.OverwriteQuestion=Файл уже существует:\n%s\nПерезаписать его?
 
 Hotkeys.Title= Конфигурация горячих клавиш
 Hotkeys.BtnAssign=&Назначить

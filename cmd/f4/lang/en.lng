@@ -150,6 +150,8 @@ Action.Debug.ScreenDump=&Dump screen
 Action.Debug.ScreenDump.Desc=Write the current screen buffer to vtui.screen.log
 Action.Editor.Save=&Save
 Action.Editor.Save.Desc=Save file
+Action.Editor.SaveAs=Save &as...
+Action.Editor.SaveAs.Desc=Write the text under another name, codepage or line breaks
 Action.Editor.SwitchToViewer=&View
 Action.Editor.SwitchToViewer.Desc=Switch to viewer mode
 Action.Editor.Quit=E&xit
@@ -1333,6 +1335,19 @@ Replace.Replaced=%d occurrence(s) replaced
 
 Codepage.Title= Code pages
 Codepage.ConvertTitle= Convert Codepage
+
+SaveAs.Title= Save file as 
+SaveAs.Path=Save &file as:
+SaveAs.Codepage=Co&depage:
+SaveAs.BOM=Add &signature (BOM)
+SaveAs.LineBreaks=Line breaks:
+SaveAs.EOLKeep=Do not change
+SaveAs.EOLDos=Dos/Windows (CR LF)
+SaveAs.EOLUnix=Unix (LF)
+SaveAs.EOLMac=Mac (CR)
+SaveAs.BtnSave=&Save
+SaveAs.EmptyPath=Enter a file name.
+SaveAs.OverwriteQuestion=The file already exists:\n%s\nOverwrite it?
 
 Hotkeys.Title= Hotkey Configurator
 Hotkeys.BtnAssign=&Assign
