@@ -627,7 +627,11 @@ jobs:
         Homepage: https://github.com/unxed/f4
         Description: efficient and cozy two-panel file manager
         EOF
-        dpkg-deb --build --root-owner-group "$DEB" "$ASSET.deb"
+        # -Zxz: apt in Termux reads only control.tar{.zst,.lz4,.xz,.lzma,} and
+        # rejects the zstd member dpkg-deb writes by default with "Could not
+        # read meta data", which leaves `pkg install ./file.deb` broken. Only
+        # `dpkg -i` takes the default.
+        dpkg-deb -Zxz --build --root-owner-group "$DEB" "$ASSET.deb"
         dpkg-deb --info "$ASSET.deb"
         dpkg-deb --contents "$ASSET.deb"
 
