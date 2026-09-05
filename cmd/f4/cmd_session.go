@@ -55,6 +55,7 @@ type cmdShellSession struct {
 	promptSeq uint64
 	sentSeq   uint64
 	pending   bool // a typed line (command or directory sync) has no prompt yet
+	inBatch   bool // a .bat/.cmd file is being executed: nested cmd is not the shell
 	observed  promptSnapshot
 	timer     *time.Timer
 	attempts  int
@@ -106,11 +107,10 @@ type childInspector interface {
 // nestedShellImages are children that print a cmd-style prompt and accept
 // the lines f4 types (cd /d "..." & command). Their prompt ends the outer
 // command's wait, and the panels come back with the nested shell as the shell.
-// PowerShell is deliberately absent: it rejects `cd /d`, so it must keep the
-// terminal in raw mode until the user leaves it, like ssh or python.
-var nestedShellImages = map[string]bool{
-	"cmd.exe": true,
-}
+// cmd.exe is deliberately absent: it keeps the terminal in raw mode until
+// the user leaves it (exit), like ssh or python. PowerShell is also absent
+// for the same reason.
+var nestedShellImages = map[string]bool{}
 
 // childHoldsTerminal reports whether one of the shell's children is a console
 // program f4 has to wait for.
@@ -157,6 +157,18 @@ func (s *cmdShellSession) noteSent() {
 	}
 	s.mu.Unlock()
 	s.pf.noteLocalShellBusy(true)
+}
+
+// noteBatchExecution marks the current command as a .bat/.cmd file execution.
+// In batch mode a nested cmd.exe child is not treated as "the shell now"
+// because the batch file will continue after it exits.
+func (s *cmdShellSession) noteBatchExecution() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.inBatch = true
+	s.mu.Unlock()
 }
 
 // idle reports whether every typed line has been answered by a settled
@@ -228,6 +240,7 @@ func (s *cmdShellSession) settle(seq uint64) {
 			return
 		}
 		previous, sentSeq, pending := s.observed, s.sentSeq, s.pending
+		inBatch := s.inBatch
 		s.mu.Unlock()
 
 		pf := s.pf
@@ -276,7 +289,20 @@ func (s *cmdShellSession) settle(seq uint64) {
 		}
 
 		if inspector, ok := pf.localPTY().(childInspector); ok {
-			if children := inspector.ChildProcesses(); childHoldsTerminal(children) {
+			children := inspector.ChildProcesses()
+			held := childHoldsTerminal(children)
+			if !held && inBatch {
+				// In batch mode a nested cmd.exe child is not "the
+				// shell now": the batch file will continue after it
+				// exits, so the terminal is still held.
+				for _, c := range children {
+					if !c.GUI && strings.ToLower(c.Name) == "cmd.exe" {
+						held = true
+						break
+					}
+				}
+			}
+			if held {
 				vtui.DebugLog("CMD_SESSION: prompt %d held by child %v, rechecking", seq, children)
 				s.mu.Lock()
 				if !s.closed && seq == s.promptSeq {
@@ -334,6 +360,7 @@ func (s *cmdShellSession) release() {
 	pf := s.pf
 	s.mu.Lock()
 	s.pending = false
+	s.inBatch = false
 	s.mu.Unlock()
 	pf.shellPromptReady = true
 	pf.ignoreNextPrompt = false

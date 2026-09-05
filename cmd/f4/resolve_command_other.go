@@ -6,3 +6,8 @@ package main
 func resolveWindowsCommand(cmd string) string {
 	return cmd
 }
+
+// isBatchCommand is always false on non-Windows platforms.
+func isBatchCommand(cmd string) bool {
+	return false
+}

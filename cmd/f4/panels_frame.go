@@ -2605,6 +2605,9 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				pf.workspaceCommandTitle = workspaceCommandName(trimmedCmd)
 				pf.writePTY(activePty, []byte(fullWireCmd))
 				if isWindowsShell && integration == nil {
+					if isBatchCommand(cmd) {
+						pf.cmdSession.noteBatchExecution()
+					}
 					pf.noteLocalShellLineSent(activePty)
 				}
 			}
