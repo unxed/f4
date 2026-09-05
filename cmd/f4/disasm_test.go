@@ -115,6 +115,7 @@ func TestDisasmModeIsBoundToShiftF4InBothAreas(t *testing.T) {
 // the instruction length of the mode in effect, not of the one the file
 // opened in.
 func TestEditorView_DisasmMode_CycleRedecodesUnderTheCursor(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pt := piecetable.New(bytes.Repeat(movRaxRcx, 8))
@@ -164,6 +165,7 @@ func TestEditorView_DisasmMode_CycleRedecodesUnderTheCursor(t *testing.T) {
 // fifteen bytes regardless, so Down did nothing on the last instructions of
 // a file.
 func TestEditorView_DecodeStepSeesTheLastBytes(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	ev := NewEditorView(piecetable.New(bytes.Repeat(movRaxRcx, 2)), nil, "")
 	defer ev.Close()
@@ -183,6 +185,7 @@ func TestEditorView_DecodeStepSeesTheLastBytes(t *testing.T) {
 // decode as 64-bit whatever the view was set to, so after a switch the page
 // step and the lines on screen disagreed about where instructions start.
 func TestViewerView_DisasmMode_PageDownWalksTheSelectedMode(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
 	tmpDir := t.TempDir()
