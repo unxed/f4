@@ -30,6 +30,11 @@ func TestConPTYAvailable_DoesNotPanic(t *testing.T) {
 // the prompt-driven completion guard: the startup prompt may be delivered
 // after the command has armed ignoreNextPrompt. That ordering is covered by
 // the state-machine tests; the integration tests here focus on completion.
+//
+// The caller closes the frame with `defer pf.Close()`, not t.Cleanup: the
+// shell is `cd`ed into t.TempDir() by the test, and cleanups run in reverse
+// order, so a Close registered before TempDir would run after the RemoveAll
+// and leave cmd.exe holding the directory it is asked to delete.
 func startLocalConPTY(t *testing.T) *PanelsFrame {
 	t.Helper()
 	if !conPTYAvailable() {
@@ -47,7 +52,6 @@ func startLocalConPTY(t *testing.T) *PanelsFrame {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 
 	pf := NewPanelsFrame()
-	t.Cleanup(pf.Close)
 	pf.ResizeConsole(80, 25)
 	waitForLocalConPTYPrompt(t, pf, nil)
 	return pf
@@ -88,6 +92,7 @@ func drainFrameTasks() {
 
 func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 	pf := startLocalConPTY(t)
+	defer pf.Close()
 
 	dir := t.TempDir()
 	finished := filepath.Join(dir, "finished.marker")
@@ -140,6 +145,7 @@ func TestActionExecuteBatchDoesNotReturnPanelsEarly(t *testing.T) {
 // bring the panels back and start a fresh shell that reaches its prompt.
 func TestActionExecuteBatchExitRestartsShell(t *testing.T) {
 	pf := startLocalConPTY(t)
+	defer pf.Close()
 	oldPTY := pf.getActivePTY()
 
 	dir := t.TempDir()

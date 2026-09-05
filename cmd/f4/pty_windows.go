@@ -218,6 +218,10 @@ func (p *PTY) Close() error {
 	defer p.mu.Unlock()
 	if p.process != nil {
 		windows.TerminateProcess(p.process.Process, 0)
+		// TerminateProcess only asks; the process is gone a little later.
+		// Wait for it (bounded), so that whatever it held -- its working
+		// directory above all -- is released by the time Close returns.
+		windows.WaitForSingleObject(p.process.Process, 2000)
 		windows.CloseHandle(p.process.Process)
 		windows.CloseHandle(p.process.Thread)
 		p.process = nil
