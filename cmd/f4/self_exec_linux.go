@@ -59,6 +59,11 @@ var errExecutableUnknown = errors.New(
 // carry on without knowing (portable-config detection, say) already fall back
 // to os.Args[0]; callers that cannot must refuse.
 func f4Executable() (string, error) {
+	// On Android f4 comes up through the system loader, so /proc/self/exe names
+	// linker64 and os.Executable would point callers at /system/bin.
+	if p, ok := systemLinkerExecutable(); ok {
+		return p, nil
+	}
 	if os.Getenv(goffiUniversalGuard) == "" {
 		return os.Executable()
 	}
