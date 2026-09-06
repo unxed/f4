@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/piecetable"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -19,7 +20,8 @@ func TestParseGotoOffset(t *testing.T) {
 		{name: "0x prefix", text: "0xff", want: 255},
 		{name: "dollar prefix", text: "$ff", want: 255},
 		{name: "h suffix", text: "ffh", want: 255},
-		{name: "decimal suffix overrides checkbox", text: "255d", hex: true, want: 255},
+		{name: "decimal suffix in decimal mode", text: "255d", want: 255},
+		{name: "hexadecimal value ending in d", text: "dead", hex: true, want: 0xdead},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -32,6 +34,51 @@ func TestParseGotoOffset(t *testing.T) {
 		if _, err := parseGotoOffset(text, false); err == nil {
 			t.Errorf("parseGotoOffset(%q) accepted invalid input", text)
 		}
+	}
+}
+
+func TestGotoOffsetDialogCheckboxSelectsHexadecimalInput(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	anchor := vtui.NewWindow(0, 0, 80, 24, "anchor")
+	vtui.FrameManager.Push(anchor)
+
+	var got int64 = -1
+	dlg := showGotoOffsetDialog(anchor, "Go to offset", "Byte offset:", 0, func(offset int64) {
+		got = offset
+	})
+	var edit *vtui.Edit
+	var hex *vtui.Checkbox
+	var ok *vtui.Button
+	for _, item := range dlg.GetChildren() {
+		switch item := item.(type) {
+		case *vtui.Edit:
+			edit = item
+		case *vtui.Checkbox:
+			hex = item
+		case *vtui.Button:
+			if ok == nil {
+				ok = item
+			}
+		}
+	}
+	if edit == nil || hex == nil || ok == nil {
+		t.Fatalf("goto dialog controls = edit %v, hex %v, ok %v", edit != nil, hex != nil, ok != nil)
+	}
+	edit.SetText("dead")
+	dlg.SetFocusedItem(hex)
+	if !dlg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_SPACE}) {
+		t.Fatal("space did not toggle hexadecimal checkbox")
+	}
+	if hex.State != 1 {
+		t.Fatalf("hexadecimal checkbox state = %d, want checked", hex.State)
+	}
+	dlg.SetFocusedItem(ok)
+	if !dlg.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN}) {
+		t.Fatal("enter did not activate OK")
+	}
+	if got != 0xdead {
+		t.Fatalf("dialog parsed hexadecimal input as %d, want %d", got, 0xdead)
 	}
 }
 

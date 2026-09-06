@@ -10,8 +10,9 @@ import (
 
 // parseGotoOffset parses the byte position entered in a viewer/editor jump
 // dialog. The checkbox selects the default base, while an explicit Far-style
-// prefix or suffix always wins: 0xNN, $NN and NNh are hexadecimal, and NNd is
-// decimal.
+// hexadecimal prefix or suffix wins: 0xNN, $NN and NNh are hexadecimal. A
+// trailing d is only accepted as a decimal suffix in decimal mode, because d
+// is a valid hexadecimal digit and must remain usable in hexadecimal mode.
 func parseGotoOffset(text string, hexadecimal bool) (int64, error) {
 	s := strings.TrimSpace(text)
 	if s == "" {
@@ -19,6 +20,9 @@ func parseGotoOffset(text string, hexadecimal bool) (int64, error) {
 	}
 
 	base := 10
+	if hexadecimal {
+		base = 16
+	}
 	lower := strings.ToLower(s)
 	switch {
 	case strings.HasPrefix(lower, "0x"):
@@ -30,13 +34,9 @@ func parseGotoOffset(text string, hexadecimal bool) (int64, error) {
 	case strings.HasSuffix(lower, "h"):
 		base = 16
 		s = s[:len(s)-1]
-	case strings.HasSuffix(lower, "d"):
+	case !hexadecimal && strings.HasSuffix(lower, "d"):
 		base = 10
 		s = s[:len(s)-1]
-	default:
-		if hexadecimal {
-			base = 16
-		}
 	}
 	if s == "" {
 		return 0, fmt.Errorf("invalid offset %q", text)
