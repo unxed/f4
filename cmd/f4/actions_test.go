@@ -1513,6 +1513,12 @@ func TestSession_DiskPersistence(t *testing.T) {
 	getSessionIniPath = func() string { return filepath.Join(tmpDir, "session.ini") }
 	t.Cleanup(func() { getSessionIniPath = origPathFunc })
 
+	// The test stands in for a process with a UI: the Last* state below is set
+	// by hand, so SaveSession must write it.
+	oldSessionLoaded := sessionLoaded
+	sessionLoaded = true
+	t.Cleanup(func() { sessionLoaded = oldSessionLoaded })
+
 	LastEditorSearch = "disk-test"
 	LastFindFileMask = "*.log"
 	LastLeftPath = "/path/a"
