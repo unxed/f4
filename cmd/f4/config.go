@@ -1242,6 +1242,32 @@ func createDefaultHighlightIni(path string) {
 # by the active Color Style, so you don't need to duplicate them unless
 # you specifically want to override the theme's colors.
 #
+# A [Highlight_N] section matches a file by its Name/Mask, attributes, size,
+# or date. The four color keys are selected independently:
+#   NormalColor          - an ordinary, unselected item
+#   SelectedColor        - a selected item
+#   CursorColor          - an ordinary item under the cursor
+#   SelectedCursorColor  - a selected item under the cursor
+# The cursor-specific keys may also be written as
+# NormalColorUnderCursor and SelectedColorUnderCursor. If a specialized
+# color is omitted, f4 falls back to the corresponding ordinary color.
+# Colors use foreground/background expressions, for example:
+#   foreground:#FF00FF | background:#008080
+# Other useful keys are IncludeAttributes/ExcludeAttributes (Directory,
+# Hidden, Executable, ReadOnly, System, Archive, Symlink), SizeAbove,
+# SizeBelow, DateType, DateAfter, DateBefore, Mark, and ContinueProcessing.
+#
+# Uncomment and adapt this complete example to add a custom rule. The section
+# is commented out deliberately, so the example does not change the panel.
+# [Highlight_100]
+# Name = Archives
+# Mask = *.zip, *.rar, *.7z
+# ExcludeAttributes = Directory
+# NormalColor = foreground:#FF00FF
+# SelectedColor = foreground:#FF00FF | background:#008080
+# CursorColor = foreground:#FFFFFF | background:#008080
+# SelectedCursorColor = foreground:#FFFFFF | background:#0000A0
+#
 # [SortGroup_N] sections below define sort groups. They accept the same
 # matching keys as a highlight rule (Mask, IncludeAttributes,
 # ExcludeAttributes, SizeAbove/SizeBelow, DateAfter/DateBefore) and are

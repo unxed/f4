@@ -32,6 +32,23 @@ func TestHighlightRule_Match(t *testing.T) {
 	}
 }
 
+func TestHighlightRule_CursorColorAliases(t *testing.T) {
+	ini := ParseIni(strings.NewReader(`[Highlight_0]
+NormalColorUnderCursor = foreground:#112233
+SelectedColorUnderCursor = background:#445566
+`))
+	rules := parseHighlightRules(ini)
+	if len(rules) != 1 {
+		t.Fatalf("parseHighlightRules returned %d rules, want 1", len(rules))
+	}
+	if rules[0].CursorStr != "foreground:#112233" {
+		t.Errorf("CursorStr = %q, want alias value", rules[0].CursorStr)
+	}
+	if rules[0].SelectedCursorStr != "background:#445566" {
+		t.Errorf("SelectedCursorStr = %q, want alias value", rules[0].SelectedCursorStr)
+	}
+}
+
 func TestHighlightRule_MatchAttributes(t *testing.T) {
 	ruleDir := HighlightRule{
 		AttrSet: AttrDirectory,

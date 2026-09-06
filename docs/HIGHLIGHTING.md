@@ -36,8 +36,13 @@ The file is parsed as a standard INI file. Rules are defined in sections startin
 | `ContinueProcessing`| Boolean | If `1`, matching continues to subsequent rules, merging colors. |
 | `NormalColor` | String | Color expression for unmodified files. |
 | `SelectedColor` | String | Color expression for selected files. |
-| `CursorColor` | String | Color expression for files currently under the cursor. |
-| `SelectedCursorColor` | String| Color expression for selected files under the cursor. |
+| `CursorColor` (or `NormalColorUnderCursor`) | String | Color expression for unselected files currently under the cursor. |
+| `SelectedCursorColor` (or `SelectedColorUnderCursor`) | String| Color expression for selected files under the cursor. |
+
+The cursor-specific keys are optional. If one is omitted, the corresponding
+ordinary color (`NormalColor` or `SelectedColor`) is used. This makes it
+possible to keep the cursor visible on selected files without changing the
+normal selected-file color.
 
 ---
 

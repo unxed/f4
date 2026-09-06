@@ -485,6 +485,30 @@ func TestConfig_PanelFileInfoDefaultsHiddenWhenKeyIsAbsent(t *testing.T) {
 	}
 }
 
+func TestCreateDefaultHighlightIniDocumentsColorOptions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "highlight.ini")
+	createDefaultHighlightIni(path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	for _, key := range []string{
+		"# [Highlight_100]",
+		"# NormalColor =",
+		"# SelectedColor =",
+		"# CursorColor =",
+		"# SelectedCursorColor =",
+		"NormalColorUnderCursor",
+		"SelectedColorUnderCursor",
+	} {
+		if !strings.Contains(content, key) {
+			t.Errorf("generated highlight.ini is missing documented %q", key)
+		}
+	}
+}
+
 func TestConfig_ApplyCommandParallelismDefaultsToLogicalCPUs(t *testing.T) {
 	tmpDir := t.TempDir()
 	userIniPath := filepath.Join(tmpDir, "settings.ini")

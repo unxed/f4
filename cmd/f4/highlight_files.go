@@ -230,6 +230,12 @@ func parseRuleSections(ini *IniFile, prefix string) []ruleSection {
 		rule.SelectedStr = ini.GetString(secName, "SelectedColor", "")
 		rule.CursorStr = ini.GetString(secName, "CursorColor", "")
 		rule.SelectedCursorStr = ini.GetString(secName, "SelectedCursorColor", "")
+		if rule.CursorStr == "" {
+			rule.CursorStr = ini.GetString(secName, "NormalColorUnderCursor", "")
+		}
+		if rule.SelectedCursorStr == "" {
+			rule.SelectedCursorStr = ini.GetString(secName, "SelectedColorUnderCursor", "")
+		}
 		rules = append(rules, ruleSection{Section: secName, Rule: rule})
 	}
 	return rules
