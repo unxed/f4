@@ -271,6 +271,11 @@ Action.Terminal.ViewLog.Desc=Terminállog megnyitása a nézőben
 Action.Terminal.EditLog=Terminal log &szerkesztése
 Action.Terminal.EditLog.Desc=Terminállog megnyitása a szerkesztőben
 
+Viewer.Title= Néző
+Viewer.ModeText=Szöveg
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Keresés
+
 Btn.OverwriteAll=Mindet &felülír
 Btn.SkipAll=Mi&ndet kihagy
 Btn.Retry=&Újra
@@ -288,11 +293,6 @@ Op.Foreground=Monopol mód
 Op.PathNameOnly=Csak név
 Op.PathFullPath=Teljes útvonal
 Op.PathSrcDst=Forrás -> Cél
-
-Viewer.Title= Néző
-Viewer.ModeText=Szöveg
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Keresés
 
 Search.CaseSensitive=Kis- és &nagybetű-érzékeny
 Search.Reverse=&Keresés visszafelé

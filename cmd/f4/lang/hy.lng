@@ -271,6 +271,11 @@ Action.Terminal.ViewLog.Desc=Բացել տերմինալի լոգը դիտողո
 Action.Terminal.EditLog=&Լոգի խմբագրում
 Action.Terminal.EditLog.Desc=Բացել տերմինալի լոգը խմբագրիչում
 
+Viewer.Title= Դիտում
+Viewer.ModeText=Տեքստ
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Որոնում
+
 Btn.OverwriteAll=Վերագրել &բոլորը
 Btn.SkipAll=Բաց &թողնել բոլորը
 Btn.Retry=&Կրկնել
@@ -288,11 +293,6 @@ Op.Foreground=Մոնոպոլ ռեժիմ
 Op.PathNameOnly=Միայն անունը
 Op.PathFullPath=Լրիվ ուղին
 Op.PathSrcDst=Աղբյուր -> Նշանակում
-
-Viewer.Title= Դիտում
-Viewer.ModeText=Տեքստ
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Որոնում
 
 Search.CaseSensitive=&Հաշվի առնել ռեգիստրը
 Search.Reverse=&Հակադարձ որոնում

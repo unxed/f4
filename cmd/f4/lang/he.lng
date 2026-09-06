@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=פתיחת יומן הטרמינל בצופה
 Action.Terminal.EditLog=ע&ריכת יומן הטרמינל
 Action.Terminal.EditLog.Desc=פתיחת יומן הטרמינל בעורך
 
+Viewer.Title= צפייה
+Viewer.ModeText=טקסט
+Viewer.ModeHex=הקסדצימלי
+Viewer.SearchTitle= חיפושים
+
 Btn.OverwriteAll=החלף את ה&כל
 Btn.SkipAll=ד&לג על הכל
 Btn.Retry=נ&סה שנית
@@ -293,11 +298,6 @@ Op.DummyQueue=תור (ברירת מחדל)
 Op.DummyBackground=שכפול פאנל ברקע
 Op.DummyForeground=נעילת חזית
 Op.BtnStart=ה&פעל
-
-Viewer.Title= צפייה
-Viewer.ModeText=טקסט
-Viewer.ModeHex=הקסדצימלי
-Viewer.SearchTitle= חיפושים
 
 Search.CaseSensitive=תואם רי&שיות
 Search.Reverse=חיפושים ה&פוכים

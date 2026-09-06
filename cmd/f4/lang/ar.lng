@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=فتح سجل الطرفية في المستعرض
 Action.Terminal.EditLog=ت&حرير سجل الطرفية
 Action.Terminal.EditLog.Desc=فتح سجل الطرفية في المحرر
 
+Viewer.Title= عرض
+Viewer.ModeText=نص
+Viewer.ModeHex=ست عشري
+Viewer.SearchTitle= بحث
+
 Btn.OverwriteAll=استبدال ال&كل
 Btn.SkipAll=تخ&طي الكل
 Btn.Retry=إعادة الم&حاولة
@@ -293,11 +298,6 @@ Op.DummyQueue=الانتظار (الافتراضي)
 Op.DummyBackground=نسخ لوحة الخلفية
 Op.DummyForeground=قفل الواجهة
 Op.BtnStart=ب&دء
-
-Viewer.Title= عرض
-Viewer.ModeText=نص
-Viewer.ModeHex=ست عشري
-Viewer.SearchTitle= بحث
 
 Search.CaseSensitive=حساس لحالة الأ&حرف
 Search.Reverse=بحث ع&كسي

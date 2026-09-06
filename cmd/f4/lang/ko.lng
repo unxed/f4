@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=뷰어에서 터미널 로그 열기
 Action.Terminal.EditLog=터미널 로그 편집(&E)
 Action.Terminal.EditLog.Desc=편집기에서 터미널 로그 열기
 
+Viewer.Title= 보기
+Viewer.ModeText=텍스트
+Viewer.ModeHex=16진수
+Viewer.SearchTitle= 검색
+
 Btn.OverwriteAll=모두 덮어쓰기(&A)
 Btn.SkipAll=모두 건너뛰기(&K)
 Btn.Retry=재시도(&R)
@@ -293,11 +298,6 @@ Op.DummyQueue=대기열 (기본값)
 Op.DummyBackground=백그라운드 패널 복제
 Op.DummyForeground=전면 단독 실행
 Op.BtnStart=시작(&S)
-
-Viewer.Title= 보기
-Viewer.ModeText=텍스트
-Viewer.ModeHex=16진수
-Viewer.SearchTitle= 검색
 
 Search.CaseSensitive=대소문자 구분(&C)
 Search.Reverse=역방향 검색(&R)

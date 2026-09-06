@@ -247,6 +247,11 @@ Action.Panel.SplitLeft.Desc=ऊर्ध्वाधर विभाजन क�
 Action.Panel.SplitRight.Desc=ऊर्ध्वाधर विभाजन को दाईं ओर ले जाएं
 Action.Panel.SplitUp.Desc=दोनों पैनलों को लंबवत सिकोड़ें
 
+Viewer.Title= देखें
+Viewer.ModeText=पाठ
+Viewer.ModeHex=हेक्स
+Viewer.SearchTitle= खोजें
+
 Btn.OverwriteAll=सभी को ओ&वरराइट करें
 Btn.SkipAll=सभी को छो&ड़ें
 Btn.Retry=पुनः प्र&यास करें
@@ -262,11 +267,6 @@ Op.DummyQueue=कतार (डिफ़ॉल्ट)
 Op.DummyBackground=पृष्ठभूमि पैनल प्रतिलिपि
 Op.DummyForeground=अग्रभूमि लॉक
 Op.BtnStart=&प्रारंभ
-
-Viewer.Title= देखें
-Viewer.ModeText=पाठ
-Viewer.ModeHex=हेक्स
-Viewer.SearchTitle= खोजें
 
 Search.CaseSensitive=केस संवे&दनशील
 Search.Reverse=विप&रीत खोज

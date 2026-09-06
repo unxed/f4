@@ -271,6 +271,11 @@ Action.Terminal.ViewLog.Desc=在查看器中打开终端日志
 Action.Terminal.EditLog=编辑终端日志(&E)
 Action.Terminal.EditLog.Desc=在编辑器中打开终端日志
 
+Viewer.Title= 查看
+Viewer.ModeText=文本
+Viewer.ModeHex=十六进制
+Viewer.SearchTitle= 搜索
+
 Btn.OverwriteAll=全部覆盖(&A)
 Btn.SkipAll=全部跳过(&K)
 Btn.Retry=重试(&R)
@@ -288,11 +293,6 @@ Op.Foreground=前台独占
 Op.PathNameOnly=仅名称
 Op.PathFullPath=完整路径
 Op.PathSrcDst=源路径 -> 目标路径
-
-Viewer.Title= 查看
-Viewer.ModeText=文本
-Viewer.ModeHex=十六进制
-Viewer.SearchTitle= 搜索
 
 Search.CaseSensitive=区分大小写(&C)
 Search.Reverse=反向搜索(&R)

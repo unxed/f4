@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Відкрити журнал терміналу в
 Action.Terminal.EditLog=&Правка журналу
 Action.Terminal.EditLog.Desc=Відкрити журнал терміналу в редакторі
 
+Viewer.Title= Перегляд
+Viewer.ModeText=Текст
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Пошук
+
 Btn.OverwriteAll=Переписати &все
 Btn.SkipAll=П&ропустити все
 Btn.Retry=&Повторити
@@ -293,11 +298,6 @@ Op.DummyQueue=Черга (За замовчуванням)
 Op.DummyBackground=Фонове клонування панелей
 Op.DummyForeground=Монопольний режим
 Op.BtnStart=&Старт
-
-Viewer.Title= Перегляд
-Viewer.ModeText=Текст
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Пошук
 
 Search.CaseSensitive=Чутливість до &регістру
 Search.Reverse=&Зворотний пошук

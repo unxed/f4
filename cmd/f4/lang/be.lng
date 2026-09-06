@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Адкрыць журнал тэрмінала ў �
 Action.Terminal.EditLog=&Праўка журнала
 Action.Terminal.EditLog.Desc=Адкрыць журнал тэрмінала ў рэдактары
 
+Viewer.Title= Прагляд
+Viewer.ModeText=Тэкст
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Пошук
+
 Btn.OverwriteAll=Перапісаць &усё
 Btn.SkipAll=П&рапусціць усё
 Btn.Retry=&Паўтарыць
@@ -293,11 +298,6 @@ Op.DummyQueue=Чарга (Па змаўчанні)
 Op.DummyBackground=Фонавае кланіраванне панэляў
 Op.DummyForeground=Манапольны рэжым
 Op.BtnStart=&Старт
-
-Viewer.Title= Прагляд
-Viewer.ModeText=Тэкст
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Пошук
 
 Search.CaseSensitive=Адчувальнасць да &рэгістра
 Search.Reverse=&Зваротны пошук

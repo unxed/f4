@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Abrir el registro del terminal en el visor
 Action.Terminal.EditLog=&Editar registro de terminal
 Action.Terminal.EditLog.Desc=Abrir el registro del terminal en el editor
 
+Viewer.Title= Ver
+Viewer.ModeText=Texto
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Buscar
+
 Btn.OverwriteAll=Sobrescribir &todo
 Btn.SkipAll=O&mitir todo
 Btn.Retry=&Reintentar
@@ -293,11 +298,6 @@ Op.DummyQueue=Cola (Por defecto)
 Op.DummyBackground=Clon de panel en segundo plano
 Op.DummyForeground=Bloqueo en primer plano
 Op.BtnStart=&Comenzar
-
-Viewer.Title= Ver
-Viewer.ModeText=Texto
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Buscar
 
 Search.CaseSensitive=&Distinguir mayúsculas
 Search.Reverse=Búsqueda &inversa

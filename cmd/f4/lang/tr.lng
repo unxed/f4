@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Terminal günlüğünü görüntüleyicide aç
 Action.Terminal.EditLog=Terminal günlüğünü düz&enle
 Action.Terminal.EditLog.Desc=Terminal günlüğünü düzenleyicide aç
 
+Viewer.Title= Görünüm
+Viewer.ModeText=Metin
+Viewer.ModeHex=Onaltılık
+Viewer.SearchTitle= Arama
+
 Btn.OverwriteAll=Tümünün Üzerine &Yaz
 Btn.SkipAll=Tümünü At&la
 Btn.Retry=&Yeniden dene
@@ -293,11 +298,6 @@ Op.DummyQueue=Sıra (Varsayılan)
 Op.DummyBackground=Arka plan
 Op.DummyForeground=Ön plan kilidi
 Op.BtnStart=&Başlat
-
-Viewer.Title= Görünüm
-Viewer.ModeText=Metin
-Viewer.ModeHex=Onaltılık
-Viewer.SearchTitle= Arama
 
 Search.CaseSensitive=&Büyük/küçük harf duyarlı
 Search.Reverse=&Ters arama

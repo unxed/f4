@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=ტერმინალის ლოგის გ�
 Action.Terminal.EditLog=ტერმინალის ლოგის &რედაქტირება
 Action.Terminal.EditLog.Desc=ტერმინალის ლოგის გახსნა რედაქტორში
 
+Viewer.Title= ნახვა
+Viewer.ModeText=ტექსტი
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= ძებნა
+
 Btn.OverwriteAll=ყველას &თავზე გადაწერა
 Btn.SkipAll=ყველას გამო&ტოვება
 Btn.Retry=&გამეორება
@@ -293,11 +298,6 @@ Op.DummyQueue=რიგი (ნაგულისხმევი)
 Op.DummyBackground=ფონური პანელის კლონი
 Op.DummyForeground=მონოპოლიური რეჟიმი
 Op.BtnStart=&დაწყება
-
-Viewer.Title= ნახვა
-Viewer.ModeText=ტექსტი
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= ძებნა
 
 Search.CaseSensitive=&რეგისტრის გათვალისწინება
 Search.Reverse=&უკუძებნა

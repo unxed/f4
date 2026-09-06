@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=ভিউয়ারে টার্মিনা�
 Action.Terminal.EditLog=টার্মিনাল লগ সম্পাদনা করুন (&E)
 Action.Terminal.EditLog.Desc=এডিটরে টার্মিনাল লগ খুলুন
 
+Viewer.Title= প্রদর্শন
+Viewer.ModeText=টেক্সট
+Viewer.ModeHex=হেক্স
+Viewer.SearchTitle= অনুসন্ধান
+
 Btn.OverwriteAll=সব ওভাররাইট করুন (&A)
 Btn.SkipAll=সব এড়িয়ে যান (&K)
 Btn.Retry=পুনরায় চেষ্টা করুন (&R)
@@ -293,11 +298,6 @@ Op.DummyQueue=সারি (ডিফল্ট)
 Op.DummyBackground=ব্যাকগ্রাউন্ড প্যানেল ক্লোন
 Op.DummyForeground=ফোরগ্রাউন্ড লক
 Op.BtnStart=শুরু করুন (&S)
-
-Viewer.Title= প্রদর্শন
-Viewer.ModeText=টেক্সট
-Viewer.ModeHex=হেক্স
-Viewer.SearchTitle= অনুসন্ধান
 
 Search.CaseSensitive=কেস সংবেদনশীল (&C)
 Search.Reverse=বিপরীত অনুসন্ধান (&R)

@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Atvērto termināļa logu skatītājā
 Action.Terminal.EditLog=Rediģēt termināļa &logu
 Action.Terminal.EditLog.Desc=Atvērt termināļa logu redaktorā
 
+Viewer.Title= Skatīt
+Viewer.ModeText=Teksts
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Meklēt
+
 Btn.OverwriteAll=Pārrakstīt &visus
 Btn.SkipAll=Iz&laist visus
 Btn.Retry=&Atkārtot
@@ -293,11 +298,6 @@ Op.DummyQueue=Rinda (Noklusējums)
 Op.DummyBackground=Fona paneļa klonēšana
 Op.DummyForeground=Priekšplāna bloķēšana
 Op.BtnStart=&Sākt
-
-Viewer.Title= Skatīt
-Viewer.ModeText=Teksts
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Meklēt
 
 Search.CaseSensitive=&Reģistrjūtīgs
 Search.Reverse=At&pakaļejošā meklēšana

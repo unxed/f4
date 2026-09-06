@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Avaa terminaalin loki katselussa
 Action.Terminal.EditLog=&Muokkaa terminaalin lokia
 Action.Terminal.EditLog.Desc=Avaa terminaalin loki muokkaimessa
 
+Viewer.Title= Katselu
+Viewer.ModeText=Teksti
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Etsi
+
 Btn.OverwriteAll=Korvaa &kaikki
 Btn.SkipAll=O&hita kaikki
 Btn.Retry=&Yritä uudelleen
@@ -293,11 +298,6 @@ Op.DummyQueue=Jono (Oletus)
 Op.DummyBackground=Taustapaneelin klooni
 Op.DummyForeground=Etualalukitus
 Op.BtnStart=&Aloita
-
-Viewer.Title= Katselu
-Viewer.ModeText=Teksti
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Etsi
 
 Search.CaseSensitive=Kirjasin&koon huomiointi
 Search.Reverse=&Hae taaksepäin

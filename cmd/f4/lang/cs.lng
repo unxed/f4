@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Otevřít protokol terminálu v prohlížeči
 Action.Terminal.EditLog=&Upravit protokol terminálu
 Action.Terminal.EditLog.Desc=Otevřít protokol terminálu v editoru
 
+Viewer.Title= Zobrazit
+Viewer.ModeText=Text
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Hledat
+
 Btn.OverwriteAll=Přepsat &vše
 Btn.SkipAll=Pře&skočit vše
 Btn.Retry=&Opakovat
@@ -293,11 +298,6 @@ Op.DummyQueue=Fronta (Výchozí)
 Op.DummyBackground=Klonování panelu na pozadí
 Op.DummyForeground=Zámek na popředí
 Op.BtnStart=&Spustit
-
-Viewer.Title= Zobrazit
-Viewer.ModeText=Text
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Hledat
 
 Search.CaseSensitive=Rozlišovat &velikost
 Search.Reverse=&Zpětné vyhledávání

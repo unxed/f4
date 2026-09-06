@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Ava terminali logi vaatajas
 Action.Terminal.EditLog=Redigeeri terminali &logi
 Action.Terminal.EditLog.Desc=Ava terminali logi redaktoris
 
+Viewer.Title= Vaade
+Viewer.ModeText=Tekst
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Otsi
+
 Btn.OverwriteAll=Kirjuta &kõik üle
 Btn.SkipAll=Jä&ta kaikki vahele
 Btn.Retry=&Proovi uuesti
@@ -293,11 +298,6 @@ Op.DummyQueue=Järjekord (Vaikimisi)
 Op.DummyBackground=Taustapaneeli kloonimine
 Op.DummyForeground=Esiplaani lukustus
 Op.BtnStart=&Alusta
-
-Viewer.Title= Vaade
-Viewer.ModeText=Tekst
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Otsi
 
 Search.CaseSensitive=&Tõstutundlik
 Search.Reverse=Ta&gasiotsing

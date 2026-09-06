@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Atidaryti terminalo logą peržiūrai
 Action.Terminal.EditLog=Redaguoti terminalo &logą
 Action.Terminal.EditLog.Desc=Atidaryti terminalo logą redaktoriuje
 
+Viewer.Title= Peržiūra
+Viewer.ModeText=Tekstas
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Paieška
+
 Btn.OverwriteAll=Perrašyti &visus
 Btn.SkipAll=Pr&aleisti visus
 Btn.Retry=&Pakartoti
@@ -293,11 +298,6 @@ Op.DummyQueue=Eilė (Numatytoji)
 Op.DummyBackground=Fono skydelio klonavimas
 Op.DummyForeground=Monopolinis režimas
 Op.BtnStart=&Pradėti
-
-Viewer.Title= Peržiūra
-Viewer.ModeText=Tekstas
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Paieška
 
 Search.CaseSensitive=Skirti &registro dydį
 Search.Reverse=At&bulinė paieška

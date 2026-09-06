@@ -230,15 +230,6 @@ Action.Viewer.SearchNext.Desc=Continue search forwards
 Action.Viewer.SearchPrevious=Find &backwards
 Action.Viewer.SearchPrevious.Desc=Continue search backwards
 Action.Viewer.GoTo.Desc=Go to a line or byte offset
-Editor.GotoTitle=Go to position
-Editor.GotoLine=Line:
-Editor.GotoPosition=Position:
-Editor.GotoOffsetTitle=Go to offset
-Editor.GotoOffsetPrompt=Byte offset:
-Editor.GotoInvalid=Line and position must be positive numbers.
-Viewer.GotoOffsetTitle=Go to offset
-Viewer.GotoOffsetPrompt=Byte offset:
-Goto.Hexadecimal=Hexadecimal
 Action.Viewer.CodepageNext=N&ext codepage
 Action.Viewer.CodepageNext.Desc=Cycle to next codepage
 Action.Viewer.CodepageMenu=&Codepage menu
@@ -422,6 +413,26 @@ Action.App.SQLite.Desc=Open the SQLite client on the database under the cursor
 Action.Panel.TempPanel.Desc=Open the temporary panel or switch its saved list
 Action.Panel.Player.Desc=Toggle the audio player panel
 
+Editor.GotoTitle=Go to position
+Editor.GotoLine=Line:
+Editor.GotoPosition=Position:
+Editor.GotoOffsetTitle=Go to offset
+Editor.GotoOffsetPrompt=Byte offset:
+Editor.GotoInvalid=Line and position must be positive numbers.
+Editor.Base64.Title=Base64
+Editor.Base64.NoSelection=Select text first.
+Editor.Indexing=Indexing
+
+Viewer.GotoOffsetTitle=Go to offset
+Viewer.GotoOffsetPrompt=Byte offset:
+Viewer.Title= View
+Viewer.ModeText=Text
+Viewer.ModeHex=Hex
+Viewer.DisasmBits=Disassembler: %d-bit x86
+Viewer.SearchTitle= Search
+
+Goto.Hexadecimal=Hexadecimal
+
 Link.Title= Link
 Link.Prompt=Create link to %s in:
 Link.PromptMultiple=Create links to %d item(s) in:
@@ -452,12 +463,6 @@ Op.DummyQueue=Queue (Default)
 Op.DummyBackground=Background panel clone
 Op.DummyForeground=Foreground lock
 Op.BtnStart=&Start
-
-Viewer.Title= View
-Viewer.ModeText=Text
-Viewer.ModeHex=Hex
-Viewer.DisasmBits=Disassembler: %d-bit x86
-Viewer.SearchTitle= Search
 
 Search.CaseSensitive=&Case sensitive
 Search.Reverse=&Reverse search
@@ -655,10 +660,6 @@ Jobs.Empty=Nothing is running
 
 Sort.Title=Sort by
 
-Editor.Base64.Title=Base64
-Editor.Base64.NoSelection=Select text first.
-Editor.Indexing=Indexing
-
 Help.ViewerEditor=Viewer & Editor Keys
 Help.PanelNav=Panel Keys
 Help.NavigationKeys=Navigation keys
@@ -779,6 +780,7 @@ EditorSettings.Crosshair=Show cross&hair
 EditorSettings.ColorerBg=Colorer &background
 EditorSettings.SyntaxAnimation=Animate syntax &highlighting
 EditorSettings.UseExternalEditor=Use e&xternal editor
+EditorSettings.ExternalCommand=E&xternal command:
 EditorSettings.ExternalCommandConsole=Console e&xternal command:
 EditorSettings.ExternalCommandGUI=GUI e&xternal command:
 

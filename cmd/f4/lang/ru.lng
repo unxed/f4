@@ -224,15 +224,6 @@ Action.Viewer.SearchNext.Desc=Продолжить поиск вперёд
 Action.Viewer.SearchPrevious=Искать &назад
 Action.Viewer.SearchPrevious.Desc=Продолжить поиск назад
 Action.Viewer.GoTo.Desc=Перейти к строке или смещению в байтах
-Editor.GotoTitle=Перейти к позиции
-Editor.GotoLine=Строка:
-Editor.GotoPosition=Позиция:
-Editor.GotoOffsetTitle=Перейти к смещению
-Editor.GotoOffsetPrompt=Смещение в байтах:
-Editor.GotoInvalid=Строка и позиция должны быть положительными числами.
-Viewer.GotoOffsetTitle=Перейти к смещению
-Viewer.GotoOffsetPrompt=Смещение в байтах:
-Goto.Hexadecimal=Шестнадцатеричный формат
 Action.Viewer.CodepageNext=Следующая &кодировка
 Action.Viewer.CodepageNext.Desc=Переключиться на следующую кодировку
 Action.Viewer.CodepageMenu=Меню кодирово&к
@@ -415,6 +406,24 @@ Action.App.SQLite=&Клиент SQLite
 Action.App.SQLite.Desc=Открыть клиент SQLite для базы данных под курсором
 Action.Panel.TempPanel.Desc=Открыть временную панель или выбрать сохранённый список
 
+Editor.GotoTitle=Перейти к позиции
+Editor.GotoLine=Строка:
+Editor.GotoPosition=Позиция:
+Editor.GotoOffsetTitle=Перейти к смещению
+Editor.GotoOffsetPrompt=Смещение в байтах:
+Editor.GotoInvalid=Строка и позиция должны быть положительными числами.
+Editor.Indexing=Индексация
+
+Viewer.GotoOffsetTitle=Перейти к смещению
+Viewer.GotoOffsetPrompt=Смещение в байтах:
+Viewer.Title= Просмотр
+Viewer.ModeText=Текст
+Viewer.ModeHex=Hex
+Viewer.DisasmBits=Дизассемблер: %d-битный x86
+Viewer.SearchTitle= Поиск
+
+Goto.Hexadecimal=Шестнадцатеричный формат
+
 Link.Title= Ссылка
 Link.Prompt=Создать ссылку на %s в:
 Link.PromptMultiple=Создать ссылки на %d элемент(ов) в:
@@ -445,12 +454,6 @@ Op.DummyQueue=Очередь (По умолчанию)
 Op.DummyBackground=Фоновое клонирование панелей
 Op.DummyForeground=Монопольный режим
 Op.BtnStart=&Старт
-
-Viewer.Title= Просмотр
-Viewer.ModeText=Текст
-Viewer.ModeHex=Hex
-Viewer.DisasmBits=Дизассемблер: %d-битный x86
-Viewer.SearchTitle= Поиск
 
 Search.CaseSensitive=Чувствительность к &регистру
 Search.Reverse=&Обратный поиск
@@ -644,8 +647,6 @@ Jobs.BtnClose=&Закрыть
 Jobs.Empty=Ничего не выполняется
 
 Sort.Title=Сортировка
-
-Editor.Indexing=Индексация
 
 Help.ViewerEditor=Клавиши Просмотра и Редактора
 Help.PanelNav=Клавиши панелей

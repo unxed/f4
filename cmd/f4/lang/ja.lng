@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=ビューアでターミナルログを開く
 Action.Terminal.EditLog=ターミナルログ編集(&E)
 Action.Terminal.EditLog.Desc=エディタでターミナルログを開く
 
+Viewer.Title= ビュー
+Viewer.ModeText=テキスト
+Viewer.ModeHex=16進数
+Viewer.SearchTitle= 検索
+
 Btn.OverwriteAll=すべて上書き(&A)
 Btn.SkipAll=すべてスキップ(&K)
 Btn.Retry=再試行(&R)
@@ -293,11 +298,6 @@ Op.DummyQueue=キュー (デフォルト)
 Op.DummyBackground=バックグラウンドパネルクローン
 Op.DummyForeground=フォアグラウンドロック
 Op.BtnStart=開始(&S)
-
-Viewer.Title= ビュー
-Viewer.ModeText=テキスト
-Viewer.ModeHex=16進数
-Viewer.SearchTitle= 検索
 
 Search.CaseSensitive=大文字小文字を区別(&C)
 Search.Reverse=逆方向検索(&R)

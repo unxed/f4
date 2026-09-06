@@ -272,6 +272,11 @@ Action.Terminal.ViewLog.Desc=Terminal-Log im Viewer öffnen
 Action.Terminal.EditLog=Terminal-Log &bearbeiten
 Action.Terminal.EditLog.Desc=Terminal-Log im Editor öffnen
 
+Viewer.Title= Anzeigen
+Viewer.ModeText=Text
+Viewer.ModeHex=Hex
+Viewer.SearchTitle= Suchen
+
 Btn.OverwriteAll=&Alle überschreiben
 Btn.SkipAll=A&lle überspringen
 Btn.Retry=&Wiederholen
@@ -293,11 +298,6 @@ Op.DummyQueue=Warteschlange (Standard)
 Op.DummyBackground=Hintergrund-Panel-Kopie
 Op.DummyForeground=Vordergrund-Sperre
 Op.BtnStart=&Start
-
-Viewer.Title= Anzeigen
-Viewer.ModeText=Text
-Viewer.ModeHex=Hex
-Viewer.SearchTitle= Suchen
 
 Search.CaseSensitive=&Groß-/Kleinschreibung
 Search.Reverse=&Rückwärtssuche
