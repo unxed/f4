@@ -1749,6 +1749,15 @@ func init() {
 		}),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.SyncPanels",
+		Area:        "Shell",
+		Label:       "Sync Panels",
+		Description: "Open the active panel's directory in the passive panel",
+		DescKey:     "Action.Panel.SyncPanels.Desc",
+		DefaultKeys: []string{"AltI"},
+		Handler:     withPF(func(pf *PanelsFrame) { pf.syncPassivePanel() }),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.ToggleInfoBytes",
 		Area:        "Shell",
 		Label:       "Toggle Bytes Format",

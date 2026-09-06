@@ -4983,6 +4983,22 @@ func (pf *PanelsFrame) navigateToBookmark(fsp *FileSystemPanel, bookmark Bookmar
 	return pf.NavigateToPath(fsp, expandPathEnv(bookmark.Path))
 }
 
+// syncPassivePanel opens the active panel's directory in the passive panel,
+// like mc's Alt+I (#892). It goes through NavigateToPath so archives, remote
+// and provider paths take the same route as folder history and bookmarks.
+func (pf *PanelsFrame) syncPassivePanel() bool {
+	src := pf.getActivePanel()
+	dst := pf.getInactivePanel()
+	if src == nil || dst == nil || isAIPanel(src) || isAIPanel(dst) {
+		return false
+	}
+	target := src.persistentPath()
+	if target == "" || sameFolderHistoryPath(target, dst.persistentPath()) {
+		return false
+	}
+	return pf.NavigateToPath(dst, target)
+}
+
 func (pf *PanelsFrame) NavigateToPath(fsp *FileSystemPanel, targetPath string) bool {
 	if targetPath == "" {
 		return false

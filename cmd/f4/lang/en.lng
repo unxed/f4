@@ -338,6 +338,7 @@ Action.Panel.SplitDown.Desc=Grow both panels vertically
 Action.Panel.SplitActiveUp.Desc=Shrink the active panel vertically
 Action.Panel.SplitActiveDown.Desc=Grow the active panel vertically
 Action.Panel.SplitReset.Desc=Reset the panel split to defaults
+Action.Panel.SyncPanels.Desc=Open the active panel's directory in the passive panel
 Action.Panel.ToggleInfoBytes.Desc=Flip number formatting in info and quick view panels
 Action.Panel.ViewBrief.Desc=Set active panel to brief mode
 Action.Panel.ViewMedium.Desc=Set active panel to medium mode

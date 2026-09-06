@@ -332,6 +332,7 @@ Action.Panel.SplitDown.Desc=Увеличить обе панели по верт
 Action.Panel.SplitActiveUp.Desc=Уменьшить активную панель по вертикали
 Action.Panel.SplitActiveDown.Desc=Увеличить активную панель по вертикали
 Action.Panel.SplitReset.Desc=Сбросить разделитель панелей
+Action.Panel.SyncPanels.Desc=Открыть в пассивной панели каталог активной панели
 Action.Panel.ToggleInfoBytes.Desc=Переключить формат чисел в информационной панели и быстром просмотре
 Action.Panel.ViewBrief.Desc=Краткий режим активной панели
 Action.Panel.ViewMedium.Desc=Средний режим активной панели

@@ -6171,3 +6171,45 @@ func TestFilePanel_WheelScrollSpeed(t *testing.T) {
 		t.Errorf("Expected cursor at 1 after wheel up, got %d", got)
 	}
 }
+
+func TestPanelsFrame_SyncPassivePanel(t *testing.T) {
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(tmpDir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pf := &PanelsFrame{}
+	lp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(sub))
+	rp := NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS(tmpDir))
+	pf.panels[0] = lp
+	pf.panels[1] = rp
+	pf.activeIdx = 0
+	defer pf.Close()
+
+	waitForLoad(t, lp)
+	waitForLoad(t, rp)
+
+	if !pf.syncPassivePanel() {
+		t.Fatal("syncPassivePanel returned false for a differing passive panel")
+	}
+	waitForLoad(t, rp)
+	if got, want := filepath.Clean(rp.vfs.GetPath()), filepath.Clean(sub); got != want {
+		t.Fatalf("passive panel path = %q, want %q", got, want)
+	}
+	if got, want := filepath.Clean(lp.vfs.GetPath()), filepath.Clean(sub); got != want {
+		t.Fatalf("active panel moved to %q, want %q", got, want)
+	}
+
+	// Already in sync: nothing to do.
+	if pf.syncPassivePanel() {
+		t.Fatal("syncPassivePanel should be a no-op when both panels show the same directory")
+	}
+}
