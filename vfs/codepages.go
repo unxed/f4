@@ -2,6 +2,7 @@ package vfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -31,7 +32,23 @@ const (
 	legacySystemOEM  = 22222
 )
 
-var systemANSI, systemOEM int
+// systemANSI and systemOEM are the ids behind the "ANSI" and "OEM" entries,
+// systemANSIEncoding and systemOEMEncoding the encodings they stand for.
+// The detected* copies keep what the platform deduced at startup, so that
+// clearing the configuration override restores it without asking again.
+var (
+	systemANSI, systemOEM                     int
+	systemANSIEncoding, systemOEMEncoding     encoding.Encoding
+	detectedANSI, detectedOEM                 int
+	detectedANSIEncoding, detectedOEMEncoding encoding.Encoding
+)
+
+// otherCodepages is every codepage except the two system aliases, in menu
+// order: the built-in table followed by whatever the platform contributes.
+// SetSystemCodepages rebuilds AvailableCodepages from it, so pinning ANSI or
+// OEM does not repeat the platform scan -- on Unix that scan is an
+// `iconv --list` subprocess.
+var otherCodepages []Codepage
 
 type codepageGroup uint8
 
@@ -56,10 +73,10 @@ const UTF8BOMSize = 3
 func init() {
 	ascii, _ := htmlindex.Get("us-ascii")
 	systemANSI, systemOEM = systemCodepageIDs()
-	ansiName, oemName := systemCodepageNames()
-	AvailableCodepages = []Codepage{
-		{ID: systemANSI, Name: ansiName, Enc: localecp.ANSIEncoding, group: codepageSystem},
-		{ID: systemOEM, Name: oemName, Enc: localecp.OEMEncoding, group: codepageSystem},
+	systemANSIEncoding, systemOEMEncoding = localecp.ANSIEncoding, localecp.OEMEncoding
+	detectedANSI, detectedOEM = systemANSI, systemOEM
+	detectedANSIEncoding, detectedOEMEncoding = systemANSIEncoding, systemOEMEncoding
+	otherCodepages = []Codepage{
 		{ID: 65001, Name: "UTF-8", Enc: unicode.UTF8, group: codepageUnicode},
 		{ID: 1200, Name: "UTF-16 (Little endian)", Enc: unicode.UTF16(unicode.LittleEndian, unicode.UseBOM), group: codepageUnicode},
 		{ID: 1201, Name: "UTF-16 (Big endian)", Enc: unicode.UTF16(unicode.BigEndian, unicode.UseBOM), group: codepageUnicode},
@@ -114,13 +131,72 @@ func init() {
 		{ID: 54936, Name: "GB18030 (Simplified Chinese)", Enc: simplifiedchinese.GB18030, group: codepageOther},
 		{ID: 950, Name: "Big5 (Traditional Chinese)", Enc: traditionalchinese.Big5, group: codepageOther},
 	}
-	AvailableCodepages = append(AvailableCodepages, platformCodepages()...)
-	AvailableCodepages = uniqueCodepages(AvailableCodepages)
+	// platformCodepages asks FindCodepage which ids are already covered, so
+	// the list it consults has to be in place before it runs.
+	AvailableCodepages = append(systemCodepageEntries(), otherCodepages...)
+	otherCodepages = append(otherCodepages, platformCodepages()...)
+	rebuildAvailableCodepages()
+}
+
+// systemCodepageEntries are the two aliases at the head of the codepage list,
+// built from whatever ANSI and OEM currently mean.
+func systemCodepageEntries() []Codepage {
+	ansiName, oemName := systemCodepageNames()
+	return []Codepage{
+		{ID: systemANSI, Name: ansiName, Enc: systemANSIEncoding, group: codepageSystem},
+		{ID: systemOEM, Name: oemName, Enc: systemOEMEncoding, group: codepageSystem},
+	}
+}
+
+func rebuildAvailableCodepages() {
+	list := make([]Codepage, 0, len(otherCodepages)+2)
+	list = append(list, systemCodepageEntries()...)
+	list = append(list, otherCodepages...)
+	AvailableCodepages = uniqueCodepages(list)
+}
+
+// SetSystemCodepages pins what ANSI and OEM mean, the way far2l's
+// ~/.config/far2l/cp file does.
+//
+// Neither is a system property on Unix: localecp guesses both from
+// LC_ALL/LC_CTYPE/LANG, and the guess is wrong whenever the locale says
+// nothing useful about the legacy encodings the user actually meets --
+// LANG=C, an en_US.UTF-8 desktop used to read CP866 archives, a locale that
+// is simply not in the table. There is nothing better to infer from, so the
+// user has to be able to state it outright (#368).
+//
+// A zero or negative id means "whatever was detected", so removing the
+// setting restores the deduced codepage. An id this build does not know is
+// reported and leaves that half detected, because one bad line in a
+// configuration file must not cost the user both codepages. Call it during
+// startup, before anything is decoded: it rewrites process-wide state and
+// does not synchronize with readers.
+func SetSystemCodepages(ansiID, oemID int) error {
+	newANSI, ansiEnc, ansiErr := resolveSystemCodepage(ansiID, detectedANSI, detectedANSIEncoding)
+	newOEM, oemEnc, oemErr := resolveSystemCodepage(oemID, detectedOEM, detectedOEMEncoding)
+	systemANSI, systemANSIEncoding = newANSI, ansiEnc
+	systemOEM, systemOEMEncoding = newOEM, oemEnc
+	rebuildAvailableCodepages()
+	return errors.Join(ansiErr, oemErr)
+}
+
+// resolveSystemCodepage turns a configured id into the id and encoding an
+// alias should use, falling back to the detected pair.
+func resolveSystemCodepage(id, detected int, detectedEnc encoding.Encoding) (int, encoding.Encoding, error) {
+	if id <= 0 {
+		return detected, detectedEnc, nil
+	}
+	id = normalizeCodepageID(id)
+	cp, ok := FindCodepage(id)
+	if !ok || cp.Enc == nil {
+		return detected, detectedEnc, fmt.Errorf("unknown codepage %d", id)
+	}
+	return id, cp.Enc, nil
 }
 
 // SystemANSICodepage and SystemOEMCodepage are the real system codepage IDs
-// used by Far for its ANSI and OEM entries. The associated encodings remain
-// localecp.ANSIEncoding and localecp.OEMEncoding respectively.
+// used by Far for its ANSI and OEM entries. The associated encodings are the
+// ones localecp deduced, unless SetSystemCodepages replaced them.
 func SystemANSICodepage() int { return systemANSI }
 func SystemOEMCodepage() int  { return systemOEM }
 
@@ -661,11 +737,11 @@ func GetCodepageDecoderEncoder(cp string) (*encoding.Decoder, *encoding.Encoder)
 }
 
 func GetSystemOEMEncoding() encoding.Encoding {
-	return localecp.OEMEncoding
+	return systemOEMEncoding
 }
 
 func GetSystemANSIEncoding() encoding.Encoding {
-	return localecp.ANSIEncoding
+	return systemANSIEncoding
 }
 
 type MemoryReadAtCloser struct {

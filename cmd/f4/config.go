@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/netproxy"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
 
@@ -239,6 +240,11 @@ type F4Config struct {
 	EditorMemoryMap          bool
 	ViewerAutodetectCodePage bool
 	ViewerDefaultCodePage    int
+	// SystemANSICodePage and SystemOEMCodePage pin what "ANSI" and "OEM"
+	// mean on a system that cannot be asked. 0 keeps the codepage deduced
+	// from the locale.
+	SystemANSICodePage int
+	SystemOEMCodePage  int
 	// Wheel scroll speed (lines per notch) per area and direction.
 	// 0 = follow the system setting.
 	WheelPanelUp    int
@@ -588,6 +594,9 @@ func LoadConfig() {
 	AppConfig.AutoSaveGUIWindow = ini.GetString("System", "AutoSaveGUIWindow", autoSaveDefault) != "0"
 	AppConfig.AnnounceKittyTerm = ini.GetString("System", "AnnounceKittyTerm", "1") == "1"
 	fmt.Sscanf(ini.GetString("System", "MacroRecordFormat", "0"), "%d", &AppConfig.MacroRecordFormat)
+	AppConfig.SystemANSICodePage = parseForcedCodePage(ini.GetString("System", "ANSICodePage", ""))
+	AppConfig.SystemOEMCodePage = parseForcedCodePage(ini.GetString("System", "OEMCodePage", ""))
+	applyForcedCodePages()
 	fmt.Sscanf(ini.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &AppConfig.FileOpPathDisplay)
 	AppConfig.GuiFont = ini.GetString("Appearance", "GuiFont", "")
 	AppConfig.GuiUseSystemMonospace = ini.GetString("Appearance", "GuiUseSystemMonospace", "1") == "1"
@@ -745,6 +754,34 @@ func LoadConfig() {
 	}
 }
 
+// parseForcedCodePage reads [System] ANSICodePage / OEMCodePage. Empty, zero,
+// or "auto" all mean "keep what the locale said"; anything unparsable means
+// the same, because a typo here must not leave f4 decoding with a codepage
+// nobody chose.
+func parseForcedCodePage(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.EqualFold(value, "auto") {
+		return 0
+	}
+	id, err := strconv.Atoi(value)
+	if err != nil || id < 0 {
+		return 0
+	}
+	return id
+}
+
+// applyForcedCodePages hands the two settings to vfs, which owns what ANSI and
+// OEM mean. On Linux neither is a system property -- they are guessed from
+// LC_ALL/LC_CTYPE/LANG -- and the guess is wrong on every machine whose locale
+// says nothing about the legacy encodings its user actually meets, so far2l
+// lets ~/.config/far2l/cp override it and f4 lets settings.ini do the same
+// (#368).
+func applyForcedCodePages() {
+	if err := vfs.SetSystemCodepages(AppConfig.SystemANSICodePage, AppConfig.SystemOEMCodePage); err != nil {
+		vtui.DebugLog("CONFIG: forced ANSI/OEM codepage ignored: %v", err)
+	}
+}
+
 func SaveConfig() {
 	saveConfigWithWindowSize(true)
 }
@@ -831,6 +868,8 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "AutoSaveGUIWindow = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AutoSaveGUIWindow])
 	fmt.Fprintf(&sb, "AnnounceKittyTerm = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.AnnounceKittyTerm])
 	fmt.Fprintf(&sb, "MacroRecordFormat = %d\n", AppConfig.MacroRecordFormat)
+	fmt.Fprintf(&sb, "ANSICodePage = %d\n", AppConfig.SystemANSICodePage)
+	fmt.Fprintf(&sb, "OEMCodePage = %d\n", AppConfig.SystemOEMCodePage)
 
 	sb.WriteString("\n[Dialogs]\n")
 	fmt.Fprintf(&sb, "EnforceColorCorrection = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EnforceColorCorrection])
