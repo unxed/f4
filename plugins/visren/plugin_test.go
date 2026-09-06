@@ -35,9 +35,9 @@ func (registration *contributionRegistrationMock) Unregister() {
 
 type contributionHostMock struct {
 	*hostAPIMock
-	command      vfs.PluginCommand
-	registration *contributionRegistrationMock
-	err          error
+	commands      []vfs.PluginCommand
+	registrations []*contributionRegistrationMock
+	err           error
 }
 
 func (*contributionHostMock) RegisterQuickViewProvider(vfs.QuickViewProvider) (vfs.Registration, error) {
@@ -45,14 +45,13 @@ func (*contributionHostMock) RegisterQuickViewProvider(vfs.QuickViewProvider) (v
 }
 
 func (host *contributionHostMock) RegisterPluginCommand(command vfs.PluginCommand) (vfs.Registration, error) {
-	host.command = command
+	host.commands = append(host.commands, command)
 	if host.err != nil {
 		return nil, host.err
 	}
-	if host.registration == nil {
-		host.registration = &contributionRegistrationMock{}
-	}
-	return host.registration, nil
+	registration := &contributionRegistrationMock{}
+	host.registrations = append(host.registrations, registration)
+	return registration, nil
 }
 
 func (*contributionHostMock) RegisterCommandPrefix(string, string, func(vfs.App, string)) (vfs.CommandPrefixRegistration, error) {
@@ -90,21 +89,34 @@ func TestPluginPrefersRichCommandAndUnregistersIt(t *testing.T) {
 	if host.label != "" || host.handler != nil {
 		t.Fatal("rich host also received a duplicate legacy menu item")
 	}
-	command := host.command
+	if len(host.commands) != 2 {
+		t.Fatalf("registered commands = %#v, want panel and configuration commands", host.commands)
+	}
+	command := host.commands[0]
 	if command.ID != "visren.open" || command.Location != vfs.PluginCommandPanel ||
 		command.Label != "&Visual File Renamer" || command.LabelKey != "VisRen.Menu" ||
 		command.Description == "" || command.DescriptionKey != "VisRen.Command.Open.Desc" ||
 		len(command.SearchKeys) != 2 || command.Run == nil {
 		t.Fatalf("rich command metadata = %#v", command)
 	}
-	if err := plugin.Close(); err != nil {
-		t.Fatal(err)
+	configCommand := host.commands[1]
+	if configCommand.ID != "visren.configure" || configCommand.Location != vfs.PluginCommandConfig ||
+		configCommand.Label != "Visual File Renamer" || configCommand.Description == "" || configCommand.Run == nil {
+		t.Fatalf("configuration command metadata = %#v", configCommand)
 	}
 	if err := plugin.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if host.registration == nil || host.registration.unregistered != 1 {
-		t.Fatalf("unregister calls = %#v", host.registration)
+	if err := plugin.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if len(host.registrations) != 2 {
+		t.Fatalf("registrations = %#v, want two", host.registrations)
+	}
+	for _, registration := range host.registrations {
+		if registration.unregistered != 1 {
+			t.Fatalf("unregister calls = %#v", host.registrations)
+		}
 	}
 }
 

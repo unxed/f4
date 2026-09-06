@@ -10,8 +10,14 @@ import (
 )
 
 type config struct {
-	WordDiv string `json:"word_div"`
+	WordDiv      string `json:"word_div"`
+	EditorFormat string `json:"editor_format"`
 }
+
+const (
+	editorFormatSourceTarget = "source_target"
+	editorFormatTargetsOnly  = "targets_only"
+)
 
 func configPath() string {
 	dir := vfs.CustomConfigDir
@@ -26,13 +32,16 @@ func configPath() string {
 }
 
 func loadConfig() config {
-	cfg := config{WordDiv: "-. _&"}
+	cfg := config{WordDiv: "-. _&", EditorFormat: editorFormatSourceTarget}
 	data, err := os.ReadFile(configPath())
 	if err == nil {
 		_ = json.Unmarshal(data, &cfg)
 	}
 	if cfg.WordDiv == "" {
 		cfg.WordDiv = "-. _&"
+	}
+	if cfg.EditorFormat != editorFormatSourceTarget && cfg.EditorFormat != editorFormatTargetsOnly {
+		cfg.EditorFormat = editorFormatSourceTarget
 	}
 	if runes := []rune(cfg.WordDiv); len(runes) > 18 {
 		cfg.WordDiv = string(runes[:18])

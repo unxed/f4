@@ -6,6 +6,9 @@ Author=f4 Team
 [Strings]
 VisRen.Menu=&Визуальное переименование файлов
 VisRen.Command.Open.Desc=Визуально переименовать выбранные файлы и каталоги
+VisRen.ConfigMenu=Визуальное переименование файлов
+VisRen.ConfigDescription=Настройка редактора визуального переименования файлов
+VisRen.ConfigTitle=Настройки визуального переименования файлов
 VisRen.Title=Визуальное переименование файлов
 VisRen.HostUnsupported=Эта сборка F4 не предоставляет интерфейс VisRen.
 VisRen.LocalOnly=VisRen работает только на локальной файловой панели.

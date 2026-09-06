@@ -11,15 +11,15 @@ func renderEditorList(rows []Preview, twoColumns bool) []byte {
 	var out strings.Builder
 	maxSource := 0
 	for _, row := range rows {
-		if n := len(strconv.Quote(row.Item.Source)); n > maxSource {
+		if n := len(row.Item.Source); n > maxSource {
 			maxSource = n
 		}
 	}
 	for _, row := range rows {
 		if twoColumns {
-			fmt.Fprintf(&out, "%-*s %s\n", maxSource, strconv.Quote(row.Item.Source), strconv.Quote(row.Destination))
+			fmt.Fprintf(&out, "%-*s %s\n", maxSource, row.Item.Source, row.Destination)
 		} else {
-			fmt.Fprintf(&out, "%s\n", strconv.Quote(row.Destination))
+			fmt.Fprintf(&out, "%s\n", row.Destination)
 		}
 	}
 	return []byte(out.String())
@@ -50,7 +50,7 @@ func parseEditorList(data []byte, rows []Preview, twoColumns bool) ([]string, in
 		}
 		row := remainingRows[0]
 		remainingRows = remainingRows[1:]
-		values, err := quotedFields(line)
+		values, err := editorFields(line, row, twoColumns)
 		expected := 1
 		if twoColumns {
 			expected = 2
@@ -73,6 +73,34 @@ func parseEditorList(data []byte, rows []Preview, twoColumns bool) ([]string, in
 		destinations[idx] = destination
 	}
 	return destinations, -1, nil
+}
+
+// editorFields accepts the current unquoted fixed-column format and the old
+// quoted format. In source+target mode the known source name disambiguates
+// spaces in both columns without making the user edit shell-style quotes.
+func editorFields(line string, row Preview, twoColumns bool) ([]string, error) {
+	values, quotedErr := quotedFields(line)
+	if quotedErr == nil {
+		return values, nil
+	}
+	if !twoColumns {
+		if line == "" {
+			return nil, quotedErr
+		}
+		return []string{line}, nil
+	}
+	if !strings.HasPrefix(line, row.Item.Source) {
+		return nil, fmt.Errorf("source column was changed")
+	}
+	remainder := line[len(row.Item.Source):]
+	if len(remainder) == 0 || (remainder[0] != ' ' && remainder[0] != '\t') {
+		return nil, fmt.Errorf("source column was changed")
+	}
+	destination := strings.TrimLeft(remainder, " \t")
+	if destination == "" {
+		return nil, fmt.Errorf("empty destination")
+	}
+	return []string{row.Item.Source, destination}, nil
 }
 
 func quotedFields(line string) ([]string, error) {

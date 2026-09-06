@@ -6,6 +6,9 @@ Author=f4 Team
 [Strings]
 VisRen.Menu=&Visual File Renamer
 VisRen.Command.Open.Desc=Visually rename the selected files and directories
+VisRen.ConfigMenu=Visual File Renamer
+VisRen.ConfigDescription=Configure the Visual File Renamer editor
+VisRen.ConfigTitle=Visual File Renamer settings
 VisRen.Title=Visual File Renamer
 VisRen.HostUnsupported=This F4 host does not provide the VisRen UI bridge.
 VisRen.LocalOnly=VisRen works only on a local file panel.

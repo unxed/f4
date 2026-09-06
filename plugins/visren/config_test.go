@@ -15,14 +15,17 @@ func TestSaveConfigKeepsPreviousFileOnSuccessiveAtomicSave(t *testing.T) {
 	vfs.CustomConfigDir = dir
 	defer func() { vfs.CustomConfigDir = oldDir }()
 
-	if err := saveConfig(config{WordDiv: "first"}); err != nil {
+	if got := loadConfig(); got.EditorFormat != editorFormatSourceTarget {
+		t.Fatalf("default EditorFormat = %q, want %q", got.EditorFormat, editorFormatSourceTarget)
+	}
+	if err := saveConfig(config{WordDiv: "first", EditorFormat: editorFormatTargetsOnly}); err != nil {
 		t.Fatal(err)
 	}
-	if err := saveConfig(config{WordDiv: "second"}); err != nil {
+	if err := saveConfig(config{WordDiv: "second", EditorFormat: editorFormatTargetsOnly}); err != nil {
 		t.Fatal(err)
 	}
-	if got := loadConfig().WordDiv; got != "second" {
-		t.Fatalf("loaded WordDiv = %q, want second", got)
+	if got := loadConfig(); got.WordDiv != "second" || got.EditorFormat != editorFormatTargetsOnly {
+		t.Fatalf("loaded config = %#v, want WordDiv second and targets-only format", got)
 	}
 	if leftovers, err := filepath.Glob(filepath.Join(dir, ".visren-*.tmp")); err != nil {
 		t.Fatal(err)

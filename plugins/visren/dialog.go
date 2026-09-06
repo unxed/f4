@@ -840,12 +840,7 @@ func (d *Dialog) askEditorColumns() {
 	if d.editorButton.IsDisabled() {
 		return
 	}
-	choice := vtui.ShowMessageOn(d, " "+tr("VisRen.Editor", "In editor")+" ", tr("VisRen.EditorFormat", "Editor list format:"), editorColumnChoices())
-	choice.OnResult = func(code int) {
-		if code == 0 || code == 1 {
-			d.openEditor(code == 0, nil, 0)
-		}
-	}
+	d.openEditor(loadConfig().EditorFormat == editorFormatSourceTarget, nil, 0)
 }
 
 func editorColumnChoices() []string {

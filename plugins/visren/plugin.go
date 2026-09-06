@@ -25,10 +25,10 @@ type PanelHost interface {
 }
 
 type Plugin struct {
-	mu           sync.Mutex
-	undoDir      string
-	undoLog      []RenamePair
-	registration vfs.Registration
+	mu            sync.Mutex
+	undoDir       string
+	undoLog       []RenamePair
+	registrations []vfs.Registration
 }
 
 func (p *Plugin) Init(api vfs.HostAPI) error {
@@ -46,8 +46,19 @@ func (p *Plugin) Init(api vfs.HostAPI) error {
 		if err != nil {
 			return fmt.Errorf("VisRen: register command: %w", err)
 		}
+		configRegistration, err := contributions.RegisterPluginCommand(vfs.PluginCommand{
+			ID:          "visren.configure",
+			Location:    vfs.PluginCommandConfig,
+			Label:       tr("VisRen.ConfigMenu", "Visual File Renamer"),
+			Description: tr("VisRen.ConfigDescription", "Configure the Visual File Renamer editor"),
+			Run:         p.configure,
+		})
+		if err != nil {
+			registration.Unregister()
+			return fmt.Errorf("VisRen: register configuration command: %w", err)
+		}
 		p.mu.Lock()
-		p.registration = registration
+		p.registrations = []vfs.Registration{registration, configRegistration}
 		p.mu.Unlock()
 		return nil
 	}
@@ -57,17 +68,42 @@ func (p *Plugin) Init(api vfs.HostAPI) error {
 
 func (p *Plugin) Close() error {
 	p.mu.Lock()
-	registration := p.registration
-	p.registration = nil
+	registrations := p.registrations
+	p.registrations = nil
 	p.undoDir, p.undoLog = "", nil
 	p.mu.Unlock()
-	if registration != nil {
-		registration.Unregister()
+	for index := len(registrations) - 1; index >= 0; index-- {
+		if registrations[index] != nil {
+			registrations[index].Unregister()
+		}
 	}
 	return nil
 }
 
 func (p *Plugin) GetName() string { return "VisRen" }
+
+func (p *Plugin) configure(app vfs.App) {
+	cfg := loadConfig()
+	labels := editorColumnChoices()
+	if cfg.EditorFormat == editorFormatSourceTarget {
+		labels[0] = "√ " + labels[0]
+	} else {
+		labels[1] = "√ " + labels[1]
+	}
+	app.Menu(tr("VisRen.ConfigTitle", "Visual File Renamer settings"), labels, func(index int) {
+		if index != 0 && index != 1 {
+			return
+		}
+		if index == 0 {
+			cfg.EditorFormat = editorFormatSourceTarget
+		} else {
+			cfg.EditorFormat = editorFormatTargetsOnly
+		}
+		if err := saveConfig(cfg); err != nil {
+			app.Message(tr("VisRen.ConfigTitle", "Visual File Renamer settings"), err.Error(), []string{"&Ok"})
+		}
+	})
+}
 
 func tr(key, fallback string) string {
 	value := vtui.Msg(key)
