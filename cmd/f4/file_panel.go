@@ -2676,6 +2676,23 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	fp.drawNameScrollBrackets(scr)
 	fp.drawScrollBar(scr)
 
+	var totSize int64
+	var totCount int
+	var totFiles int
+	var totDirs int
+	for _, e := range fp.entries {
+		if e.Name == ".." {
+			continue
+		}
+		totCount++
+		if e.IsDir {
+			totDirs++
+		} else {
+			totFiles++
+			totSize += e.Size
+		}
+	}
+
 	if AppConfig.ShowPanelFileInfo && fp.Y2-fp.Y1+1 > 6 {
 		p := vtui.NewPainter(scr)
 		attrBox := vtui.Palette[ColPanelBox]
@@ -2713,6 +2730,11 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 			}
 
 			rightStr := fmt.Sprintf("%s  %s", sizeStr, dateStr)
+			if _, isLocal := fp.vfs.(*vfs.OSVFS); isLocal {
+				if info, ok := fsInfo(fp.vfs.GetPath()); ok {
+					rightStr = fmt.Sprintf("(%d/%d) %s  %s", totFiles, totDirs, formatBytes(info.Free), rightStr)
+				}
+			}
 			nameStr := e.Name
 
 			if fp.vfs != nil && fp.vfs.GetPath() == "net://" {
@@ -2747,22 +2769,14 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	var selSize int64
 	var selFiles int
 	var selDirs int
-	var totSize int64
-	var totCount int
 
 	for _, e := range fp.entries {
-		if e.Name != ".." {
-			totCount++
-			if !e.IsDir {
-				totSize += e.Size
-			}
-			if e.Selected {
-				if e.IsDir {
-					selDirs++
-				} else {
-					selFiles++
-					selSize += e.Size
-				}
+		if e.Name != ".." && e.Selected {
+			if e.IsDir {
+				selDirs++
+			} else {
+				selFiles++
+				selSize += e.Size
 			}
 		}
 	}

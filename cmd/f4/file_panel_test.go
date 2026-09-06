@@ -729,6 +729,28 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 		t.Errorf("Expected bottom bar to contain 'folders:1', got: %q", result)
 	}
 
+	var status strings.Builder
+	for x := 0; x < 80; x++ {
+		cell := scr.GetCell(x, 22)
+		if cell.Char != 0 && cell.Char != ' ' {
+			if _, err := status.WriteRune(vtui.CellBaseRune(cell.Char)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	statusResult := status.String()
+	if !strings.Contains(statusResult, "(2/1)") {
+		t.Errorf("Expected status line to contain file/directory counts, got: %q", statusResult)
+	}
+	info, ok := fsInfo(fp.vfs.GetPath())
+	if !ok {
+		t.Fatal("fsInfo failed for the local test directory")
+	}
+	freeSpace := strings.ReplaceAll(formatBytes(info.Free), " ", "")
+	if !strings.Contains(statusResult, freeSpace) {
+		t.Errorf("Expected status line to contain free space %q, got: %q", freeSpace, statusResult)
+	}
+
 	// Hiding the separate file-information line must not hide the selection
 	// summary drawn directly on the panel's bottom border.
 	AppConfig.ShowPanelFileInfo = false
