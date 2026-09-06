@@ -38,7 +38,7 @@ require (
 	github.com/unxed/sevenzip v0.0.0-20260826171606-a536eac9d163
 	github.com/unxed/tar v0.1.128
 	github.com/unxed/vtinput v0.1.8
-	github.com/unxed/vtui v0.1.318
+	github.com/unxed/vtui v0.1.319
 	github.com/unxed/zip v0.1.131
 	github.com/unxed/zipper v0.1.153
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -185,4 +185,4 @@ replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.8
 // replace github.com/unxed/colorer4go => ../../../dev/colorer4go
 // replace github.com/unxed/vtui => ../../../dev/vtui
 
-replace github.com/neurlang/wayland => github.com/unxed/wayland v0.0.0-20260904142929-d13d49067138
+replace github.com/neurlang/wayland => github.com/unxed/wayland v0.0.0-20260906012106-4096eafdd7f4
