@@ -4727,6 +4727,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 	// Capture visible offset for preloading before we destroy the current engine
 	visStart := ev.engine.VisualToLogical(ev.ScrollTopRow, 0)
 	createNewTarget := ev.createNewTarget
+	filePath := ev.filePath
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		// The writer reads the unchanged pieces straight out of the mapping.
@@ -4739,7 +4740,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 
 		capabilities := ev.vfs.GetCapabilities()
 		// Capture original metadata to restore it after atomic rename
-		originalStat, statErr := ev.vfs.Stat(ctx.Context, ev.filePath)
+		originalStat, statErr := ev.vfs.Stat(ctx.Context, filePath)
 		if createNewTarget {
 			var destinationErr error
 			switch {
@@ -4771,12 +4772,13 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		// A colon denotes an NTFS alternate stream only for a local OS VFS.
 		// Treating cloud:// as an ADS used to bypass staging and overwrite remote
 		// objects directly on Windows.
-		useTemp := !identityPreservingWrite && (!isLocalOSVFS(ev.vfs) || !isAlternateDataStream(ev.filePath))
+		useTemp := !identityPreservingWrite && (!isLocalOSVFS(ev.vfs) || !isAlternateDataStream(filePath))
 		tempPath := ""
+		finalFilePath := filePath
 		var f io.WriteCloser
 		var err error
 		if useTemp {
-			tempPath, err = editorTempSibling(ev.vfs, ev.filePath)
+			tempPath, err = editorTempSibling(ev.vfs, filePath)
 		}
 
 		// A file system that can assemble a file out of pieces of another
@@ -4788,7 +4790,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		if err == nil {
 			if patcher, ok := ev.vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !ev.utf8BOM && !createNewTarget && !fullWrite {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
-					perr := patcher.PatchInPlace(ctx.Context, ev.filePath, pieces)
+					perr := patcher.PatchInPlace(ctx.Context, filePath, pieces)
 					if perr == nil {
 						saved = true
 						// This one writes through to the destination itself, so
@@ -4809,7 +4811,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		if !saved && err == nil {
 			if delta, isDelta := ev.vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 && !ev.utf8BOM && !fullWrite {
 				if pieces, ok := patchPiecesFromTable(ev.pt); ok {
-					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), ev.filePath, tempPath, pieces)
+					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), filePath, tempPath, pieces)
 					if perr == nil {
 						saved = true
 					} else {
@@ -4824,7 +4826,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		} else if useTemp && err == nil {
 			f, err = ev.vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, false), tempPath)
 		} else if err == nil {
-			f, err = ev.vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, !createNewTarget), ev.filePath)
+			f, err = ev.vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, !createNewTarget), filePath)
 		}
 		if err == nil && useTemp && !saved {
 			// os.Create-style APIs commonly start at 0666/umask (often 0644).
@@ -4946,7 +4948,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 				oldBackingClosed = true
 			}
 			renameCtx := vfs.WithDestinationOverwrite(ctx.Context, !createNewTarget)
-			if err := ev.vfs.Rename(renameCtx, tempPath, ev.filePath); err != nil {
+			if err := ev.vfs.Rename(renameCtx, tempPath, filePath); err != nil {
 				// Do not remove the staged path after an uncertain/partial rename.
 				// A remote provider may have committed the move and merely lost the
 				// response (or failed while removing its backup). In that state the
@@ -4968,8 +4970,8 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 			// Drive moves the new temp object into place and deletes the old ID).
 			// Persist the VFS-remapped canonical path so reopen/history survives a
 			// later session instead of retaining the deleted object URI.
-			if canonical, absErr := ev.vfs.Abs(ev.filePath); absErr == nil && canonical != "" {
-				ev.filePath = canonical
+			if canonical, absErr := ev.vfs.Abs(filePath); absErr == nil && canonical != "" {
+				finalFilePath = canonical
 			}
 		}
 
@@ -4978,12 +4980,12 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		// user-visible partial save and must not be silently ignored.
 		var metadataErr error
 		if statErr == nil {
-			if attrErr := ev.vfs.SetAttributes(ctx.Context, ev.filePath, originalStat); attrErr != nil && isLocalOSVFS(ev.vfs) {
+			if attrErr := ev.vfs.SetAttributes(ctx.Context, finalFilePath, originalStat); attrErr != nil && isLocalOSVFS(ev.vfs) {
 				metadataErr = attrErr
 			}
 		}
 
-		newFile, err := ev.vfs.Open(ctx.Context, ev.filePath)
+		newFile, err := ev.vfs.Open(ctx.Context, finalFilePath)
 		var newPt *piecetable.PieceTable
 		var newEngine *textlayout.WrapEngine
 		var newBuf *AsyncBuffer
@@ -5054,6 +5056,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 
 		ctx.RunOnUI(func() {
 			ev.saving = false
+			ev.filePath = finalFilePath
 			if err == nil {
 				vtui.DebugLog("EDITOR: Successfully saved %s (%d bytes)", ev.filePath, ev.pt.Size())
 			}
