@@ -127,6 +127,68 @@ Help.Box = foreground:#102030 | background:#405060
 	}
 }
 
+// Help draws its scrollbar inside its own window, so it must not follow the
+// shared Scrollbar key that is tuned for lists sitting on the dialog
+// background (issue #261).
+func TestColors_HelpScrollbarOverrideReachesHelpViewScrollbar(t *testing.T) {
+	oldPalette := append([]uint64(nil), vtui.Palette...)
+	oldTheme := vtui.ThemePalette
+	oldCfg := AppConfig
+	t.Cleanup(func() {
+		vtui.Palette = oldPalette
+		vtui.ThemePalette = oldTheme
+		AppConfig = oldCfg
+	})
+
+	AppConfig.EnforceColorCorrection = false
+	vtui.SetDefaultPalette()
+	SetDefaultF4Palette()
+	InitColors(ParseIni(strings.NewReader(`[farcolors]
+Scrollbar = foreground:#C0C0C0 | background:#0000A0
+Help.Scrollbar = foreground:#102030 | background:#405060
+`)))
+
+	engine := vtui.NewHelpEngine(&memoryHelpVFS{files: map[string]string{}})
+	lines := make([]string, 40)
+	for i := range lines {
+		lines[i] = "help line"
+	}
+	engine.AddTopic(&vtui.HelpTopic{Name: "Long", Lines: lines})
+	view := vtui.NewHelpView(engine, "Long")
+	view.SetPosition(0, 0, 30, 8)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(32, 10)
+	view.Show(scr)
+
+	// The scrollbar runs down the right padding column of the help window.
+	cell := scr.GetCell(28, 1)
+	if cell.Char != vtui.ScrollUpArrow {
+		t.Fatalf("no scrollbar drawn at the right padding column: got %q", rune(cell.Char))
+	}
+	if got, want := cell.Attributes, vtui.Palette[vtui.ColHelpScrollbar]; got != want {
+		t.Fatalf("help scrollbar attribute = %#x, want %#x", got, want)
+	}
+	if cell.Attributes == vtui.Palette[vtui.ColScrollBar] {
+		t.Fatal("help scrollbar still follows the shared Scrollbar color")
+	}
+}
+
+// Table.Box was renamed to Table.Separator; existing farcolors.ini files must
+// keep working.
+func TestColors_TableBoxAliasStillMapsToTableSeparator(t *testing.T) {
+	sepIdx, ok := colorMap["Table.Separator"]
+	if !ok {
+		t.Fatal("Table.Separator is not mapped")
+	}
+	aliasIdx, ok := colorMap["Table.Box"]
+	if !ok {
+		t.Fatal("the legacy Table.Box key no longer resolves")
+	}
+	if sepIdx != aliasIdx {
+		t.Fatalf("Table.Box maps to slot %d, want %d", aliasIdx, sepIdx)
+	}
+}
+
 func TestColors_ExportColors_Grouped(t *testing.T) {
 	vtui.SetDefaultPalette()
 	SetDefaultF4Palette()
@@ -155,6 +217,7 @@ func TestColors_ExportColors_Grouped(t *testing.T) {
 	// Check that group comments are present
 	expectedHeaders := []string{
 		"# Panel",
+		"# Lists and tables",
 		"# Dialog",
 		"# Warning message",
 		"# Menu",
@@ -172,7 +235,7 @@ func TestColors_ExportColors_Grouped(t *testing.T) {
 		}
 	}
 	for _, note := range []string{
-		"Table.Box colors table column separators and tree lines",
+		"Table.Separator colors the column separators of a table",
 		"Scrollbar is the shared fallback for generic lists and menus",
 	} {
 		if !strings.Contains(content, note) {
