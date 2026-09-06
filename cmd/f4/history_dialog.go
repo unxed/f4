@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strings"
 	"unicode"
 
@@ -31,6 +32,12 @@ type historySearch struct {
 	timeMode        int
 	showDirPrefix   bool
 	dirPrefixLen    int
+	// pinSlotOf turns on the pinned area (issue #407): marked entries are
+	// listed above the chronological ones and carry the digit of the far2l
+	// bookmark slot they own instead of the plain lock star. It reports -1
+	// for a record with no slot. Folder history sets it; the command and
+	// view/edit histories leave it nil and keep their flat list.
+	pinSlotOf       func(HistoryRecord) int
 	onLockToggled   func()
 	onTimesChanged  func(int)
 	onPrefixChanged func(int)
@@ -70,17 +77,34 @@ func newHistorySearch(menu *vtui.VMenu, items []HistoryRecord, hint string) *his
 
 func (s *historySearch) applyFilter() {
 	items := make([]vtui.MenuItem, 0, len(s.all))
+	var pinned []vtui.MenuItem
 	// History providers keep the newest entry first. Dialogs show chronological
 	// order instead: the oldest entry at the top and the newest at the bottom.
 	for i := len(s.all) - 1; i >= 0; i-- {
 		text := s.displayText(s.all[i])
 		matched, _ := historySearchMatch(text, s.query, s.prefixOnly)
-		if matched {
-			items = append(items, vtui.MenuItem{
-				Text:     text,
-				UserData: historySearchEntry{index: i},
-			})
+		if !matched {
+			continue
 		}
+		item := vtui.MenuItem{Text: text, UserData: historySearchEntry{index: i}}
+		// Pinned folders get their own area above the chronological list, so
+		// they stay one glance away however long the history grows (#407).
+		if s.pinSlotOf != nil && s.isPinned(i) {
+			pinned = append(pinned, item)
+			continue
+		}
+		items = append(items, item)
+	}
+	if len(pinned) > 0 {
+		// Slot order first — that is the order of the digit hotkeys — then
+		// the folders pinned past the tenth, which have no digit to sort by.
+		sort.SliceStable(pinned, func(a, b int) bool {
+			return s.pinRank(pinned[a]) < s.pinRank(pinned[b])
+		})
+		if len(items) > 0 {
+			pinned = append(pinned, vtui.MenuItem{Separator: true})
+		}
+		items = append(pinned, items...)
 	}
 	s.menu.Items = items
 	s.menu.ItemCount = len(items)
@@ -102,6 +126,62 @@ func (s *historySearch) applyFilter() {
 	// view, which places a long history at the bottom of the viewport.
 	s.menu.SetSelectPos(len(items) - 1)
 	vtui.FrameManager.Redraw()
+}
+
+// isPinned reports whether the record at index belongs in the pinned area:
+// the user marked it, or it owns a bookmark slot set elsewhere (from the
+// panel with Ctrl+Shift+N, or in a bookmarks.ini shared with far2l).
+func (s *historySearch) isPinned(index int) bool {
+	if index < 0 || index >= len(s.all) {
+		return false
+	}
+	if s.all[index].Lock {
+		return true
+	}
+	return s.pinSlotOf != nil && s.pinSlotOf(s.all[index]) >= 0
+}
+
+// pinRank orders the pinned area: slot digit first, everything past the tenth
+// pin last, in the chronological order applyFilter produced it in.
+func (s *historySearch) pinRank(item vtui.MenuItem) int {
+	unslotted := len(BookmarkSet{})
+	entry, ok := item.UserData.(historySearchEntry)
+	if !ok || s.pinSlotOf == nil || entry.index < 0 || entry.index >= len(s.all) {
+		return unslotted
+	}
+	if slot := s.pinSlotOf(s.all[entry.index]); slot >= 0 {
+		return slot
+	}
+	return unslotted
+}
+
+// marker is the character drawn in the leading column: the bookmark digit for
+// a pinned folder that owns one of the ten slots, a star for one that is
+// marked but ran out of digits, a blank for an ordinary entry.
+func (s *historySearch) marker(index int) rune {
+	if index < 0 || index >= len(s.all) {
+		return ' '
+	}
+	if s.pinSlotOf != nil {
+		if slot := s.pinSlotOf(s.all[index]); slot >= 0 && slot <= 9 {
+			return rune('0' + slot)
+		}
+	}
+	if s.all[index].Lock {
+		return '*'
+	}
+	return ' '
+}
+
+// refreshKeepingSelection re-groups the list after a pin changed and leaves
+// the cursor on the same record — applyFilter on its own drops it on the
+// newest entry, which would throw the user out of the pinned area.
+func (s *historySearch) refreshKeepingSelection() {
+	index, _, ok := s.selected()
+	s.applyFilter()
+	if ok {
+		s.selectOriginalIndex(index)
+	}
 }
 
 func (s *historySearch) defaultMenuText(text string) string {
@@ -445,6 +525,12 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 			break
 		}
 		item := s.menu.Items[itemIdx]
+		if item.Separator {
+			// VMenu already drew the divider between the pinned area and the
+			// chronological list; painting a blank item row over it would
+			// rub it out again.
+			continue
+		}
 		text := item.Text
 		if entry, ok := item.UserData.(historySearchEntry); ok && entry.index >= 0 && entry.index < len(s.all) {
 			text = s.displayText(s.all[entry.index])
@@ -467,14 +553,14 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 			commandWidth -= secondaryWidth + 2
 		}
 
-		lockChar := uint64(' ')
-		if entry, ok := s.menu.Items[itemIdx].UserData.(historySearchEntry); ok && s.all[entry.index].Lock {
-			lockChar = uint64('*')
+		markChar := uint64(' ')
+		if entry, ok := item.UserData.(historySearchEntry); ok {
+			markChar = uint64(s.marker(entry.index))
 		}
 
 		cells := make([]vtui.CharInfo, 0, len([]rune(text))+1)
 		if s.supportsLocks {
-			cells = append(cells, vtui.CharInfo{Char: lockChar, Attributes: baseAttr})
+			cells = append(cells, vtui.CharInfo{Char: markChar, Attributes: baseAttr})
 		}
 		for i, r := range []rune(text) {
 			attr := baseAttr

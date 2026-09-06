@@ -67,6 +67,9 @@ func TestFolderHistorySuppressionIsBoundToItsAsyncNavigation(t *testing.T) {
 }
 
 func TestFolderHistoryNavigationAndMenuDoNotReorderHistory(t *testing.T) {
+	// The folder history dialog folds the bookmark table in (#407); keep it
+	// pointed at a temp profile so the test cannot see or touch a real one.
+	setupPortableIni(t, "0")
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(80, 25)
 	vtui.FrameManager.Init(scr)

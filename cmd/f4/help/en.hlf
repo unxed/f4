@@ -702,6 +702,20 @@ Besides the cursor keys, the following keyboard shortcuts are available:
 
   Copy the selected path to the clipboard           Ctrl+C, Ctrl+Ins
 
+    Folder bookmarks live in this list too. Pinning a folder moves it
+into its own area at the top of the dialog, above the visited ones, and
+hands it one of the ten bookmark slots: RightCtrl+digit then reaches it
+from the panel, Alt+digit from here. A pinned folder survives Del and
+Ctrl+R and is never pushed out of the history by newer entries.
+
+  Pin or unpin the selected folder                  Ins
+  Go to the folder pinned in slot 0..9              Alt+0 .. Alt+9
+
+    The slots are far2l's own, kept in settings/bookmarks.ini, so a file
+shared with far2l keeps working in both programs, and the Bookmarks
+dialog (F9, Commands) edits the very same ten. An eleventh pinned folder
+stays pinned without a digit and is marked with a star instead.
+
 @MediaInfo
 $MediaInfo plugin
     The built-in MediaInfo plugin reads common media containers directly

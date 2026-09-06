@@ -86,6 +86,20 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		return
 	}
 	richFolders, folderHP := loadFolderHistoryRecords(vtui.GlobalHistoryProvider)
+	// Folder bookmarks and folder history are one list now (#407). Fold the
+	// bookmark table in before the emptiness check, so a profile whose only
+	// saved folders are bookmarks still opens the dialog, and hand the marks
+	// their digits straight away — a folder locked before this existed picks
+	// up a hotkey the first time the dialog is opened.
+	var pins *folderPins
+	if folderHP != nil {
+		if pins = loadFolderPins(); pins != nil {
+			richFolders = mergeFolderPins(richFolders, pins)
+			if pins.reconcile(richFolders) {
+				pins.save()
+			}
+		}
+	}
 	h := extractNames(richFolders)
 	if len(richFolders) == 0 {
 		vtui.ShowMessage(Msg("History.Title"), Msg("History.EmptyFolders"), []string{Msg("vtui.Ok")})
@@ -99,16 +113,32 @@ func actionFoldersHistory(pf *PanelsFrame) {
 	search.supportsLocks = folderHP != nil
 	search.showTimes = true
 	search.timeMode = AppConfig.HistoryShowTimes[historyTypeFolders]
+	if pins != nil {
+		search.pinSlotOf = func(rec HistoryRecord) int { return pins.slotOf(rec.Name) }
+	}
 	search.onTimesChanged = func(mode int) {
 		AppConfig.HistoryShowTimes[historyTypeFolders] = mode
 		SaveConfig()
 	}
-	search.onLockToggled = func() {
+
+	// persist writes the folder list back and keeps the bookmark table in
+	// step with it: pinning an entry claims a digit, unpinning gives it back.
+	persist := func() {
+		richFolders = append([]HistoryRecord(nil), search.all...)
+		h = extractNames(richFolders)
 		if folderHP != nil {
-			richFolders = append([]HistoryRecord(nil), search.all...)
-			h = extractNames(richFolders)
 			saveFolderHistoryRecords(folderHP, richFolders)
+		} else if vtui.GlobalHistoryProvider != nil {
+			vtui.GlobalHistoryProvider.SaveHistory("folders", h)
 		}
+		if pins != nil && pins.reconcile(richFolders) {
+			pins.save()
+		}
+	}
+	search.onLockToggled = func() {
+		persist()
+		// The row has just moved into or out of the pinned area.
+		search.refreshKeepingSelection()
 	}
 	search.applyFilter()
 
@@ -151,6 +181,21 @@ func actionFoldersHistory(pf *PanelsFrame) {
 			return false
 		}
 
+		// Alt+digit reaches the pinned folders by their slot digit, the same
+		// table RightCtrl+digit uses from the panel — that hotkey cannot get
+		// through while this dialog is on top of the frame stack (#407).
+		if pins != nil && alt && !shift &&
+			e.VirtualKeyCode >= vtinput.VK_0 && e.VirtualKeyCode <= vtinput.VK_9 {
+			if path := pins.slotAt(int(e.VirtualKeyCode - vtinput.VK_0)); path != "" {
+				search.cleanup()
+				menu.Close()
+				if targetPanel := pf.getActivePanel(); targetPanel != nil {
+					pf.NavigateToPath(targetPanel, path)
+				}
+			}
+			return true
+		}
+
 		// Ctrl+R: drop entries whose path no longer exists on disk (far2l).
 		if e.VirtualKeyCode == vtinput.VK_R && ctrl && !alt && !shift {
 			confirmAndPruneMissingFolderHistory(&h, &richFolders, folderHP, search, menu)
@@ -186,13 +231,7 @@ func actionFoldersHistory(pf *PanelsFrame) {
 		if (e.VirtualKeyCode == vtinput.VK_DELETE || e.VirtualKeyCode == vtinput.VK_BACK) && shift {
 			// Delete item
 			if search.deleteSelected() {
-				richFolders = append([]HistoryRecord(nil), search.all...)
-				h = extractNames(richFolders)
-				if folderHP != nil {
-					saveFolderHistoryRecords(folderHP, richFolders)
-				} else {
-					vtui.GlobalHistoryProvider.SaveHistory("folders", h)
-				}
+				persist()
 			}
 			if len(search.all) == 0 {
 				search.cleanup()

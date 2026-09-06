@@ -141,6 +141,9 @@ func TestActionFoldersHistory_WiresHint(t *testing.T) {
 
 func TestActionFoldersHistoryInsertPersistsLock(t *testing.T) {
 	initHistoryTestScreen(t)
+	// Ins now also claims a folder bookmark slot (#407), so the bookmark
+	// table has to resolve inside a temp profile, not the developer's own.
+	setupPortableIni(t, "0")
 	hp := &F4HistoryProvider{
 		path: filepath.Join(t.TempDir(), "history.json"),
 		data: map[string][]string{"folders": {"C:\\newest", "C:\\older"}},
