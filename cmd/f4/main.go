@@ -16,7 +16,34 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
+	"golang.org/x/term"
 )
+
+// startupDirEnv carries the directory f4 was called from to the process that
+// draws the panels. That process cannot ask itself: the GUI restarts detached
+// and the daemon is spawned by the client, and a Dock start would answer with
+// the bundle's own directory.
+const startupDirEnv = "F4_STARTUP_DIR"
+
+// rememberStartupDir records the working directory, but only for a start from a
+// terminal. It must run before checkAndDetach and before the daemon is spawned:
+// both hand the next process /dev/null on stdin. An inherited value wins.
+func rememberStartupDir() {
+	if os.Getenv(startupDirEnv) != "" {
+		return
+	}
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return
+	}
+	if dir, err := os.Getwd(); err == nil {
+		_ = os.Setenv(startupDirEnv, dir)
+	}
+}
+
+// startupDir is that directory; empty means the panels keep the restored paths.
+func startupDir() string {
+	return os.Getenv(startupDirEnv)
+}
 
 // SelectedTTYBackend holds the user-chosen or auto-detected console renderer name ("ansi" or "winapi").
 var SelectedTTYBackend string
@@ -84,6 +111,7 @@ func sudoStartupMode(args []string, askpassParent bool) (dispatcher string, askp
 
 func main() {
 	vtui.AppName = "f4"
+	rememberStartupDir()
 	configureF4DebugLogPath(GetF4ConfigDir())
 	if archivePath, archiveKind, found, err := parseUpdateHelperArgs(os.Args[1:]); found {
 		if err != nil {
@@ -731,6 +759,9 @@ func SetupUI() {
 	if len(states) > 0 {
 		applyWorkspaceSession(panels, states[0], width, height, AppConfig.SavePanelPaths)
 	}
+	// The startup directory outranks the restored paths. A client attaching to a
+	// running daemon brings its own instead -- see attachPayload.
+	applyStartupDir(panels, startupDir())
 	vtui.FrameManager.Push(panels)
 	if len(states) > 1 {
 		// AddScreenBackground inserts immediately after the active workspace;

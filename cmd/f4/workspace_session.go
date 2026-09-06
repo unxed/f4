@@ -282,6 +282,41 @@ func validSessionViewMode(mode int) ViewMode {
 	return viewMode
 }
 
+// navigatePanelTo moves a panel to path. What does not open as an object of its
+// own (an archive, a provider resource) stays a plain path in the current VFS;
+// a URI without its plugin is not even that.
+func navigatePanelTo(pf *PanelsFrame, panel *FileSystemPanel, path string) {
+	if path == "" || pf.NavigateToPath(panel, path) {
+		return
+	}
+	if vfs.IsURIPath(path) {
+		return
+	}
+	// A path that no longer exists leaves the VFS where it was, so re-reading
+	// the directory would only redraw the one already on screen.
+	if err := panel.vfs.SetPath(path); err != nil {
+		vtui.DebugLog("SESSION: cannot open %s: %v", path, err)
+		return
+	}
+	panel.ReadDirectory()
+}
+
+// applyStartupDir opens dir in both panels, so `cd dir && f4` shows dir and not
+// session.ini's paths. It runs after applyWorkspaceSession and therefore wins;
+// an empty dir changes nothing.
+func applyStartupDir(pf *PanelsFrame, dir string) {
+	if pf == nil || dir == "" {
+		return
+	}
+	for _, p := range pf.panels {
+		if fsp, ok := p.(*FileSystemPanel); ok && fsp != nil {
+			navigatePanelTo(pf, fsp, dir)
+			// The pending cursor names a file of the directory just left.
+			fsp.pendingSelection = ""
+		}
+	}
+}
+
 func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, height int, restorePaths bool) {
 	if pf == nil {
 		return
@@ -306,18 +341,9 @@ func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, 
 	left.sortReverse, right.sortReverse = state.Left.SortReverse, state.Right.SortReverse
 	left.useSortGroups, right.useSortGroups = state.Left.UseSortGroups, state.Right.UseSortGroups
 
-	navigate := func(panel *FileSystemPanel, path string) {
-		if path == "" || pf.NavigateToPath(panel, path) {
-			return
-		}
-		if !vfs.IsURIPath(path) {
-			panel.vfs.SetPath(path)
-			panel.ReadDirectory()
-		}
-	}
 	if restorePaths {
-		navigate(left, state.Left.Path)
-		navigate(right, state.Right.Path)
+		navigatePanelTo(pf, left, state.Left.Path)
+		navigatePanelTo(pf, right, state.Right.Path)
 		left.pendingSelection, right.pendingSelection = state.Left.Cursor, state.Right.Cursor
 	}
 
