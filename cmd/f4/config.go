@@ -225,6 +225,8 @@ type F4Config struct {
 	EditorCrosshair          bool
 	UseExternalEditor        bool
 	ExternalEditorCommand    string
+	ExternalEditorConsole    string
+	ExternalEditorGUI        string
 	EditorAutodetectCodePage bool
 	EditorHighlighter        string
 	EditorSyntaxAnimation    bool
@@ -387,6 +389,8 @@ var AppConfig = F4Config{
 	EditorCrosshair:          false,
 	UseExternalEditor:        false,
 	ExternalEditorCommand:    "",
+	ExternalEditorConsole:    "",
+	ExternalEditorGUI:        "",
 	EditorAutodetectCodePage: true,
 	EditorHighlighter:        "Chroma",
 	EditorSyntaxAnimation:    false,
@@ -734,6 +738,8 @@ func LoadConfig() {
 	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"
 	AppConfig.ExternalEditorCommand = ini.GetString("Editor", "ExternalEditorCommand", "")
+	AppConfig.ExternalEditorConsole = ini.GetString("Editor", "ExternalEditorCommandConsole", AppConfig.ExternalEditorCommand)
+	AppConfig.ExternalEditorGUI = ini.GetString("Editor", "ExternalEditorCommandGUI", AppConfig.ExternalEditorCommand)
 	plugStr := ini.GetString("Plugins", "List", "")
 	if plugStr != "" {
 		AppConfig.RegisteredPlugins = strings.Split(plugStr, "|")
@@ -920,7 +926,13 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "Crosshair = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorCrosshair])
 	fmt.Fprintf(&sb, "TabSize = %d\n", AppConfig.EditorTabSize)
 	fmt.Fprintf(&sb, "UseExternalEditor = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.UseExternalEditor])
-	fmt.Fprintf(&sb, "ExternalEditorCommand = %s\n", AppConfig.ExternalEditorCommand)
+	legacyExternalEditorCommand := AppConfig.ExternalEditorConsole
+	if legacyExternalEditorCommand == "" {
+		legacyExternalEditorCommand = AppConfig.ExternalEditorCommand
+	}
+	fmt.Fprintf(&sb, "ExternalEditorCommand = %s\n", legacyExternalEditorCommand)
+	fmt.Fprintf(&sb, "ExternalEditorCommandConsole = %s\n", AppConfig.ExternalEditorConsole)
+	fmt.Fprintf(&sb, "ExternalEditorCommandGUI = %s\n", AppConfig.ExternalEditorGUI)
 	fmt.Fprintf(&sb, "AutodetectCodePage = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorAutodetectCodePage])
 	fmt.Fprintf(&sb, "MemoryMap = %d\n", map[bool]int{true: 1, false: 0}[AppConfig.EditorMemoryMap])
 	fmt.Fprintf(&sb, "Highlighter = %s\n", AppConfig.EditorHighlighter)

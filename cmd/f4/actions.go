@@ -646,7 +646,7 @@ func actionSortMenuForPanel(pf *PanelsFrame, fsp *FileSystemPanel) {
 
 func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64) {
 	rememberViewerEditorHistory(v, path, historyModeEdit)
-	cmdStr := AppConfig.ExternalEditorCommand
+	cmdStr := configuredExternalEditorCommand()
 	if cmdStr == "" {
 		cmdStr = os.Getenv("EDITOR")
 		if cmdStr == "" {
@@ -792,6 +792,21 @@ func actionEditFileExternal(pf *PanelsFrame, v vfs.VFS, path string, size int64)
 			pf.RefreshAll()
 		}
 	})
+}
+
+// configuredExternalEditorCommand selects the editor configured for the
+// renderer currently hosting f4. The old single command remains a fallback
+// so existing settings continue to work after the split configuration is
+// introduced.
+func configuredExternalEditorCommand() string {
+	if probeGUIBackend() != "" {
+		if AppConfig.ExternalEditorGUI != "" {
+			return AppConfig.ExternalEditorGUI
+		}
+	} else if AppConfig.ExternalEditorConsole != "" {
+		return AppConfig.ExternalEditorConsole
+	}
+	return AppConfig.ExternalEditorCommand
 }
 
 func runExternalEditor(pf *PanelsFrame, cmdStr, path string) {
@@ -2699,29 +2714,32 @@ func actionEditorSettings(pf *PanelsFrame) {
 		checkRows = len(checkCaptions)
 	}
 
-	// The external editor row is a checkbox, a label and an input field on
-	// one line. How much of it the two captions take depends on the
-	// language, so the field is sized from what they leave rather than from
-	// a constant that happens to fit in English: a translation whose
-	// captions are wider (Bengali, for one) pushed the field onto the
-	// dialog frame. When even a usable field does not fit, the row is
-	// stacked over three lines instead, and the dialog grows to match.
+	// The external editor has separate commands for the console and GUI. How
+	// much of each row the captions take depends on the language, so the
+	// fields are sized from what the captions leave rather than from a
+	// constant that happens to fit in English.
 	captionWidth := func(key string) int {
 		clean, _, _ := vtui.ParseAmpersandString(Msg(key))
 		return vtui.StringWidth(clean)
 	}
 	const minExternalCommandWidth = 20
 	extCheckWidth := 4 + captionWidth("EditorSettings.UseExternalEditor")
-	extLabelWidth := captionWidth("EditorSettings.ExternalCommand")
-	// The row spends, left to right: the checkbox, its right margin, the
-	// layout's spacing, the label's left margin, the label, its right
-	// margin, the spacing again; whatever is left over is the field.
+	extConsoleLabelWidth := captionWidth("EditorSettings.ExternalCommandConsole")
+	extGUILabelWidth := captionWidth("EditorSettings.ExternalCommandGUI")
+	// The first row spends, left to right: the checkbox, its right margin,
+	// the layout's spacing, the label's left margin, the label, its right
+	// margin, the spacing again; whatever is left over is the field. The
+	// second row has no checkbox, so it gets the full dialog width.
 	const extRowSpacing = 1
-	extCmdWidth := (width - 4) - extCheckWidth - 1 - extRowSpacing - 2 - extLabelWidth - 1 - extRowSpacing
-	stackExternalRow := extCmdWidth < minExternalCommandWidth
-	if stackExternalRow {
+	extConsoleCmdWidth := (width - 4) - extCheckWidth - 1 - extRowSpacing - 2 - extConsoleLabelWidth - 1 - extRowSpacing
+	extGUICmdWidth := (width - 4) - extGUILabelWidth - 1 - extRowSpacing
+	stackExternalRows := extConsoleCmdWidth < minExternalCommandWidth || extGUICmdWidth < minExternalCommandWidth
+	extCmdWidth := extConsoleCmdWidth
+	if stackExternalRows {
 		extCmdWidth = width - 4
-		height += 2
+		height += 4
+	} else {
+		height++
 	}
 	dlg := vtui.NewCenteredDialog(width, height, Msg("EditorSettings.Title"))
 	dlg.ShowClose = true
@@ -2829,10 +2847,19 @@ func actionEditorSettings(pf *PanelsFrame) {
 		chkExtEdit.State = 1
 	}
 
-	editExtCmd := vtui.NewEdit(0, 0, extCmdWidth, AppConfig.ExternalEditorCommand)
-	editExtCmd.PathHintsEnabled = true
-	attachHistory(editExtCmd, externalEditorHistoryID)
-	lblExtCmd := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommand"), editExtCmd)
+	editExtCmdConsole := vtui.NewEdit(0, 0, extCmdWidth, AppConfig.ExternalEditorConsole)
+	editExtCmdConsole.PathHintsEnabled = true
+	attachHistory(editExtCmdConsole, externalEditorHistoryID)
+	lblExtCmdConsole := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommandConsole"), editExtCmdConsole)
+	editExtCmdGUI := vtui.NewEdit(0, 0, func() int {
+		if stackExternalRows {
+			return extCmdWidth
+		}
+		return extGUICmdWidth
+	}(), AppConfig.ExternalEditorGUI)
+	editExtCmdGUI.PathHintsEnabled = true
+	attachHistory(editExtCmdGUI, externalEditorHistoryID)
+	lblExtCmdGUI := vtui.NewLabel(0, 0, Msg("EditorSettings.ExternalCommandGUI"), editExtCmdGUI)
 
 	btnOk := vtui.NewButton(0, 0, Msg("vtui.Ok"))
 	btnOk.IsDefault = true
@@ -2860,11 +2887,14 @@ func actionEditorSettings(pf *PanelsFrame) {
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
 	dlg.AddItem(chkExtEdit)
-	dlg.AddItem(lblExtCmd)
-	dlg.AddItem(editExtCmd)
+	dlg.AddItem(lblExtCmdConsole)
+	dlg.AddItem(editExtCmdConsole)
+	dlg.AddItem(lblExtCmdGUI)
+	dlg.AddItem(editExtCmdGUI)
 	dlg.AddItem(btnOk)
 	dlg.AddItem(btnCancel)
-	dlg.AddLink(chkExtEdit, editExtCmd, vtui.LinkEnableIfChecked)
+	dlg.AddLink(chkExtEdit, editExtCmdConsole, vtui.LinkEnableIfChecked)
+	dlg.AddLink(chkExtEdit, editExtCmdGUI, vtui.LinkEnableIfChecked)
 
 	// 3. Layout Configuration
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
@@ -2922,16 +2952,22 @@ func actionEditorSettings(pf *PanelsFrame) {
 	vbox.Add(lblMask, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
-	if stackExternalRow {
+	if stackExternalRows {
 		vbox.Add(chkExtEdit, vtui.Margins{Top: 1}, vtui.AlignLeft)
-		vbox.Add(lblExtCmd, vtui.Margins{}, vtui.AlignLeft)
-		vbox.Add(editExtCmd, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(lblExtCmdConsole, vtui.Margins{}, vtui.AlignLeft)
+		vbox.Add(editExtCmdConsole, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(lblExtCmdGUI, vtui.Margins{Top: 1}, vtui.AlignLeft)
+		vbox.Add(editExtCmdGUI, vtui.Margins{}, vtui.AlignFill)
 	} else {
-		rowExt := vtui.NewHBoxLayout(0, 0, width-4, 1)
-		rowExt.Add(chkExtEdit, vtui.Margins{Right: 1}, vtui.AlignLeft)
-		rowExt.Add(lblExtCmd, vtui.Margins{Right: 1, Left: 2}, vtui.AlignLeft)
-		rowExt.Add(editExtCmd, vtui.Margins{}, vtui.AlignFill)
-		vbox.Add(rowExt, vtui.Margins{Top: 1}, vtui.AlignFill)
+		rowExtConsole := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		rowExtConsole.Add(chkExtEdit, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		rowExtConsole.Add(lblExtCmdConsole, vtui.Margins{Right: 1, Left: 2}, vtui.AlignLeft)
+		rowExtConsole.Add(editExtCmdConsole, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(rowExtConsole, vtui.Margins{Top: 1}, vtui.AlignFill)
+		rowExtGUI := vtui.NewHBoxLayout(0, 0, width-4, 1)
+		rowExtGUI.Add(lblExtCmdGUI, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		rowExtGUI.Add(editExtCmdGUI, vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(rowExtGUI, vtui.Margins{}, vtui.AlignFill)
 	}
 
 	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
@@ -2973,8 +3009,12 @@ func actionEditorSettings(pf *PanelsFrame) {
 		AppConfig.EditorSyntaxAnimation = chkSyntaxAnimation.State == 1
 		AppConfig.EditorAutoCompleteMask = editMask.GetText()
 		AppConfig.UseExternalEditor = chkExtEdit.State == 1
-		AppConfig.ExternalEditorCommand = editExtCmd.GetText()
-		commitHistory(editExtCmd, AppConfig.ExternalEditorCommand)
+		AppConfig.ExternalEditorConsole = editExtCmdConsole.GetText()
+		AppConfig.ExternalEditorGUI = editExtCmdGUI.GetText()
+		// Keep the legacy key useful for older f4 versions.
+		AppConfig.ExternalEditorCommand = AppConfig.ExternalEditorConsole
+		commitHistory(editExtCmdConsole, AppConfig.ExternalEditorConsole)
+		commitHistory(editExtCmdGUI, AppConfig.ExternalEditorGUI)
 		SaveConfig()
 		dlg.Close()
 	}

@@ -779,7 +779,8 @@ EditorSettings.Crosshair=Show cross&hair
 EditorSettings.ColorerBg=Colorer &background
 EditorSettings.SyntaxAnimation=Animate syntax &highlighting
 EditorSettings.UseExternalEditor=Use e&xternal editor
-EditorSettings.ExternalCommand=E&xternal command:
+EditorSettings.ExternalCommandConsole=Console e&xternal command:
+EditorSettings.ExternalCommandGUI=GUI e&xternal command:
 
 ViewerSettings.Title= Viewer settings
 ViewerSettings.AutodetectCodePage=Autodetect code &page

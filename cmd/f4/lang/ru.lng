@@ -767,7 +767,8 @@ EditorSettings.Crosshair=Показывать к&рест в редакторе
 EditorSettings.ColorerBg=Фон &Colorer
 EditorSettings.SyntaxAnimation=Анимировать &подсветку синтаксиса
 EditorSettings.UseExternalEditor=В&нешний редактор
-EditorSettings.ExternalCommand=Ко&манда запуска:
+EditorSettings.ExternalCommandConsole=Команда запуска в &консоли:
+EditorSettings.ExternalCommandGUI=Команда запуска в &GUI:
 
 ViewerSettings.Title= Настройки вьювера
 ViewerSettings.AutodetectCodePage=Автоопределять кодовую &страницу
