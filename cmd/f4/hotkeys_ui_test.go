@@ -325,3 +325,76 @@ func TestActionHotkeyConfigUnbindUsesDraftUntilSave(t *testing.T) {
 		t.Fatalf("saved removal = %q, want None", got)
 	}
 }
+
+// TestNativeOnlyActionsStayAssignable guards issue #72: a user whose host
+// swallows a framework-owned chord must still be able to put the action on a
+// key of their own from the hotkey settings dialog.
+func TestNativeOnlyActionsStayAssignable(t *testing.T) {
+	previous := GlobalHotkeysMgr
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	hm := NewHotkeyManager("")
+	GlobalHotkeysMgr = hm
+	rows := buildHotkeyRows(hm)
+
+	for _, tc := range []struct {
+		action    string
+		nativeKey string
+	}{
+		{"Workspace.Next", "Ctrl+Tab"},
+		{"Workspace.Previous", "Ctrl+Shift+Tab"},
+		{"Workspace.List", "F12"},
+	} {
+		var native, assignable int
+		for _, row := range rows {
+			if row.Action != tc.action {
+				continue
+			}
+			switch {
+			case row.Key == tc.nativeKey && !row.Editable:
+				native++
+			case row.Key == "" && row.Editable:
+				assignable++
+			default:
+				t.Errorf("%s: unexpected row %+v", tc.action, row)
+			}
+		}
+		if native != 1 {
+			t.Errorf("%s: read-only %s rows = %d, want 1", tc.action, tc.nativeKey, native)
+		}
+		if assignable != 1 {
+			t.Errorf("%s: assignable rows = %d, want 1", tc.action, assignable)
+		}
+	}
+}
+
+// TestConfiguredBindingReplacesTheAssignableRow keeps the ordinary case
+// unchanged: once an action carries a configurable binding it no longer needs
+// the empty row.
+func TestConfiguredBindingReplacesTheAssignableRow(t *testing.T) {
+	previous := GlobalHotkeysMgr
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	hm := NewHotkeyManager("")
+	GlobalHotkeysMgr = hm
+	hm.Bind("Common", "CtrlShiftT", "Workspace.Next")
+
+	var empty, bound int
+	for _, row := range buildHotkeyRows(hm) {
+		if row.Action != "Workspace.Next" {
+			continue
+		}
+		if row.Key == "" {
+			empty++
+		}
+		if row.Key == "Ctrl+Shift+T" && row.Editable && row.Area == "Common" {
+			bound++
+		}
+	}
+	if bound != 1 {
+		t.Errorf("configured Ctrl+Shift+T rows = %d, want 1", bound)
+	}
+	if empty != 0 {
+		t.Errorf("empty rows = %d, want 0 once the action is bound", empty)
+	}
+}

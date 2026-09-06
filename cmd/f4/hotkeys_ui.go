@@ -215,6 +215,128 @@ func selectedHotkeyRow(table *vtui.Table, rows []hotkeyRow) (hotkeyRow, bool) {
 	return selectedHotkeyRowAt(table, rows, table.SelectPos)
 }
 
+// buildHotkeyRows assembles the shortcut inventory the hotkey settings dialog
+// shows: one editable row per configurable binding, one read-only row per
+// framework-owned native chord, and one editable row for every action that has
+// no configurable binding yet.
+func buildHotkeyRows(draft *HotkeyManager) []hotkeyRow {
+	if draft == nil {
+		return nil
+	}
+
+	var hkRows []hotkeyRow
+	activeBinds := draft.GetActiveBindings()
+	actions := GetActions()
+	// Only configurable bindings count as assigned here. Native chords are
+	// documented below but deliberately stay out of this set.
+	assignedActions := make(map[string]bool)
+
+	for area, binds := range activeBinds {
+		for key, binding := range binds {
+			parts := strings.SplitN(binding, ":", 2)
+			actName := parts[0]
+			cond := ""
+			if len(parts) == 2 {
+				cond = parts[1]
+			}
+			act, ok := GetAction(actName)
+			if !ok {
+				act = Action{Name: actName, Label: actName, Description: "Unknown action"}
+			}
+			hkRows = append(hkRows, hotkeyRow{
+				Action:    act.Name,
+				Label:     plainLabel(act.DisplayLabel()),
+				Area:      area,
+				Key:       FormatKeyForUI(key),
+				RawKey:    key,
+				Editable:  true,
+				Condition: cond,
+				Desc:      act.DisplayDescription(),
+			})
+			assignedActions[strings.ToLower(act.Name)] = true
+		}
+	}
+
+	// Native shortcuts are handled by the focused frame rather than the
+	// configurable hotkey manager. They still belong in this inventory so
+	// the dialog describes every shortcut the user can press. Keep these
+	// rows read-only: assigning them would create a misleading binding that
+	// cannot replace the frame-owned behavior.
+	//
+	// They must not mark the action as assigned, though. An action whose only
+	// shortcut is native -- Next Workspace on Ctrl+Tab -- would otherwise get
+	// no editable row at all from the loop below, and both Assign and Enter
+	// gate on hotkeyRow.Editable, so the dialog offered no way to give it a
+	// second key. That is exactly the case a user hits when the host swallows
+	// the native chord: Ctrl+Tab switches browser tabs when f4 runs in a
+	// browser, and iTerm2 over ssh does not deliver it either (issue #72).
+	// Dispatch already honors such a binding -- MacroManager.Filter resolves
+	// it through configuredHotkeyAction and RunAction, with Common as the
+	// fallback area -- so only this inventory stood in the way. The read-only
+	// native row stays alongside the editable one.
+	for _, act := range actions {
+		seenNative := make(map[string]bool)
+		for _, spec := range act.NativeKeys {
+			key, cond, _ := strings.Cut(spec, ":")
+			key = strings.TrimSpace(key)
+			displayKey := FormatKeyForUI(key)
+			if key == "" || seenNative[displayKey] {
+				continue
+			}
+			if draft.GetAction(act.Area, key) != "" {
+				continue
+			}
+			seenNative[displayKey] = true
+			hkRows = append(hkRows, hotkeyRow{
+				Action:    act.Name,
+				Label:     plainLabel(act.DisplayLabel()),
+				Area:      act.Area,
+				Key:       displayKey,
+				RawKey:    key,
+				Condition: cond,
+				Desc:      act.DisplayDescription(),
+			})
+		}
+	}
+
+	for _, act := range actions {
+		if !assignedActions[strings.ToLower(act.Name)] {
+			hkRows = append(hkRows, hotkeyRow{
+				Action:    act.Name,
+				Label:     plainLabel(act.DisplayLabel()),
+				Area:      act.Area, // unassigned, shown under the action's native area
+				Key:       "",
+				Editable:  true,
+				Condition: "",
+				Desc:      act.DisplayDescription(),
+			})
+		}
+	}
+
+	sort.Slice(hkRows, func(i, j int) bool {
+		if hkRows[i].Area != hkRows[j].Area {
+			// Rows without an area (shouldn't happen) go last
+			if hkRows[i].Area == "" {
+				return false
+			}
+			if hkRows[j].Area == "" {
+				return true
+			}
+			return hkRows[i].Area < hkRows[j].Area
+		}
+		if hkRows[i].Label != hkRows[j].Label {
+			return hkRows[i].Label < hkRows[j].Label
+		}
+		// One action can now contribute both a native row and the empty
+		// row that offers an extra key. Order that pair deterministically,
+		// chord first, so the empty row reads as "and you may add one here"
+		// instead of appearing above the shortcut it complements.
+		return hkRows[i].Key > hkRows[j].Key
+	})
+
+	return hkRows
+}
+
 func actionHotkeyConfig(pf *PanelsFrame) {
 	w, h := 120, 48
 	if vtui.FrameManager != nil {
@@ -250,97 +372,8 @@ func actionHotkeyConfig(pf *PanelsFrame) {
 	var hkRows []hotkeyRow
 
 	refresh := func() {
-		hkRows = nil
 		rows = nil
-
-		activeBinds := draft.GetActiveBindings()
-		actions := GetActions()
-		assignedActions := make(map[string]bool)
-
-		for area, binds := range activeBinds {
-			for key, binding := range binds {
-				parts := strings.SplitN(binding, ":", 2)
-				actName := parts[0]
-				cond := ""
-				if len(parts) == 2 {
-					cond = parts[1]
-				}
-				act, ok := GetAction(actName)
-				if !ok {
-					act = Action{Name: actName, Label: actName, Description: "Unknown action"}
-				}
-				hkRows = append(hkRows, hotkeyRow{
-					Action:    act.Name,
-					Label:     plainLabel(act.DisplayLabel()),
-					Area:      area,
-					Key:       FormatKeyForUI(key),
-					RawKey:    key,
-					Editable:  true,
-					Condition: cond,
-					Desc:      act.DisplayDescription(),
-				})
-				assignedActions[strings.ToLower(act.Name)] = true
-			}
-		}
-
-		// Native shortcuts are handled by the focused frame rather than the
-		// configurable hotkey manager. They still belong in this inventory so
-		// the dialog describes every shortcut the user can press. Keep these
-		// rows read-only: assigning them would create a misleading binding that
-		// cannot replace the frame-owned behavior.
-		for _, act := range actions {
-			seenNative := make(map[string]bool)
-			for _, spec := range act.NativeKeys {
-				key, cond, _ := strings.Cut(spec, ":")
-				key = strings.TrimSpace(key)
-				displayKey := FormatKeyForUI(key)
-				if key == "" || seenNative[displayKey] {
-					continue
-				}
-				if draft.GetAction(act.Area, key) != "" {
-					continue
-				}
-				seenNative[displayKey] = true
-				hkRows = append(hkRows, hotkeyRow{
-					Action:    act.Name,
-					Label:     plainLabel(act.DisplayLabel()),
-					Area:      act.Area,
-					Key:       displayKey,
-					RawKey:    key,
-					Condition: cond,
-					Desc:      act.DisplayDescription(),
-				})
-				assignedActions[strings.ToLower(act.Name)] = true
-			}
-		}
-
-		for _, act := range actions {
-			if !assignedActions[strings.ToLower(act.Name)] {
-				hkRows = append(hkRows, hotkeyRow{
-					Action:    act.Name,
-					Label:     plainLabel(act.DisplayLabel()),
-					Area:      act.Area, // unassigned, shown under the action's native area
-					Key:       "",
-					Editable:  true,
-					Condition: "",
-					Desc:      act.DisplayDescription(),
-				})
-			}
-		}
-
-		sort.Slice(hkRows, func(i, j int) bool {
-			if hkRows[i].Area != hkRows[j].Area {
-				// Rows without an area (shouldn't happen) go last
-				if hkRows[i].Area == "" {
-					return false
-				}
-				if hkRows[j].Area == "" {
-					return true
-				}
-				return hkRows[i].Area < hkRows[j].Area
-			}
-			return hkRows[i].Label < hkRows[j].Label
-		})
+		hkRows = buildHotkeyRows(draft)
 
 		for _, r := range hkRows {
 			rows = append(rows, r)
