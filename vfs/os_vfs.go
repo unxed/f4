@@ -494,7 +494,7 @@ func (f *osFileWrapper) RefreshSize(ctx context.Context) (int64, error) {
 	if f.File == nil {
 		return f.Size(), os.ErrInvalid
 	}
-	info, err := f.File.Stat()
+	info, err := f.Stat()
 	if err != nil {
 		return f.Size(), err
 	}

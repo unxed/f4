@@ -170,10 +170,6 @@ func pluginActionDefaultShortcut(name string) string {
 	return ""
 }
 
-func pluginMenuItemShortcut(item PluginMenuItem) string {
-	return pluginActionShortcut(item.ActionName)
-}
-
 func assignPluginHotkey(menu *vtui.VMenu, index int, actionName string) {
 	hm := GlobalHotkeysMgr
 	if hm == nil || vtui.FrameManager == nil || !isPluginActionName(actionName) {
