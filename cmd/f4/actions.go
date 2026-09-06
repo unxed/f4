@@ -3244,6 +3244,26 @@ func actionFindDuplicates(pf *PanelsFrame) {
 	})
 }
 
+// elementWidth returns the number of columns an element occupies at its
+// current position.
+func elementWidth(el vtui.UIElement) int {
+	x1, _, x2, _ := el.GetPosition()
+	return x2 - x1 + 1
+}
+
+// checkboxColumnWidth returns the width of the widest checkbox, i.e. the
+// width a shared column has to be for a second column placed after it
+// to line up across rows.
+func checkboxColumnWidth(items ...*vtui.Checkbox) int {
+	w := 0
+	for _, cb := range items {
+		if cw := elementWidth(cb); cw > w {
+			w = cw
+		}
+	}
+	return w
+}
+
 func boolToCheckboxState(value bool) int {
 	if value {
 		return 1
@@ -3309,10 +3329,16 @@ func actionFindFile(pf *PanelsFrame) {
 	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editText, vtui.Margins{Top: 1}, vtui.AlignFill)
 
+	// Each row is its own HBox, so the right checkbox would otherwise
+	// land wherever its left neighbour ends and the column would
+	// zigzag with the caption lengths (#903). Pad every left-column
+	// cell to the widest left caption so the right column starts at
+	// one X in every row, whatever language the captions come in.
+	leftColumn := checkboxColumnWidth(chkCase, chkRegexp, chkFolders)
 	optionsRow := func(left, right *vtui.Checkbox) *vtui.HBoxLayout {
 		row := vtui.NewHBoxLayout(0, 0, width-4, 1)
 		row.Spacing = 8
-		row.Add(left, vtui.Margins{}, vtui.AlignTop)
+		row.Add(left, vtui.Margins{Right: leftColumn - elementWidth(left)}, vtui.AlignTop)
 		row.Add(right, vtui.Margins{}, vtui.AlignTop)
 		return row
 	}

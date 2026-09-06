@@ -197,3 +197,54 @@ func TestLayout_FileAssociationEditor_AllLanguages(t *testing.T) {
 		return nil
 	})
 }
+
+func TestLayout_FindFileOptionsColumns_AllLanguages(t *testing.T) {
+	vtui.SetDefaultPalette()
+
+	packs := LoadAllLanguagePacks()
+	if len(packs) == 0 {
+		t.Skip("no language packs bundled")
+	}
+
+	// The Find File dialog lays its six option checkboxes out as three
+	// two-column rows. The right column must start at the same X in
+	// every row (#903), and the captions must still fit the dialog.
+	build := func() vtui.Container {
+		const width, height = 78, 20
+		dlg := vtui.NewDialog(0, 0, width-1, height-1, Msg("FindFile.Title"))
+
+		chkCase := vtui.NewCheckbox(0, 0, Msg("FindFile.CaseSensitive"), false)
+		chkWhole := vtui.NewCheckbox(0, 0, Msg("FindFile.WholeWords"), false)
+		chkRegexp := vtui.NewCheckbox(0, 0, Msg("FindFile.Regexp"), false)
+		chkNotContaining := vtui.NewCheckbox(0, 0, Msg("FindFile.NotContaining"), false)
+		chkFolders := vtui.NewCheckbox(0, 0, Msg("FindFile.Folders"), false)
+		chkSymlinks := vtui.NewCheckbox(0, 0, Msg("FindFile.Symlinks"), false)
+		for _, cb := range []*vtui.Checkbox{chkCase, chkWhole, chkRegexp, chkNotContaining, chkFolders, chkSymlinks} {
+			dlg.AddItem(cb)
+		}
+
+		vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
+		leftColumn := checkboxColumnWidth(chkCase, chkRegexp, chkFolders)
+		optionsRow := func(left, right *vtui.Checkbox) *vtui.HBoxLayout {
+			row := vtui.NewHBoxLayout(0, 0, width-4, 1)
+			row.Spacing = 8
+			row.Add(left, vtui.Margins{Right: leftColumn - elementWidth(left)}, vtui.AlignTop)
+			row.Add(right, vtui.Margins{}, vtui.AlignTop)
+			return row
+		}
+		vbox.Add(optionsRow(chkCase, chkWhole), vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(optionsRow(chkRegexp, chkNotContaining), vtui.Margins{}, vtui.AlignFill)
+		vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{}, vtui.AlignFill)
+		vbox.Apply()
+
+		rightX := func(cb *vtui.Checkbox) int { x1, _, _, _ := cb.GetPosition(); return x1 }
+		want := rightX(chkWhole)
+		for _, cb := range []*vtui.Checkbox{chkNotContaining, chkSymlinks} {
+			if got := rightX(cb); got != want {
+				t.Errorf("right column misaligned: %q starts at %d, want %d", cb.GetText(), got, want)
+			}
+		}
+		return dlg
+	}
+	vtui.AssertLayoutInLanguages(t, packs, build)
+}
