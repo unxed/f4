@@ -94,6 +94,21 @@ func fixedPanelSortChecked(index int, mode SortMode) bool {
 	return ok && fsp.sortMode == mode
 }
 
+func fixedPanelSortGroupsChecked(index int) bool {
+	_, fsp, ok := fixedRegularPanel(index)
+	return ok && fsp.useSortGroups
+}
+
+func runFixedPanelSortGroups(index int) bool {
+	pf, fsp, ok := fixedRegularPanel(index)
+	if !ok {
+		return false
+	}
+	fsp.ToggleSortGroups()
+	pf.updateMenuCheckmarks()
+	return true
+}
+
 func runFixedPanelView(index int, mode ViewMode) bool {
 	pf, _, ok := fixedRegularPanel(index)
 	if !ok {
@@ -232,6 +247,23 @@ func init() {
 				Handler: func() bool { return runFixedPanelSort(side.index, sortMode.mode) },
 			})
 		}
+
+		RegisterAction(Action{
+			Name:         "Panel." + side.id + ".SortUseGroups",
+			Area:         "Shell",
+			Label:        "Use Sort Groups",
+			LabelKey:     "Menu.SortUseGroups",
+			Description:  fmt.Sprintf("Group the %s panel by the configured sort groups", strings.ToLower(side.id)),
+			DescKey:      "Action.Panel.SortUseGroups.Desc",
+			MenuPath:     side.menuPath,
+			HideFromMenu: true,
+			Visible: func() bool {
+				_, _, ok := fixedRegularPanel(side.index)
+				return ok
+			},
+			Checked: func() bool { return fixedPanelSortGroupsChecked(side.index) },
+			Handler: func() bool { return runFixedPanelSortGroups(side.index) },
+		})
 
 		for _, aiView := range fixedAIViewActionSpecs {
 			aiView := aiView

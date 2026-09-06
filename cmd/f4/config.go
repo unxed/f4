@@ -1185,7 +1185,7 @@ func applyWheelSettings() {
 }
 
 func createDefaultHighlightIni(path string) {
-	content := `# User highlight rules.
+	content := `# User highlight rules and sort groups.
 #
 # f4 applies file highlighting rules from both the active Color Style (Theme)
 # and this file. By default, rules in this file have higher priority.
@@ -1194,7 +1194,40 @@ func createDefaultHighlightIni(path string) {
 # Default groups (Hidden, Executables, Directories) are already defined
 # by the active Color Style, so you don't need to duplicate them unless
 # you specifically want to override the theme's colors.
+#
+# [SortGroup_N] sections below define sort groups. They accept the same
+# matching keys as a highlight rule (Mask, IncludeAttributes,
+# ExcludeAttributes, SizeAbove/SizeBelow, DateAfter/DateBefore) and are
+# used only when a panel has "Use sort groups" switched on: files are then
+# clustered by group first and sorted by the current sort mode inside each
+# group. Group decides where a cluster goes; sections that share a number
+# form one group, and files matching no group land after all of them.
 
+[SortGroup_1]
+Name = Executables
+Group = 0
+IncludeAttributes = executable
+ExcludeAttributes = directory
+
+[SortGroup_2]
+Name = Executables (by name)
+Group = 0
+Mask = *.exe, *.com, *.bat, *.cmd, *.ps1, *.sh
+
+[SortGroup_3]
+Name = Archives
+Group = 1
+Mask = *.zip, *.7z, *.rar, *.tar, *.tgz, *.gz, *.bz2, *.xz, *.zst
+
+[SortGroup_4]
+Name = Images
+Group = 2
+Mask = *.png, *.jpg, *.jpeg, *.gif, *.bmp, *.webp, *.svg, *.ico, *.tif, *.tiff
+
+[SortGroup_5]
+Name = Media
+Group = 3
+Mask = *.mp3, *.flac, *.ogg, *.wav, *.mp4, *.mkv, *.avi, *.webm, *.mov
 `
 	_ = os.WriteFile(path, []byte(content), 0600)
 	_ = os.Chmod(path, 0600)

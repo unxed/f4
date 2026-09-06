@@ -124,3 +124,71 @@ Mask = *.zip, *.tar, *.gz, *.7z
 NormalColor = foreground:#AD7FA8
 SelectedColor = foreground:#AD7FA8 | background:#0000A0
 ```
+
+---
+
+## 7. Sort Groups
+
+Sort groups reuse this file and this rule syntax to answer a different
+question: not *what colour is a file*, but *where on the panel does it belong*.
+A panel with sort groups switched on clusters its files by group first and
+applies the current sort mode inside each cluster — "all images together",
+"executables at the top".
+
+### Configuration
+
+Groups are `[SortGroup_N]` sections of the same `highlight.ini`. They accept
+every matching parameter of a highlight rule (`Mask`, `IncludeAttributes`,
+`ExcludeAttributes`, `SizeAbove`, `SizeBelow`, `DateType`, `DateRelative`,
+`DateAfter`, `DateBefore`) and ignore the colour ones. Two keys are specific to
+groups:
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `Name` | String | Label for the group. Defaults to its mask list. |
+| `Group` | Integer | Position of the cluster on the panel. Defaults to the section's position in the file. |
+
+Rules are tried in section order and the first match wins, so a narrow rule
+placed before a broad one carves items out of it. Sections that share a `Group`
+number form a single cluster — that is how a group can match either by
+attribute or by name:
+
+```ini
+[SortGroup_1]
+Name = Executables
+Group = 0
+IncludeAttributes = Executable
+ExcludeAttributes = Directory
+
+[SortGroup_2]
+Name = Executables (by name)
+Group = 0
+Mask = *.exe, *.com, *.bat, *.cmd, *.ps1, *.sh
+
+[SortGroup_3]
+Name = Images
+Group = 2
+Mask = *.png, *.jpg, *.jpeg, *.gif, *.webp
+```
+
+Files that match no group fall into the default group, number `10000`, which
+puts them after every configured cluster. A group meant to sit *below* the
+unclassified files therefore just needs a larger number, e.g. `Group = 20000`.
+
+### Using them
+
+Grouping is a per-panel switch, off by default, and the panel remembers it
+across restarts:
+
+* **Left**/**Right** menu → *Use sort groups*
+* the sort menu (`Ctrl+F12`) → *Use sort groups*
+* action `Panel.SortUseGroups` (and `Panel.Left.SortUseGroups` /
+  `Panel.Right.SortUseGroups`), bindable from the hotkey settings and reachable
+  from the command palette
+
+Two properties are worth knowing. Directories still come first: a group never
+pulls a folder down among the files. And the group order is not flipped by the
+reverse-sort toggle — "executables first" stays first when the name order is
+reversed, only the contents of each cluster turn around. Switching a grouped
+panel to *Unsorted* keeps the filesystem order inside every cluster instead of
+sorting it.

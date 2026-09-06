@@ -1243,12 +1243,16 @@ func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 	if !ok {
 		t.Fatalf("Ctrl+F12 top frame = %T, want *vtui.VMenu", vtui.FrameManager.GetTopFrame())
 	}
-	if len(menu.Items) != 5 {
-		t.Fatalf("sort menu has %d items, want 5", len(menu.Items))
+	// Five sort modes plus the sort-group toggle on the last row.
+	if len(menu.Items) != 6 {
+		t.Fatalf("sort menu has %d items, want 6", len(menu.Items))
+	}
+	if !strings.Contains(menu.Items[5].Text, Msg("Menu.SortUseGroups")) {
+		t.Fatalf("last sort menu row = %q, want the sort-group toggle", menu.Items[5].Text)
 	}
 	panelX1, panelY1, panelX2, panelY2 := fsp.GetPosition()
 	menuX1, menuY1, menuX2, menuY2 := menu.GetPosition()
-	if menuX1+menuX2 != panelX1+panelX2 || menuY1+menuY2 != panelY1+panelY2 {
+	if !menuIsCenteredIn(menuX1, menuY1, menuX2, menuY2, panelX1, panelY1, panelX2, panelY2) {
 		t.Fatalf("sort menu (%d,%d)-(%d,%d) is not centered in panel (%d,%d)-(%d,%d)",
 			menuX1, menuY1, menuX2, menuY2, panelX1, panelY1, panelX2, panelY2)
 	}
@@ -1306,12 +1310,26 @@ func TestPanelsFrame_RightClickHeaderOpensPanelCenteredSortMenu(t *testing.T) {
 	}
 	panelX1, panelY1, panelX2, panelY2 := left.GetPosition()
 	menuX1, menuY1, menuX2, menuY2 := menu.GetPosition()
-	if menuX1+menuX2 != panelX1+panelX2 || menuY1+menuY2 != panelY1+panelY2 {
+	if !menuIsCenteredIn(menuX1, menuY1, menuX2, menuY2, panelX1, panelY1, panelX2, panelY2) {
 		t.Fatalf("context sort menu (%d,%d)-(%d,%d) is not centered in left panel (%d,%d)-(%d,%d)",
 			menuX1, menuY1, menuX2, menuY2, panelX1, panelY1, panelX2, panelY2)
 	}
 	menu.Close()
 	vtui.FrameManager.Pop()
+}
+
+// menuIsCenteredIn allows the half-cell that integer centring cannot avoid: a
+// menu whose height parity differs from the panel's can only sit one row above
+// or below the exact centre.
+func menuIsCenteredIn(menuX1, menuY1, menuX2, menuY2, panelX1, panelY1, panelX2, panelY2 int) bool {
+	offBy := func(menuLow, menuHigh, panelLow, panelHigh int) int {
+		delta := (menuLow + menuHigh) - (panelLow + panelHigh)
+		if delta < 0 {
+			return -delta
+		}
+		return delta
+	}
+	return offBy(menuX1, menuX2, panelX1, panelX2) <= 1 && offBy(menuY1, menuY2, panelY1, panelY2) <= 1
 }
 
 func TestPanelsFrame_RightClickPanelPathOpensDriveMenuForThatPanel(t *testing.T) {

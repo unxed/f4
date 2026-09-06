@@ -563,6 +563,9 @@ type FileSystemPanel struct {
 
 	sortMode    SortMode
 	sortReverse bool
+	// useSortGroups clusters the panel by the [SortGroup_N] rules from
+	// highlight.ini before the sort mode is applied (far's Shift+F11).
+	useSortGroups bool
 
 	lastDirMTime time.Time
 	dirCache     map[dirCacheKey]dirCacheEntry
@@ -842,8 +845,33 @@ func (fp *FileSystemPanel) SetSortMode(mode SortMode) {
 	fp.ReadDirectory()
 }
 
+// SetUseSortGroups switches the sort-group clustering of this panel. Like a
+// sort mode change it goes through ReadDirectory, so the cursor is kept on the
+// same file while the rows move under it.
+func (fp *FileSystemPanel) SetUseSortGroups(use bool) {
+	if fp == nil || fp.useSortGroups == use {
+		return
+	}
+	fp.useSortGroups = use
+	fp.ReadDirectory()
+}
+
+func (fp *FileSystemPanel) ToggleSortGroups() {
+	if fp == nil {
+		return
+	}
+	fp.SetUseSortGroups(!fp.useSortGroups)
+}
+
+// sortGroupsActive reports whether this panel's entries have to be clustered:
+// the panel asked for it and there is at least one configured group.
+func (fp *FileSystemPanel) sortGroupsActive() bool {
+	return fp != nil && fp.useSortGroups && GlobalSortGroups.Configured()
+}
+
 func (fp *FileSystemPanel) sortEntries() {
-	if fp.sortMode == SortUnsorted || len(fp.entries) <= 1 {
+	grouped := fp.sortGroupsActive()
+	if (fp.sortMode == SortUnsorted && !grouped) || len(fp.entries) <= 1 {
 		return
 	}
 
@@ -856,7 +884,17 @@ func (fp *FileSystemPanel) sortEntries() {
 		return nameCollator.CompareString(left, right)
 	}
 
-	sort.Slice(fp.entries, func(i, j int) bool {
+	// Group numbers are resolved once per entry: doing it inside the comparator
+	// would re-run every mask of every rule O(n log n) times.
+	var groups map[*fileEntry]int
+	if grouped {
+		groups = make(map[*fileEntry]int, len(fp.entries))
+		for _, entry := range fp.entries {
+			groups[entry] = GlobalSortGroups.GroupOf(&entry.VFSItem)
+		}
+	}
+
+	less := func(i, j int) bool {
 		ei, ej := fp.entries[i], fp.entries[j]
 
 		// ".." всегда сверху
@@ -867,9 +905,26 @@ func (fp *FileSystemPanel) sortEntries() {
 			return false
 		}
 
-		// Папки всегда сверху
-		if ei.IsDir != ej.IsDir {
+		// Папки всегда сверху. Folders outrank sort groups, as in far: a
+		// group never pulls a directory down among the files. In unsorted
+		// mode nothing is reordered except the grouping itself, so the rule
+		// stays off there exactly as before.
+		if fp.sortMode != SortUnsorted && ei.IsDir != ej.IsDir {
 			return ei.IsDir
+		}
+
+		if grouped {
+			// The group is the next key and, as in far, it is not affected by
+			// the reverse flag: "executables first" must stay first when the
+			// name order is flipped.
+			if gi, gj := groups[ei], groups[ej]; gi != gj {
+				return gi < gj
+			}
+			if fp.sortMode == SortUnsorted {
+				// Grouping an unsorted panel only clusters the rows; the
+				// stable sort below keeps the filesystem order inside a group.
+				return false
+			}
 		}
 
 		cmp := 0
@@ -905,7 +960,15 @@ func (fp *FileSystemPanel) sortEntries() {
 			cmp = -cmp
 		}
 		return cmp < 0
-	})
+	}
+
+	if fp.sortMode == SortUnsorted {
+		// Only reachable with grouping on, where equal rows must not be
+		// shuffled: sort.Slice is not stable, SliceStable is.
+		sort.SliceStable(fp.entries, less)
+		return
+	}
+	sort.Slice(fp.entries, less)
 }
 
 func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {

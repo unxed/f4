@@ -606,6 +606,7 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 		{Text: "&" + Msg("Menu.SortTime"), Command: CmLeftSortTime},
 		{Text: "&" + Msg("Menu.SortSize"), Command: CmLeftSortSize},
 		{Text: "&" + Msg("Menu.SortUnsorted"), Command: CmLeftSortUnsorted},
+		{Text: "&" + Msg("Menu.SortUseGroups"), Command: CmLeftSortGroups},
 		{Separator: true},
 		{Text: Msg("Menu.Left.DriveMenu"), Command: CmLeftDriveMenu, Shortcut: "Alt+F1"},
 		{Separator: true},
@@ -639,6 +640,7 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 		{Text: "&" + Msg("Menu.SortTime"), Command: CmRightSortTime},
 		{Text: "&" + Msg("Menu.SortSize"), Command: CmRightSortSize},
 		{Text: "&" + Msg("Menu.SortUnsorted"), Command: CmRightSortUnsorted},
+		{Text: "&" + Msg("Menu.SortUseGroups"), Command: CmRightSortGroups},
 		{Separator: true},
 		{Text: Msg("Menu.Right.DriveMenu"), Command: CmRightDriveMenu, Shortcut: "Alt+F2"},
 	}}
@@ -704,6 +706,15 @@ func getSortMenuText(current, target SortMode, label string) string {
 	return " " + label
 }
 
+// getToggleMenuText marks an on/off menu row the same way the mode rows are
+// marked, so the side menus stay visually consistent.
+func getToggleMenuText(on bool, label string) string {
+	if on {
+		return "√" + label
+	}
+	return " " + label
+}
+
 var commandToActionName = map[int]string{
 	CmLeftBrief:             "Panel.Left.ViewBrief",
 	CmLeftMedium:            "Panel.Left.ViewMedium",
@@ -718,11 +729,13 @@ var commandToActionName = map[int]string{
 	CmLeftSortTime:          "Panel.Left.SortByTime",
 	CmLeftSortSize:          "Panel.Left.SortBySize",
 	CmLeftSortUnsorted:      "Panel.Left.SortUnsorted",
+	CmLeftSortGroups:        "Panel.Left.SortUseGroups",
 	CmRightSortName:         "Panel.Right.SortByName",
 	CmRightSortExt:          "Panel.Right.SortByExt",
 	CmRightSortTime:         "Panel.Right.SortByTime",
 	CmRightSortSize:         "Panel.Right.SortBySize",
 	CmRightSortUnsorted:     "Panel.Right.SortUnsorted",
+	CmRightSortGroups:       "Panel.Right.SortUseGroups",
 	CmLeftAIContext:         "AI.Left.ViewContext",
 	CmLeftAIChat:            "AI.Left.ViewChat",
 	CmLeftAIOut:             "AI.Left.ViewOut",
@@ -773,11 +786,13 @@ var commandShortcutActionName = map[int]string{
 	CmLeftSortTime:      "Panel.SortByTime",
 	CmLeftSortSize:      "Panel.SortBySize",
 	CmLeftSortUnsorted:  "Panel.SortUnsorted",
+	CmLeftSortGroups:    "Panel.SortUseGroups",
 	CmRightSortName:     "Panel.SortByName",
 	CmRightSortExt:      "Panel.SortByExt",
 	CmRightSortTime:     "Panel.SortByTime",
 	CmRightSortSize:     "Panel.SortBySize",
 	CmRightSortUnsorted: "Panel.SortUnsorted",
+	CmRightSortGroups:   "Panel.SortUseGroups",
 }
 
 func (pf *PanelsFrame) updateMenuCheckmarks() {
@@ -790,13 +805,16 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 
 	lMode, rMode := ViewModeMedium, ViewModeMedium
 	lSort, rSort := SortName, SortName
+	lGroups, rGroups := false, false
 	if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
 		lMode = fsp.viewMode
 		lSort = fsp.sortMode
+		lGroups = fsp.useSortGroups
 	}
 	if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
 		rMode = fsp.viewMode
 		rSort = fsp.sortMode
+		rGroups = fsp.useSortGroups
 	}
 
 	if pf.wide && pf.widePanel == 0 {
@@ -819,6 +837,14 @@ func (pf *PanelsFrame) updateMenuCheckmarks() {
 	}{{SortName, "SortName"}, {SortExt, "SortExt"}, {SortTime, "SortTime"}, {SortSize, "SortSize"}, {SortUnsorted, "SortUnsorted"}} {
 		pf.menuBar.Items[0].SubItems[i+5].Text = getSortMenuText(lSort, item.mode, "&"+Msg("Menu."+item.key))
 		pf.menuBar.Items[4].SubItems[i+5].Text = getSortMenuText(rSort, item.mode, "&"+Msg("Menu."+item.key))
+	}
+
+	// The sort-group toggle sits right after the sort modes; a mock menu bar
+	// built with fewer rows (tests) simply keeps its own text.
+	if len(pf.menuBar.Items[0].SubItems) > 10 && len(pf.menuBar.Items[4].SubItems) > 10 {
+		groupLabel := "&" + Msg("Menu.SortUseGroups")
+		pf.menuBar.Items[0].SubItems[10].Text = getToggleMenuText(lGroups, groupLabel)
+		pf.menuBar.Items[4].SubItems[10].Text = getToggleMenuText(rGroups, groupLabel)
 	}
 
 	// Update shortcuts dynamically from the action registry. Framework-owned
@@ -3581,6 +3607,18 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		}
 		pf.updateMenuCheckmarks()
 		return true
+	case CmLeftSortGroups:
+		if fsp, ok := pf.panels[0].(*FileSystemPanel); ok {
+			fsp.ToggleSortGroups()
+		}
+		pf.updateMenuCheckmarks()
+		return true
+	case CmRightSortGroups:
+		if fsp, ok := pf.panels[1].(*FileSystemPanel); ok {
+			fsp.ToggleSortGroups()
+		}
+		pf.updateMenuCheckmarks()
+		return true
 	case CmSwapPanels:
 		pf.panels[0], pf.panels[1] = pf.panels[1], pf.panels[0]
 		pf.activeIdx = 1 - pf.activeIdx
@@ -3616,6 +3654,12 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case CmSortUnsorted:
 		if fsp := pf.getActivePanel(); fsp != nil {
 			fsp.SetSortMode(SortUnsorted)
+		}
+		pf.updateMenuCheckmarks()
+		return true
+	case CmSortGroups:
+		if fsp := pf.getActivePanel(); fsp != nil {
+			fsp.ToggleSortGroups()
 		}
 		pf.updateMenuCheckmarks()
 		return true

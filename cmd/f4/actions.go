@@ -56,6 +56,9 @@ var (
 	LastLeftSortRev   = false
 	LastRightSortRev  = false
 
+	LastLeftSortGroups  = false
+	LastRightSortGroups = false
+
 	LastShowPanels = true
 	LastShowLeft   = true
 	LastShowRight  = true
@@ -556,17 +559,33 @@ func actionSortMenuForPanel(pf *PanelsFrame, fsp *FileSystemPanel) {
 			Shortcut: entry.shortcut,
 		})
 	}
+
+	// The last row is a toggle rather than a mode, the way far puts "use sort
+	// groups" below the mode list. Its index is len(entries).
+	groupsPrefix := "  "
+	if fsp.useSortGroups {
+		groupsPrefix = "✓ "
+	}
+	menu.AddItem(vtui.MenuItem{
+		Text:     groupsPrefix + Msg("Menu.SortUseGroups"),
+		Shortcut: MenuShortcutsForAction("Shell", "Panel.SortUseGroups"),
+	})
+
 	menu.SetSelectPos(selected)
 	menu.OnAction = func(idx int) {
-		if idx < 0 || idx >= len(entries) {
+		switch {
+		case idx >= 0 && idx < len(entries):
+			fsp.SetSortMode(entries[idx].mode)
+		case idx == len(entries):
+			fsp.ToggleSortGroups()
+		default:
 			return
 		}
-		fsp.SetSortMode(entries[idx].mode)
 		pf.updateMenuCheckmarks()
 		vtui.FrameManager.Redraw()
 	}
 
-	w, h := 36, len(entries)+2
+	w, h := 36, len(entries)+3
 	panelX1, panelY1, panelX2, panelY2 := fsp.GetPosition()
 	panelW := panelX2 - panelX1 + 1
 	panelH := panelY2 - panelY1 + 1

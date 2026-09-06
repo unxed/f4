@@ -97,17 +97,38 @@ func (fh *FileHighlighter) CombineRules() {
 	}
 }
 
+// ruleSection pairs a parsed rule with the ini section it came from, so a
+// caller that needs section-local keys (sort groups read Name and Group) can
+// still reach them after the shared matcher fields have been parsed.
+type ruleSection struct {
+	Section string
+	Rule    HighlightRule
+}
+
 func parseHighlightRules(ini *IniFile) []HighlightRule {
-	var rules []HighlightRule
+	sections := parseRuleSections(ini, "highlight_")
+	rules := make([]HighlightRule, 0, len(sections))
+	for _, section := range sections {
+		rules = append(rules, section.Rule)
+	}
+	return rules
+}
+
+// parseRuleSections reads every "<prefix>N" section into a HighlightRule,
+// ordered by the numeric suffix. Highlighting and sort groups share this
+// parser so both accept the same mask, attribute, size and date keys; the
+// colour keys are simply left empty for rules that do not use them.
+func parseRuleSections(ini *IniFile, prefix string) []ruleSection {
+	var rules []ruleSection
 	var sections []string
 	for secName := range ini.data {
-		if strings.HasPrefix(strings.ToLower(secName), "highlight_") {
+		if strings.HasPrefix(strings.ToLower(secName), prefix) {
 			sections = append(sections, secName)
 		}
 	}
 	sort.Slice(sections, func(i, j int) bool {
-		idxI, _ := strconv.Atoi(strings.TrimPrefix(strings.ToLower(sections[i]), "highlight_"))
-		idxJ, _ := strconv.Atoi(strings.TrimPrefix(strings.ToLower(sections[j]), "highlight_"))
+		idxI, _ := strconv.Atoi(strings.TrimPrefix(strings.ToLower(sections[i]), prefix))
+		idxJ, _ := strconv.Atoi(strings.TrimPrefix(strings.ToLower(sections[j]), prefix))
 		return idxI < idxJ
 	})
 
@@ -209,7 +230,7 @@ func parseHighlightRules(ini *IniFile) []HighlightRule {
 		rule.SelectedStr = ini.GetString(secName, "SelectedColor", "")
 		rule.CursorStr = ini.GetString(secName, "CursorColor", "")
 		rule.SelectedCursorStr = ini.GetString(secName, "SelectedCursorColor", "")
-		rules = append(rules, rule)
+		rules = append(rules, ruleSection{Section: secName, Rule: rule})
 	}
 	return rules
 }

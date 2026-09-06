@@ -1217,6 +1217,23 @@ func init() {
 		}),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.SortUseGroups",
+		Area:        "Shell",
+		Label:       "Use Sort Groups",
+		LabelKey:    "Menu.SortUseGroups",
+		Description: "Group panel entries by the configured sort groups",
+		DescKey:     "Action.Panel.SortUseGroups.Desc",
+		Checked: func() bool {
+			pf := findPanelsFrameAnyScreen()
+			if pf == nil {
+				return false
+			}
+			fsp := pf.getActivePanel()
+			return fsp != nil && fsp.useSortGroups
+		},
+		Handler: withPF(func(pf *PanelsFrame) { vtui.FrameManager.EmitCommand(CmSortGroups, nil) }),
+	})
+	RegisterAction(Action{
 		Name:        "Panel.SortMenu",
 		Area:        "Shell",
 		Label:       "Sort Modes",

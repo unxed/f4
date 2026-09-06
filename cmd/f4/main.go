@@ -670,6 +670,9 @@ func SetupUI() {
 	if _, err := os.Stat(highlightPath); err == nil {
 		highlightIni := LoadIni(highlightPath)
 		GlobalFileHighlighter.LoadFromIni(highlightIni)
+		// Sort groups share the file (and the rule syntax) with highlighting,
+		// the way far keeps both in one dialog. Themes may not define them.
+		GlobalSortGroups.LoadFromIni(highlightIni)
 	}
 
 	// CrashDirFull задаётся рано (см. main()); здесь только повторная
@@ -882,6 +885,7 @@ func LoadSession() {
 	fmt.Sscanf(ini.GetString("Panel/Left", "ViewMode", "0"), "%d", &LastLeftViewMode)
 	fmt.Sscanf(ini.GetString("Panel/Left", "SortMode", "0"), "%d", &LastLeftSortMode)
 	LastLeftSortRev = ini.GetString("Panel/Left", "SortReverse", "0") == "1"
+	LastLeftSortGroups = ini.GetString("Panel/Left", "UseSortGroups", "0") == "1"
 
 	// Восстанавливаем состояние правой панели
 	LastRightPath = ini.GetString("Panel/Right", "Folder", "")
@@ -889,6 +893,7 @@ func LoadSession() {
 	fmt.Sscanf(ini.GetString("Panel/Right", "ViewMode", "0"), "%d", &LastRightViewMode)
 	fmt.Sscanf(ini.GetString("Panel/Right", "SortMode", "0"), "%d", &LastRightSortMode)
 	LastRightSortRev = ini.GetString("Panel/Right", "SortReverse", "0") == "1"
+	LastRightSortGroups = ini.GetString("Panel/Right", "UseSortGroups", "0") == "1"
 
 	// Восстанавливаем глобальное состояние сессии
 	activeStr := ini.GetString("Session", "ActivePanel", "1")
@@ -1071,6 +1076,7 @@ func saveSessionFileWithOptions(path string, savePanelSettings, saveCurrentPanel
 	fmt.Fprintf(&sb, "ViewMode = %d\n", LastLeftViewMode)
 	fmt.Fprintf(&sb, "SortMode = %d\n", LastLeftSortMode)
 	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastLeftSortRev])
+	fmt.Fprintf(&sb, "UseSortGroups = %d\n", map[bool]int{true: 1, false: 0}[LastLeftSortGroups])
 
 	sb.WriteString("\n[Panel/Right]\n")
 	fmt.Fprintf(&sb, "Folder = %s\n", LastRightPath)
@@ -1078,6 +1084,7 @@ func saveSessionFileWithOptions(path string, savePanelSettings, saveCurrentPanel
 	fmt.Fprintf(&sb, "ViewMode = %d\n", LastRightViewMode)
 	fmt.Fprintf(&sb, "SortMode = %d\n", LastRightSortMode)
 	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[LastRightSortRev])
+	fmt.Fprintf(&sb, "UseSortGroups = %d\n", map[bool]int{true: 1, false: 0}[LastRightSortGroups])
 	writeWorkspaceSessions(&sb, LastWorkspaceSessions, LastActiveWorkspace)
 
 	err := os.WriteFile(path, []byte(sb.String()), 0600)

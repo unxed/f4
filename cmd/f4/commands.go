@@ -73,4 +73,9 @@ const (
 	// empty rows with it and keeps it in FrameManager.DisabledCommands so
 	// vtui renders them dimmed and ignores Enter on them.
 	CmBookmarkEmptySlot
+	// Sort-group toggles are appended here rather than next to the other sort
+	// commands so the existing command numbers keep their values.
+	CmSortGroups
+	CmLeftSortGroups
+	CmRightSortGroups
 )

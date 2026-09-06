@@ -9,11 +9,12 @@ import (
 )
 
 type panelSessionState struct {
-	Path        string
-	Cursor      string
-	ViewMode    int
-	SortMode    int
-	SortReverse bool
+	Path          string
+	Cursor        string
+	ViewMode      int
+	SortMode      int
+	SortReverse   bool
+	UseSortGroups bool
 }
 
 type workspaceSessionState struct {
@@ -34,10 +35,12 @@ func legacyWorkspaceSession() workspaceSessionState {
 		Left: panelSessionState{
 			Path: LastLeftPath, Cursor: LastLeftCursor, ViewMode: LastLeftViewMode,
 			SortMode: LastLeftSortMode, SortReverse: LastLeftSortRev,
+			UseSortGroups: LastLeftSortGroups,
 		},
 		Right: panelSessionState{
 			Path: LastRightPath, Cursor: LastRightCursor, ViewMode: LastRightViewMode,
 			SortMode: LastRightSortMode, SortReverse: LastRightSortRev,
+			UseSortGroups: LastRightSortGroups,
 		},
 		ActivePanel: LastActivePanel,
 		WidePanel:   LastWidePanel,
@@ -53,6 +56,7 @@ func setLegacyWorkspaceSession(state workspaceSessionState) {
 	LastLeftViewMode, LastRightViewMode = state.Left.ViewMode, state.Right.ViewMode
 	LastLeftSortMode, LastRightSortMode = state.Left.SortMode, state.Right.SortMode
 	LastLeftSortRev, LastRightSortRev = state.Left.SortReverse, state.Right.SortReverse
+	LastLeftSortGroups, LastRightSortGroups = state.Left.UseSortGroups, state.Right.UseSortGroups
 	LastActivePanel, LastWidePanel = state.ActivePanel, state.WidePanel
 	LastShowPanels, LastShowLeft, LastShowRight = state.ShowPanels, state.ShowLeft, state.ShowRight
 }
@@ -103,6 +107,7 @@ func captureWorkspaceSession(pf *PanelsFrame) workspaceSessionState {
 		state.Left = panelSessionState{
 			Path: path, Cursor: cursor, ViewMode: int(left.viewMode),
 			SortMode: int(left.sortMode), SortReverse: left.sortReverse,
+			UseSortGroups: left.useSortGroups,
 		}
 	}
 	if right, ok := pf.panels[1].(*FileSystemPanel); ok {
@@ -118,6 +123,7 @@ func captureWorkspaceSession(pf *PanelsFrame) workspaceSessionState {
 		state.Right = panelSessionState{
 			Path: path, Cursor: cursor, ViewMode: int(right.viewMode),
 			SortMode: int(right.sortMode), SortReverse: right.sortReverse,
+			UseSortGroups: right.useSortGroups,
 		}
 	}
 	return state
@@ -185,15 +191,17 @@ func loadWorkspaceSessions(ini *IniFile) ([]workspaceSessionState, int) {
 			ShowRight:   ini.GetString(section, "ShowRight", "1") == "1",
 			Left: panelSessionState{
 				Path: ini.GetString(leftSection, "Folder", ""), Cursor: ini.GetString(leftSection, "CurFile", ""),
-				ViewMode:    parseSessionInt(ini, leftSection, "ViewMode", int(ViewModeMedium)),
-				SortMode:    parseSessionInt(ini, leftSection, "SortMode", int(SortName)),
-				SortReverse: ini.GetString(leftSection, "SortReverse", "0") == "1",
+				ViewMode:      parseSessionInt(ini, leftSection, "ViewMode", int(ViewModeMedium)),
+				SortMode:      parseSessionInt(ini, leftSection, "SortMode", int(SortName)),
+				SortReverse:   ini.GetString(leftSection, "SortReverse", "0") == "1",
+				UseSortGroups: ini.GetString(leftSection, "UseSortGroups", "0") == "1",
 			},
 			Right: panelSessionState{
 				Path: ini.GetString(rightSection, "Folder", ""), Cursor: ini.GetString(rightSection, "CurFile", ""),
-				ViewMode:    parseSessionInt(ini, rightSection, "ViewMode", int(ViewModeMedium)),
-				SortMode:    parseSessionInt(ini, rightSection, "SortMode", int(SortName)),
-				SortReverse: ini.GetString(rightSection, "SortReverse", "0") == "1",
+				ViewMode:      parseSessionInt(ini, rightSection, "ViewMode", int(ViewModeMedium)),
+				SortMode:      parseSessionInt(ini, rightSection, "SortMode", int(SortName)),
+				SortReverse:   ini.GetString(rightSection, "SortReverse", "0") == "1",
+				UseSortGroups: ini.GetString(rightSection, "UseSortGroups", "0") == "1",
 			},
 		}
 		if state.ActivePanel < 0 || state.ActivePanel > 1 {
@@ -247,6 +255,7 @@ func writePanelSession(sb *strings.Builder, section string, state panelSessionSt
 	fmt.Fprintf(sb, "ViewMode = %d\n", state.ViewMode)
 	fmt.Fprintf(sb, "SortMode = %d\n", state.SortMode)
 	fmt.Fprintf(sb, "SortReverse = %d\n", map[bool]int{true: 1}[state.SortReverse])
+	fmt.Fprintf(sb, "UseSortGroups = %d\n", map[bool]int{true: 1}[state.UseSortGroups])
 }
 
 func writeWorkspaceSessions(sb *strings.Builder, states []workspaceSessionState, active int) {
@@ -295,6 +304,7 @@ func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, 
 	right.SetViewMode(validSessionViewMode(state.Right.ViewMode))
 	left.sortMode, right.sortMode = SortMode(state.Left.SortMode), SortMode(state.Right.SortMode)
 	left.sortReverse, right.sortReverse = state.Left.SortReverse, state.Right.SortReverse
+	left.useSortGroups, right.useSortGroups = state.Left.UseSortGroups, state.Right.UseSortGroups
 
 	navigate := func(panel *FileSystemPanel, path string) {
 		if path == "" || pf.NavigateToPath(panel, path) {
