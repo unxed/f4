@@ -681,6 +681,13 @@ func SetupUI() {
 
 	os.MkdirAll(configDir, 0755)
 	GlobalHotkeysMgr = NewHotkeyManager(filepath.Join(configDir, "hotkeys.ini"))
+	keymapPath := filepath.Join(configDir, "keymap.ini")
+	if _, err := os.Stat(keymapPath); os.IsNotExist(err) {
+		// The file is the documentation: a user fighting a multiplexer has to
+		// find it in the profile without knowing it exists first.
+		createDefaultKeymapIni(keymapPath)
+	}
+	GlobalKeyRemap = NewKeyRemap(keymapPath)
 	MacroMgr = NewMacroManager(filepath.Join(configDir, "key_macros.ini"))
 	MacroMgr.LoadLuaMacros(filepath.Join(configDir, "Macros", "scripts"))
 	// Help is initialized after the hotkey manager: key binding topics
