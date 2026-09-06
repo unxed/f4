@@ -25,9 +25,12 @@ A file system that knows it is read-only can implement `IsReadOnly() bool`
 and the pointer will say "no" before the drop instead of failing after it.
 
 The other direction works too. Press the left button on a marked file and
-move: the marked files are offered to the desktop as a file list. A press on
-an unmarked file still only moves the cursor, so nothing about the old mouse
-behaviour changed. Only copy is offered, and only from a local panel - an
+move: the marked files are offered to the desktop as a file list. When
+nothing is marked, a press on a file and a drag out of the panel's rows
+offers that one file - the current file, as every other command understands
+it. Inside the rows a left drag still only moves the cursor, and with marks
+present a press on an unmarked file still only moves the cursor, so the old
+mouse behaviour is kept. Only copy is offered, and only from a local panel - an
 archive or a network panel says so in a toast instead.
 
 Under the gogpu backend a drop works as well, with two differences gogpu's

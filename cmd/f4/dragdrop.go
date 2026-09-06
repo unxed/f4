@@ -16,13 +16,20 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// dragOutState remembers a left button press that landed on a marked file.
-// That is the only press allowed to become a drag out of f4: a press on an
-// unmarked file still just moves the cursor, as it always has.
+// dragOutState remembers a left button press that may become a drag out of
+// f4, and the names it would carry. A press on a marked file carries every
+// marked file and starts the drag on the first move, as it always has. A
+// press on an unmarked file while nothing is marked carries just that file:
+// the press has already put the cursor on it, so this is the "current file"
+// that every other command falls back to. That drag starts only once the
+// pointer leaves the panel's rows, so a left drag inside the panel still
+// just moves the cursor.
 type dragOutState struct {
-	panel *FileSystemPanel
-	x, y  int
-	armed bool
+	panel      *FileSystemPanel
+	names      []string
+	x, y       int
+	armed      bool
+	cursorOnly bool
 }
 
 // readOnlyVFS is implemented by a file system that already knows it cannot
@@ -374,48 +381,92 @@ func (pf *PanelsFrame) processDragOutGesture(e *vtinput.InputEvent, mx, my int) 
 			return false
 		}
 		idx := info.panel.mouseEntryIndex(mx, my)
-		if idx < 0 || idx >= len(info.panel.entries) || !info.panel.entries[idx].Selected {
+		if idx < 0 || idx >= len(info.panel.entries) {
 			return false
 		}
-		pf.dragOut = dragOutState{panel: info.panel, x: mx, y: my, armed: true}
-		vtui.DebugLog("DND: drag out armed on a marked file at %d,%d", mx, my)
+		names, cursorOnly, ok := dragOutNames(info.panel, idx)
+		if !ok {
+			return false
+		}
+		pf.dragOut = dragOutState{panel: info.panel, names: names, x: mx, y: my, armed: true, cursorOnly: cursorOnly}
+		if cursorOnly {
+			vtui.DebugLog("DND: drag out armed on the current file at %d,%d", mx, my)
+		} else {
+			vtui.DebugLog("DND: drag out armed on a marked file at %d,%d", mx, my)
+		}
 		return false
 	}
 
 	if !pf.dragOut.armed || (mx == pf.dragOut.x && my == pf.dragOut.y) {
 		return false
 	}
-	panel := pf.dragOut.panel
+	if pf.dragOut.cursorOnly && pf.dragOut.panel.pointerInsideRows(mx, my) {
+		return false
+	}
+	panel, names := pf.dragOut.panel, pf.dragOut.names
 	pf.dragOut = dragOutState{}
 	vtui.DebugLog("DND: drag out gesture triggered at %d,%d", mx, my)
-	return pf.startDragOut(panel)
+	return pf.startDragOut(panel, names)
+}
+
+// dragOutNames decides what a left press on entry idx would drag out of the
+// panel. A marked entry drags every marked file. An unmarked entry drags
+// itself, but only while nothing else is marked - with marks present a
+// press elsewhere keeps its old meaning of just moving the cursor. The
+// parent entry is never dragged. cursorOnly reports the second case.
+func dragOutNames(fsp *FileSystemPanel, idx int) (names []string, cursorOnly bool, ok bool) {
+	if fsp == nil || idx < 0 || idx >= len(fsp.entries) {
+		return nil, false, false
+	}
+	entry := fsp.entries[idx]
+	if entry.Selected {
+		return fsp.GetMarkedNames(), false, true
+	}
+	if entry.Name == ".." || len(fsp.GetMarkedNames()) != 0 {
+		return nil, false, false
+	}
+	return []string{entry.Name}, true, true
+}
+
+// pointerInsideRows reports whether a screen cell lies inside the panel's
+// file rows, the area a left drag is allowed to keep the cursor in.
+func (fp *FileSystemPanel) pointerInsideRows(mx, my int) bool {
+	if fp == nil || fp.table == nil {
+		return false
+	}
+	if mx < fp.table.X1 || mx > fp.table.X2 {
+		return false
+	}
+	row := my - (fp.table.Y1 + fp.table.MarginTop)
+	return row >= 0 && row < fp.table.ViewHeight
 }
 
 // dragOutRefusal names the reason a drag out cannot start, or "" when it
 // can. One place rather than three, so the guard and the log line it writes
 // can never drift apart.
-func dragOutRefusal(fsp *FileSystemPanel) string {
+func dragOutRefusal(fsp *FileSystemPanel, names []string) string {
 	if fsp == nil {
 		return "no panel under the pointer"
 	}
 	if !vtui.DragOutSupported() {
 		return "the backend offers no drag source"
 	}
-	if len(fsp.GetMarkedNames()) == 0 {
-		return "nothing is marked"
+	if len(names) == 0 {
+		return "nothing to drag"
 	}
 	return ""
 }
 
-// startDragOut offers the marked files to the rest of the desktop. Only copy
-// is offered: a move would have f4 delete the originals because the receiver
-// said it took them, which is more trust than files deserve.
-func (pf *PanelsFrame) startDragOut(fsp *FileSystemPanel) bool {
-	if reason := dragOutRefusal(fsp); reason != "" {
+// startDragOut offers the named files of the panel - the marked ones, or the
+// current one when nothing is marked - to the rest of the desktop. Only copy
+// is offered from a materialised panel: a move would have f4 delete the
+// originals because the receiver said it took them, which is more trust
+// than files deserve.
+func (pf *PanelsFrame) startDragOut(fsp *FileSystemPanel, names []string) bool {
+	if reason := dragOutRefusal(fsp, names); reason != "" {
 		vtui.DebugLog("DND: drag out not started: %s", reason)
 		return false
 	}
-	names := fsp.GetMarkedNames()
 	paths, ok := localDragPaths(fsp, names)
 	if !ok {
 		tempDir, err := os.MkdirTemp("", "f4drag-*")

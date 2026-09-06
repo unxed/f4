@@ -188,19 +188,50 @@ func (dragBackendStub) StartDrag(vtui.DragPayload, vtui.DropAction) (vtui.DropAc
 
 func TestDragOutRefusal(t *testing.T) {
 	vtui.SetDragBackend(nil)
-	if got := dragOutRefusal(nil); got != "no panel under the pointer" {
+	if got := dragOutRefusal(nil, nil); got != "no panel under the pointer" {
 		t.Fatalf("reason = %q, want the missing panel", got)
 	}
 
 	fsp := &FileSystemPanel{vfs: vfs.NewOSVFS(t.TempDir())}
-	if got := dragOutRefusal(fsp); got != "the backend offers no drag source" {
+	if got := dragOutRefusal(fsp, []string{"a.txt"}); got != "the backend offers no drag source" {
 		t.Fatalf("reason = %q, want the missing backend", got)
 	}
 
 	vtui.SetDragBackend(dragBackendStub{})
 	defer vtui.SetDragBackend(nil)
-	if got := dragOutRefusal(fsp); got != "nothing is marked" {
+	if got := dragOutRefusal(fsp, nil); got != "nothing to drag" {
 		t.Fatalf("reason = %q, want the empty selection", got)
+	}
+	if got := dragOutRefusal(fsp, []string{"a.txt"}); got != "" {
+		t.Fatalf("reason = %q, want none", got)
+	}
+}
+
+func TestDragOutNames(t *testing.T) {
+	fsp := &FileSystemPanel{entries: []*fileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "a.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "b.txt"}},
+	}}
+
+	if _, _, ok := dragOutNames(fsp, 0); ok {
+		t.Fatal("the parent entry must never be dragged")
+	}
+	names, cursorOnly, ok := dragOutNames(fsp, 1)
+	if !ok || !cursorOnly || !reflect.DeepEqual(names, []string{"a.txt"}) {
+		t.Fatalf("names = %v cursorOnly = %v ok = %v, want the current file", names, cursorOnly, ok)
+	}
+
+	fsp.entries[2].Selected = true
+	if _, _, ok := dragOutNames(fsp, 1); ok {
+		t.Fatal("with marks present an unmarked entry must not be dragged")
+	}
+	names, cursorOnly, ok = dragOutNames(fsp, 2)
+	if !ok || cursorOnly || !reflect.DeepEqual(names, []string{"b.txt"}) {
+		t.Fatalf("names = %v cursorOnly = %v ok = %v, want the marked files", names, cursorOnly, ok)
+	}
+	if _, _, ok := dragOutNames(nil, 1); ok {
+		t.Fatal("no panel, no drag")
 	}
 }
 
@@ -222,7 +253,7 @@ func TestDragOutRemotePanel(t *testing.T) {
 	}
 	fsp.Refresh()
 
-	if !pf.startDragOut(fsp) {
+	if !pf.startDragOut(fsp, fsp.GetMarkedNames()) {
 		t.Fatal("expected startDragOut to succeed")
 	}
 
