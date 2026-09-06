@@ -54,6 +54,7 @@ func collectQueuedTasks(idle time.Duration) []func() {
 // happens over FISH+ once a burst of chunks has been stored: the batches are
 // drained in one pass while the goroutine is already finished.
 func TestEditorView_IndexerRestoresTargetLineAfterLateDrain(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	drainPendingTasks()
 
