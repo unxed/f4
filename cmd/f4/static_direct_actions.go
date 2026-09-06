@@ -201,6 +201,18 @@ func actionViewerGoTo() bool {
 	return true
 }
 
+func actionEditorGoTo() bool {
+	if vtui.FrameManager == nil {
+		return false
+	}
+	ev, ok := vtui.FrameManager.GetTopFrame().(*EditorView)
+	if !ok || ev == nil {
+		return false
+	}
+	ev.askGoto()
+	return true
+}
+
 func init() {
 	for _, side := range fixedPanelSideActionSpecs {
 		side := side
@@ -292,6 +304,17 @@ func init() {
 		DefaultKeys: []string{"AltF8"},
 		MenuPath:    "Search",
 		Handler:     actionViewerGoTo,
+	})
+	RegisterAction(Action{
+		Name:        "Editor.GoTo",
+		Area:        "Editor",
+		Label:       "Go To",
+		LabelKey:    "KeyBar.EditorAltF8",
+		Description: "Go to a line and position or byte offset",
+		DescKey:     "Action.Editor.GoTo.Desc",
+		DefaultKeys: []string{"AltF8"},
+		MenuPath:    "Search",
+		Handler:     actionEditorGoTo,
 	})
 	RegisterAction(Action{
 		Name:         "App.Background",

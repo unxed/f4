@@ -1331,6 +1331,54 @@ func (ev *EditorView) processKeyHex(e *vtinput.InputEvent) bool {
 	return false
 }
 
+func (ev *EditorView) askGoto() {
+	if ev.HexMode || ev.DecodeMode {
+		current := ev.li.GetLineOffset(ev.CursorLine) + ev.CursorPos
+		title, prompt := gotoText("Editor.GotoOffsetTitle", " Go to offset "), gotoText("Editor.GotoOffsetPrompt", "Byte offset:")
+		showGotoOffsetDialog(ev, title, prompt, int64(current), func(offset int64) {
+			ev.gotoOffset(int(offset))
+		})
+		return
+	}
+	showEditorPositionDialog(ev, ev.CursorLine+1, ev.CursorPos+1, func(line, position int) {
+		ev.gotoLinePosition(line, position)
+	})
+}
+
+func (ev *EditorView) gotoOffset(offset int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if size := ev.pt.Size(); offset > size {
+		offset = size
+	}
+	ev.targetLine = -1
+	ev.targetOffset = -1
+	ev.CursorLine = 0
+	ev.CursorPos = offset
+	if ev.HexMode {
+		ev.HexTopOffset = offset &^ 0xF
+	} else {
+		ev.HexTopOffset = offset
+	}
+	ev.HexNibble = 0
+	ev.ensureCursorVisible()
+	vtui.FrameManager.Redraw()
+}
+
+func (ev *EditorView) gotoLinePosition(line, position int) {
+	ev.targetLine = line - 1
+	ev.targetPos = position - 1
+	ev.targetOffset = -1
+	ev.targetTopRow = 0
+	ev.targetLeft = 0
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+	ev.StartIndexing()
+	ev.ensureCursorVisible()
+	vtui.FrameManager.Redraw()
+}
+
 func (ev *EditorView) Show(scr *vtui.ScreenBuf) {
 	ev.ScreenObject.Show(scr)
 	if ev.topBar != nil {
@@ -3659,6 +3707,7 @@ func (ev *EditorView) GetKeyLabels() *vtui.KeySet {
 			Msg("KeyBar.EditorF1"), Msg("KeyBar.EditorF2"), Msg("KeyBar.EditorF3"),
 			"", Msg("KeyBar.EditorF5"), Msg("KeyBar.F3"), Msg("KeyBar.EditorF7"), nextCpName, "", Msg("KeyBar.EditorF10"),
 		},
+		Alt: vtui.KeyBarLabels{"", "", "", "", "", "", "", Msg("KeyBar.EditorAltF8"), "", "", "", ""},
 	}
 	res := KeyBarLabelsForArea("Editor", fallbacks)
 	if hm := GlobalHotkeysMgr; hm != nil {

@@ -765,10 +765,14 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 // only means something once someone has counted the newlines; in hex mode it
 // is a byte offset, which needs no counting at all.
 func (vv *ViewerView) askGoto() {
-	title, prompt := " Go to line ", "Line number:"
-	if vv.HexMode {
-		title, prompt = " Go to offset ", "Byte offset:"
+	if vv.HexMode || vv.DecodeMode {
+		title, prompt := gotoText("Viewer.GotoOffsetTitle", " Go to offset "), gotoText("Viewer.GotoOffsetPrompt", "Byte offset:")
+		showGotoOffsetDialog(vv, title, prompt, vv.TopOffset, func(offset int64) {
+			vv.gotoPosition(offset)
+		})
+		return
 	}
+	title, prompt := " Go to line ", "Line number:"
 	vtui.InputBoxOn(vv, title, prompt, "", func(s string) {
 		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 		if err != nil || n < 0 {
@@ -779,15 +783,22 @@ func (vv *ViewerView) askGoto() {
 }
 
 func (vv *ViewerView) gotoPosition(n int64) {
-	if vv.HexMode {
+	if vv.HexMode || vv.DecodeMode {
 		size := vv.backend.Size()
+		if size == 0 {
+			n = 0
+		}
 		if n >= size {
 			n = size - 1
 		}
 		if n < 0 {
 			n = 0
 		}
-		vv.TopOffset = n &^ 0xF
+		if vv.HexMode {
+			vv.TopOffset = n &^ 0xF
+		} else {
+			vv.TopOffset = n
+		}
 		vtui.FrameManager.Redraw()
 		return
 	}

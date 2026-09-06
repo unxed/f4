@@ -79,6 +79,17 @@ func TestStaticDirectActionsRegistered(t *testing.T) {
 		t.Errorf("Viewer AltF8 binding = %q, want Viewer.GoTo", got)
 	}
 
+	editorGoTo, ok := GetAction("Editor.GoTo")
+	if !ok {
+		t.Fatal("Editor.GoTo is not registered")
+	}
+	if editorGoTo.Area != "Editor" || editorGoTo.LabelKey != "KeyBar.EditorAltF8" || len(editorGoTo.DefaultKeys) != 1 || editorGoTo.DefaultKeys[0] != "AltF8" {
+		t.Errorf("Editor.GoTo metadata = %#v", editorGoTo)
+	}
+	if got := NewHotkeyManager("").GetAction("Editor", "AltF8"); got != "Editor.GoTo" {
+		t.Errorf("Editor AltF8 binding = %q, want Editor.GoTo", got)
+	}
+
 	background, ok := GetAction("App.Background")
 	if !ok {
 		t.Fatal("App.Background is not registered")
