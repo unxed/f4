@@ -210,11 +210,37 @@ func HTTPClient(timeout time.Duration) *http.Client {
 	return Global().HTTPClient(timeout)
 }
 
+// tcpKeepAlive is the probing schedule for every long-lived TCP connection
+// netfox opens. A frozen peer — a suspended VM, a yanked cable, a NAT entry
+// that quietly expired — leaves the socket ESTABLISHED with nothing on the
+// wire to trip a timeout, so without probes a read blocks forever. The old
+// Dialer.KeepAlive only set the idle time and left the probe interval and
+// count to the OS, where the defaults (Linux: 75s × 9) take over ten minutes
+// to declare a peer dead. With all three pinned the kernel gives up after
+// Idle + Interval×Count, about 35 seconds, which is quick enough for a file
+// manager and still far above any sane round trip.
+//
+// These probes only ever test the hop the socket is on. Through an HTTP or
+// SOCKS proxy that hop ends at the proxy, so a dead target behind a healthy
+// proxy is invisible here; the SSH keepalive in netfox covers that case.
+var tcpKeepAlive = net.KeepAliveConfig{
+	Enable:   true,
+	Idle:     15 * time.Second,
+	Interval: 5 * time.Second,
+	Count:    4,
+}
+
+// directDialer is the dialer every raw TCP connection starts from, whether
+// it goes straight to the target or to a proxy in front of it.
+func directDialer() *net.Dialer {
+	return &net.Dialer{Timeout: 30 * time.Second, KeepAliveConfig: tcpKeepAlive}
+}
+
 // DialContext opens a plain TCP connection through these settings, which is
 // what the netfox protocols need: SSH and FTP control connections are not
 // HTTP, so they reach the proxy through CONNECT or SOCKS5 instead.
 func (s Settings) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	direct := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	direct := directDialer()
 
 	switch s.Mode {
 	case ModeDirect:
@@ -367,7 +393,7 @@ func init() {
 	// Teach x/net/proxy about http proxies so that ALL_PROXY=http://... is
 	// honoured for raw TCP in ModeSystem, the same way curl treats it.
 	reg := func(u *url.URL, fwd xproxy.Dialer) (xproxy.Dialer, error) {
-		d := &connectDialer{addr: u.Host, forward: &net.Dialer{Timeout: 30 * time.Second}}
+		d := &connectDialer{addr: u.Host, forward: directDialer()}
 		if u.User != nil {
 			d.user = u.User.Username()
 			d.pass, _ = u.User.Password()
