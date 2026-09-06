@@ -47,6 +47,9 @@ func selfCommand(self string, args ...string) *exec.Cmd {
 	// Callers that want more of their own add to cmd.Env rather than to
 	// os.Environ(), so that what selfExecEnv puts there survives.
 	cmd.Env = selfExecEnv()
+	// On Android (Termux) the command has to go through the system loader; it needs
+	// argv[0] and the environment, which selfExecArgv does not return.
+	applySystemLinkerExec(cmd)
 	return cmd
 }
 
@@ -69,5 +72,16 @@ func selfExecArgv(self string, args []string) (string, []string) {
 func loaderArgv(libc, image string, args []string) []string {
 	argv := make([]string, 0, len(args)+3)
 	argv = append(argv, "--preload", libc, image)
+	return append(argv, args...)
+}
+
+// linkerArgv is the argument vector for running image through Android's system
+// loader, which takes the image path as its first argument and hands the rest
+// to the image. argv0 stays in front because the loader consumes one entry, so
+// the image still finds its own arguments from argv[1] on -- the positions
+// ManageSessions() indexes for "--server".
+func linkerArgv(argv0, image string, args []string) []string {
+	argv := make([]string, 0, len(args)+2)
+	argv = append(argv, argv0, image)
 	return append(argv, args...)
 }
