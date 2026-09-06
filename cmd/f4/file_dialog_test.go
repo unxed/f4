@@ -4,12 +4,13 @@ import "testing"
 
 func TestFileDialogWidth(t *testing.T) {
 	cases := []struct{ screen, want int }{
-		{0, fileDialogMinWidth},
+		{0, 50},
 		{40, 40},
-		{50, 50},
-		{60, 56},
-		{80, 76},
-		{200, 196},
+		{50, 40},
+		{60, 40},
+		{80, 40},
+		{120, 60},
+		{200, 100},
 	}
 	for _, c := range cases {
 		if got := fileDialogWidth(c.screen); got != c.want {

@@ -8,20 +8,22 @@ import (
 // used to be 50 and 40 columns wide regardless of the terminal, which cut
 // long file names and destination paths and made the four dialogs visibly
 // different sizes (#891). They now share one width that follows the f4
-// window: as wide as the screen allows, leaving a small margin, but never
-// narrower than the old copy dialog.
+// window: half the screen by default, with the same width also used by the
+// text field in the rename and copy-in-place dialogs.
 const (
-	fileDialogMinWidth    = 50
-	fileDialogScreenInset = 4
+	fileDialogMinWidth = 40
 )
 
 // fileDialogWidth returns the dialog width for the given screen width.
 func fileDialogWidth(screenWidth int) int {
-	w := screenWidth - fileDialogScreenInset
+	if screenWidth <= 0 {
+		return 50
+	}
+	w := screenWidth / 2
 	if w < fileDialogMinWidth {
 		w = fileDialogMinWidth
 	}
-	if screenWidth > 0 && w > screenWidth {
+	if w > screenWidth {
 		w = screenWidth
 	}
 	return w
