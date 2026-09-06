@@ -889,7 +889,22 @@ type ReadAtCloser interface {
 	Read(ctx context.Context, p []byte) (n int, err error)
 	io.Closer
 	Size() int64
-} // TempFileWrapper is a helper for VFS that need to extract files to temp storage.
+}
+
+// SizeRefresher is an open file that can re-measure itself. Size() answers
+// with the length the file had when it was opened, which is what everything
+// paging around a file wants: a stable coordinate system. A log that is still
+// being written to is the exception, and this is the way to ask an open handle
+// whether it has grown since -- or shrunk, after a rotation.
+//
+// It is optional. A file system whose handles cannot answer cheaply, a remote
+// one above all, simply does not implement it, and callers treat that as "no
+// change" rather than paying for a round trip on a timer.
+type SizeRefresher interface {
+	RefreshSize(ctx context.Context) (int64, error)
+}
+
+// TempFileWrapper is a helper for VFS that need to extract files to temp storage.
 type TempFileWrapper struct {
 	*os.File
 	SizeVal  int64

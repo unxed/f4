@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"strings"
@@ -471,10 +472,44 @@ func (v *OSVFS) Search(ctx context.Context, path string, pattern string) (chan i
 
 type osFileWrapper struct {
 	hostfs.File
+	// mu guards size alone. RefreshSize is called from a viewer following a
+	// growing log while its background fetches ask for the size on another
+	// goroutine, so the field is no longer written once and read forever.
+	mu   sync.Mutex
 	size int64
 }
 
-func (f *osFileWrapper) Size() int64 { return f.size }
+func (f *osFileWrapper) Size() int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.size
+}
+
+// RefreshSize re-measures the open file. It reports the length the handle now
+// has, which is how the viewer notices that a log it is displaying has grown.
+func (f *osFileWrapper) RefreshSize(ctx context.Context) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return f.Size(), err
+	}
+	if f.File == nil {
+		return f.Size(), os.ErrInvalid
+	}
+	info, err := f.File.Stat()
+	if err != nil {
+		return f.Size(), err
+	}
+	if info.Mode()&(os.ModeDevice|os.ModeCharDevice) != 0 {
+		// A device's length was probed by seeking to its end when it was
+		// opened; Stat reports zero for one, and taking that would tell the
+		// viewer the disk it is showing is empty.
+		return f.Size(), nil
+	}
+	f.mu.Lock()
+	f.size = info.Size()
+	size := f.size
+	f.mu.Unlock()
+	return size, nil
+}
 func (f *osFileWrapper) Read(ctx context.Context, p []byte) (n int, err error) {
 	if ctx.Err() != nil {
 		return 0, ctx.Err()

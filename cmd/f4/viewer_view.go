@@ -55,6 +55,11 @@ type ViewerView struct {
 
 	scrollBar *vtui.ScrollBar
 
+	// tailStop closes when the viewer stops watching the file for changes.
+	// Nil means nothing is watching -- a ViewerView built directly, as the
+	// tests do, never starts the poll.
+	tailStop chan struct{}
+
 	OnClose  func()
 	Codepage int
 }
@@ -180,7 +185,102 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	vv.topBar.SetVisible(true)
 	vv.SetCanFocus(true)
 	vv.SetFocus(true)
+	vv.startTailWatch()
 	return vv, nil
+}
+
+// viewerTailPollInterval is how often an open viewer looks at the file it is
+// showing to see whether it changed. tail -f sleeps a second between looks;
+// half of that keeps a log on screen feeling live without the poll itself
+// becoming the workload.
+const viewerTailPollInterval = 500 * time.Millisecond
+
+// startTailWatch begins watching the file for changes. What it costs is one
+// re-measure of an already-open handle per tick, and on a file system whose
+// handles cannot do that -- a remote one -- it costs nothing at all, because
+// ViewerBackend.Refresh is then a no-op. Nothing is read, and nothing is
+// redrawn, until the file actually moves.
+func (vv *ViewerView) startTailWatch() {
+	if vv.tailStop != nil {
+		return
+	}
+	stop := make(chan struct{})
+	vv.tailStop = stop
+
+	// Read the frame manager here, on the goroutine that starts the poll: the
+	// poll outlives this call, and reading the global from inside it races
+	// anything that reassigns vtui.FrameManager while it is still running.
+	frames := vtui.FrameManager
+	go func() {
+		ticker := time.NewTicker(viewerTailPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				frames.PostTask(func() {
+					// The viewer may have closed between the tick and this
+					// task reaching the UI thread.
+					if vv.tailStop == stop {
+						vv.refreshFromFile()
+					}
+				})
+			}
+		}
+	}()
+}
+
+// stopTailWatch puts the poll away. Closing the channel is what the goroutine
+// is waiting on, so it stops at once rather than at the end of the interval,
+// and a closed viewer leaves nothing running behind it.
+func (vv *ViewerView) stopTailWatch() {
+	if vv.tailStop == nil {
+		return
+	}
+	close(vv.tailStop)
+	vv.tailStop = nil
+}
+
+// refreshFromFile re-measures the file and redraws when it moved. The
+// auto-scroll in DisplayObject does the rest: a viewer sitting at the end of
+// the file follows it, and one parked further up stays exactly where the
+// reader left it and only gets an honest scrollbar and percentage.
+func (vv *ViewerView) refreshFromFile() {
+	if vv.backend == nil || vv.Busy {
+		return
+	}
+	if !vv.backend.Refresh(context.Background()) {
+		return
+	}
+	if size := vv.backend.Size(); vv.TopOffset > size {
+		// The file was truncated or rotated away under the viewport, and the
+		// offset it was showing no longer exists.
+		vv.TopOffset = 0
+		vv.lastKnownSize = size
+		vv.eofVisible = false
+	}
+	vtui.FrameManager.Redraw()
+}
+
+// reload rereads the file on demand. Unlike the poll it drops the window cache
+// even when the length did not change, so a file rewritten in place -- same
+// size, different bytes -- also shows its new contents.
+func (vv *ViewerView) reload() {
+	if vv.backend == nil {
+		return
+	}
+	vv.backend.Refresh(context.Background())
+	vv.backend.DropCache()
+	if size := vv.backend.Size(); vv.TopOffset > size {
+		vv.TopOffset = 0
+		vv.eofVisible = false
+	}
+	if vv.eofVisible {
+		vv.jumpToEnd()
+		return
+	}
+	vtui.FrameManager.Redraw()
 }
 
 // viewerDetectionHeader reads the prefix every codepage decision is made on.
@@ -714,6 +814,15 @@ func (vv *ViewerView) gotoPosition(n int64) {
 	})
 }
 func (vv *ViewerView) jumpToEnd() {
+	// End has to mean the end of the file as it is now, not as it was when
+	// the viewer opened it. That is what mc does, and it makes End the manual
+	// way to catch up with a growing log even where the automatic follow does
+	// not apply -- after scrolling up, say, or on a file system whose handles
+	// cannot re-measure themselves.
+	if vv.backend != nil {
+		vv.backend.Refresh(context.Background())
+	}
+
 	contentHeight := int64(vv.Y2 - vv.Y1)
 	if vv.HexMode {
 		if vv.backend.Size() == 0 {
@@ -1079,6 +1188,7 @@ func (vv *ViewerView) ResizeConsole(w, h int) {
 }
 
 func (vv *ViewerView) Close() {
+	vv.stopTailWatch()
 	if GlobalFileState != nil && vv.path != "" {
 		GlobalFileState.SaveViewerStateAsync(FileStateKey(vv.vfs, vv.path), vv.TopOffset, vv.WrapMode, vv.HexMode)
 	}

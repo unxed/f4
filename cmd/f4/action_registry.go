@@ -2546,6 +2546,17 @@ func init() {
 		Handler:     withViewer(func(vv *ViewerView) { actionSwitchViewerToEditor(vv) }),
 	})
 	RegisterAction(Action{
+		Name:        "Viewer.Reload",
+		Area:        "Viewer",
+		Label:       "Reread File",
+		LabelKey:    "Action.Viewer.Reload",
+		Description: "Reread the file and follow it to the end if the end is on screen",
+		DescKey:     "Action.Viewer.Reload.Desc",
+		DefaultKeys: []string{"CtrlR"},
+		MenuPath:    "File",
+		Handler:     withViewer(func(vv *ViewerView) { vv.reload() }),
+	})
+	RegisterAction(Action{
 		Name:        "Viewer.Quit",
 		Area:        "Viewer",
 		Label:       "Quit",

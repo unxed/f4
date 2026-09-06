@@ -92,6 +92,48 @@ func (b *ViewerBackend) Size() int64 {
 	return b.size
 }
 
+// DropCache throws away the window the viewer reads through, so the next read
+// goes back to the file. The window is a snapshot, and everything that changes
+// the bytes underneath it has to say so.
+func (b *ViewerBackend) DropCache() {
+	b.mu.Lock()
+	b.cacheData = nil
+	b.totalLines = -1
+	b.totalForSize = -1
+	b.mu.Unlock()
+}
+
+// Refresh re-measures the file and reports whether its length changed. This is
+// what makes tail-following possible: an open handle keeps the size the file
+// had when it was opened, which is the right answer for everything except a
+// log that is still being appended to.
+//
+// A file system whose handles cannot re-measure themselves -- a remote one --
+// does not implement vfs.SizeRefresher, and this is then a no-op that costs
+// nothing, so it is safe to call on a timer.
+//
+// The cache is dropped whenever the size moved. The tail of a growing file was
+// cached as a short read that stopped at the old end, and serving that window
+// again would hide exactly the bytes the caller is refreshing for.
+func (b *ViewerBackend) Refresh(ctx context.Context) bool {
+	if b.file == nil {
+		return false
+	}
+	refresher, ok := b.file.(vfs.SizeRefresher)
+	if !ok {
+		return false
+	}
+	before := b.Size()
+	if _, err := refresher.RefreshSize(ctx); err != nil {
+		return false
+	}
+	if b.Size() == before {
+		return false
+	}
+	b.DropCache()
+	return true
+}
+
 func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
