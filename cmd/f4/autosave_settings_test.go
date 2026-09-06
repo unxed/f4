@@ -69,13 +69,17 @@ func TestConfig_AutoSaveCategoriesMigrateLegacyMaster(t *testing.T) {
 func TestSaveSession_DisabledWhenAllCategoriesAreOff(t *testing.T) {
 	oldConfig := AppConfig
 	oldSessionPath := getSessionIniPath
+	oldLoaded := sessionLoaded
 	defer func() {
 		AppConfig = oldConfig
 		getSessionIniPath = oldSessionPath
+		sessionLoaded = oldLoaded
 	}()
 
 	path := filepath.Join(t.TempDir(), "session.ini")
 	getSessionIniPath = func() string { return path }
+	// Otherwise the assertion passes for the wrong reason: unloaded state.
+	sessionLoaded = true
 	AppConfig.AutoSaveSettings = true
 	AppConfig.AutoSaveDialogSettings = false
 	AppConfig.AutoSavePanelSettings = false
@@ -84,6 +88,33 @@ func TestSaveSession_DisabledWhenAllCategoriesAreOff(t *testing.T) {
 	SaveSession()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("all-disabled automatic session save created %s, err=%v", path, err)
+	}
+}
+
+// The session client, --version and --help reach SaveSession in main's defer
+// without ever calling LoadSession: their defaults would cost the daemon's file
+// its panel paths and wide mode.
+func TestSaveSession_SkippedWhenStateWasNeverLoaded(t *testing.T) {
+	oldConfig := AppConfig
+	oldSessionPath := getSessionIniPath
+	oldLoaded := sessionLoaded
+	defer func() {
+		AppConfig = oldConfig
+		getSessionIniPath = oldSessionPath
+		sessionLoaded = oldLoaded
+	}()
+
+	path := filepath.Join(t.TempDir(), "session.ini")
+	getSessionIniPath = func() string { return path }
+	sessionLoaded = false
+	AppConfig.AutoSaveSettings = true
+	AppConfig.AutoSaveDialogSettings = true
+	AppConfig.AutoSavePanelSettings = true
+	AppConfig.AutoSaveCurrentPanel = true
+	AppConfig.AutoSaveGUIWindow = true
+	SaveSession()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("session save without a loaded state created %s, err=%v", path, err)
 	}
 }
 

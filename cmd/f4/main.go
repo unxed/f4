@@ -863,7 +863,14 @@ var getSessionIniPath = func() string {
 	return filepath.Join(GetF4ConfigDir(), "session.ini")
 }
 
+// sessionLoaded marks the process that read the session and may write it back.
+// LoadSession runs only from SetupUI, but main's defer reaches SaveSession from
+// processes with no UI at all -- the session client, --version, --help -- whose
+// Last* globals are defaults that would overwrite the daemon's file.
+var sessionLoaded bool
+
 func LoadSession() {
+	sessionLoaded = true
 	path := getSessionIniPath()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return
@@ -919,6 +926,10 @@ func LoadSession() {
 }
 
 func SaveSession() {
+	if !sessionLoaded {
+		vtui.DebugLog("SESSION: State was never loaded, nothing to save")
+		return
+	}
 	if !AppConfig.AutoSaveSettings {
 		vtui.DebugLog("SESSION: Automatic saving is disabled")
 		return
