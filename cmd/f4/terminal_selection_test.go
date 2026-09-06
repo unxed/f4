@@ -270,7 +270,10 @@ func panelsFrameWithMouseSelect(t *testing.T) (*PanelsFrame, *fakePTY) {
 	return pf, pty
 }
 
-type fakePTY struct{ writes []byte }
+type fakePTY struct {
+	writes []byte
+	busy   bool // reported by IsBusy; a busy PTY receives raw keys
+}
 
 func (p *fakePTY) Read(b []byte) (int, error)            { return 0, nil }
 func (p *fakePTY) Write(b []byte) (int, error)           { p.writes = append(p.writes, b...); return len(b), nil }
@@ -278,7 +281,7 @@ func (p *fakePTY) Close() error                          { return nil }
 func (p *fakePTY) SetSize(cols, rows int)                {}
 func (p *fakePTY) Wait() error                           { return nil }
 func (p *fakePTY) Run(name string, args ...string) error { return nil }
-func (p *fakePTY) IsBusy() bool                          { return false }
+func (p *fakePTY) IsBusy() bool                          { return p.busy }
 
 // TestPanelsFrame_TerminalMouseSelect_Drag exercises the full click →
 // drag → release pipeline through PanelsFrame.ProcessMouse. Asserts
@@ -344,6 +347,80 @@ func TestPanelsFrame_TerminalMouseSelect_KeyDownClearsHighlight(t *testing.T) {
 	})
 	if tv.HasSelection() {
 		t.Fatal("a key-down should clear the terminal mouse highlight")
+	}
+}
+
+// TestPanelsFrame_TerminalMouseSelect_EscapeDismissesWithoutPTY covers
+// #881: Esc on a highlighted selection only drops the highlight. Neither
+// the press nor its release reaches the shell, so nothing behaves like a
+// line reset. Once the highlight is gone Esc is an ordinary key again.
+func TestPanelsFrame_TerminalMouseSelect_EscapeDismissesWithoutPTY(t *testing.T) {
+	pf, pty := panelsFrameWithMouseSelect(t)
+	pty.busy = true // raw keys go straight to the PTY, as with a running command
+	tv := pf.termView
+	tv.StartSelection(2, 0, false)
+	tv.ExtendSelection(6, 0)
+
+	esc := func(down bool) *vtinput.InputEvent {
+		return &vtinput.InputEvent{
+			Type:           vtinput.KeyEventType,
+			KeyDown:        down,
+			VirtualKeyCode: vtinput.VK_ESCAPE,
+			Char:           0x1b,
+		}
+	}
+
+	if !pf.ProcessKey(esc(true)) {
+		t.Fatal("Esc on a highlighted selection should be consumed")
+	}
+	if tv.HasSelection() {
+		t.Fatal("Esc should clear the terminal mouse highlight")
+	}
+	if !pf.termSelEscHeld {
+		t.Fatal("the dismissing Esc press should arm key-up swallowing")
+	}
+	if len(pty.writes) != 0 {
+		t.Fatalf("Esc press must not reach the PTY, got %q", pty.writes)
+	}
+
+	if !pf.ProcessKey(esc(false)) {
+		t.Fatal("the release of the dismissing Esc should be consumed")
+	}
+	if pf.termSelEscHeld {
+		t.Fatal("key-up swallowing should disarm after one release")
+	}
+	if len(pty.writes) != 0 {
+		t.Fatalf("Esc release must not reach the PTY, got %q", pty.writes)
+	}
+
+	// With no highlight left, Esc goes to the shell as before.
+	pf.ProcessKey(esc(true))
+	if len(pty.writes) == 0 {
+		t.Fatal("Esc without a selection should still be forwarded to the PTY")
+	}
+}
+
+// TestPanelsFrame_TerminalMouseSelect_ModifiedEscapeNotSwallowed keeps
+// Alt+Esc / Ctrl+Esc / Shift+Esc on the regular any-key path: they clear
+// the highlight but are not treated as the dismiss gesture.
+func TestPanelsFrame_TerminalMouseSelect_ModifiedEscapeNotSwallowed(t *testing.T) {
+	pf, _ := panelsFrameWithMouseSelect(t)
+	tv := pf.termView
+	tv.StartSelection(2, 0, false)
+	tv.ExtendSelection(6, 0)
+
+	pf.ProcessKey(&vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_ESCAPE,
+		Char:            0x1b,
+		ControlKeyState: vtinput.LeftAltPressed,
+	})
+	if tv.HasSelection() {
+		t.Fatal("Alt+Esc should clear the highlight like any other key")
+	}
+	if pf.termSelEscHeld {
+		t.Fatal("Alt+Esc must not arm key-up swallowing")
 	}
 }
 

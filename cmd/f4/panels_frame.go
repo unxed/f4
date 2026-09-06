@@ -334,6 +334,7 @@ type PanelsFrame struct {
 	// mouse routing lives here; the highlight and text extraction
 	// live on the TerminalView itself.
 	termSelDragging bool      // LMB gesture is waiting for its release
+	termSelEscHeld  bool      // Esc key-down dismissed a highlight; swallow its key-up
 	termSelClickN   int       // 1 / 2 / 3 for triple-click detection
 	termSelClickAt  time.Time // time of the last click
 	termSelClickX   int
@@ -1970,6 +1971,28 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 					return temp.switchToSlot(pf, fsp, slot)
 				}
 			}
+		}
+	}
+
+	// Plain Esc on a highlighted mouse selection only dismisses the
+	// highlight (#881). The key is consumed instead of reaching the shell,
+	// so a selection can be backed out of without the running command
+	// seeing an escape (readline/zsh treat it as a line reset, much like
+	// Ctrl+C). The matching key-up is swallowed too, so win32-input-mode
+	// and kitty-protocol apps never receive a release without its press.
+	if !pf.showPanels && e.Type == vtinput.KeyEventType &&
+		e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
+		if e.KeyDown && pf.termView.HasSelection() {
+			pf.termView.ClearSelection()
+			pf.termSelEscHeld = true
+			if vtui.FrameManager != nil {
+				vtui.FrameManager.Redraw()
+			}
+			return true
+		}
+		if !e.KeyDown && pf.termSelEscHeld {
+			pf.termSelEscHeld = false
+			return true
 		}
 	}
 
