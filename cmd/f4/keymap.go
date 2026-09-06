@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/unxed/vtinput"
@@ -154,10 +155,9 @@ func (kr *KeyRemap) addRule(area, source, target string) {
 // the order EventToFarString writes them.
 var keyRemapModifiers = []string{"RCtrl", "Ctrl", "Alt", "Shift"}
 
-// canonicalKeySpelling rewrites the modifier prefixes of a hand-written rule
-// into the casing ParseFarKey matches, so that "ctrlaltf5" and "CtrlAltF5"
-// mean the same thing in keymap.ini. The key itself is left as typed, except
-// for a "VK_" prefix that ParseFarKey only recognizes in upper case.
+// canonicalKeySpelling rewrites a hand-written rule into the casing
+// ParseFarKey and EventToFarString use, so that "ctrlaltf5" and "CtrlAltF5"
+// mean the same thing in keymap.ini.
 func canonicalKeySpelling(key string) string {
 	rest := strings.TrimSpace(key)
 	var sb strings.Builder
@@ -175,11 +175,28 @@ func canonicalKeySpelling(key string) string {
 			break
 		}
 	}
-	if len(rest) > 3 && strings.EqualFold(rest[:3], "VK_") {
-		rest = "VK_" + strings.ToUpper(rest[3:])
-	}
-	sb.WriteString(rest)
+	sb.WriteString(canonicalKeyToken(rest))
 	return sb.String()
+}
+
+func canonicalKeyToken(key string) string {
+	if len(key) > 3 && strings.EqualFold(key[:3], "VK_") {
+		return "VK_" + strings.ToUpper(key[3:])
+	}
+	for _, name := range farKeyNames {
+		if strings.EqualFold(key, name) {
+			return name
+		}
+	}
+	if len(key) >= 2 && (key[0] == 'F' || key[0] == 'f') {
+		if n, err := strconv.Atoi(key[1:]); err == nil && n >= 1 && n <= 24 {
+			return "F" + strconv.Itoa(n)
+		}
+	}
+	if len(key) == 1 && key[0] >= 'a' && key[0] <= 'z' {
+		return strings.ToUpper(key)
+	}
+	return key
 }
 
 // Resolve returns the spelling that replaces key in area, or "" when no rule

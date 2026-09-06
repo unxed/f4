@@ -186,7 +186,7 @@ var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
 	"cmd/f4/fuse_mount_list.go:showMountList#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered mount-list action opens the current mount inventory",
 	},
-	"cmd/f4/panels_frame.go:(*PanelsFrame).Menu#1": {
+	"cmd/f4/panels_frame.go:(*PanelsFrame).menuItems#1": {
 		class: paletteAuditPluginDialogBridge, rationale: "vfs.App.Menu is the generic callback-based plugin dialog bridge; its rows are not globally enumerable commands",
 	},
 	"cmd/f4/panels_frame.go:(*PanelsFrame).showDriveMenuAt#1": {
