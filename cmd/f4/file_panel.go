@@ -50,7 +50,7 @@ func (m *mediumRow) GetCellText(col int) string {
 	if col >= 0 && col < len(m.fp.table.Columns) {
 		width = m.fp.table.Columns[col].Width
 	}
-	return formatPanelFileName(e, width)
+	return formatPanelFileNameAt(e, width, m.fp.nameLeftPos)
 }
 
 type panelMatchSpan struct {
@@ -69,7 +69,7 @@ func (fp *FileSystemPanel) GetCellText(row, col int) string {
 		}
 		e := fp.entries[row]
 		if col == 0 && len(fp.table.Columns) > 0 {
-			return formatPanelFileName(e, fp.table.Columns[0].Width)
+			return formatPanelFileNameAt(e, fp.table.Columns[0].Width, fp.nameLeftPos)
 		}
 		return e.GetCellText(col)
 	}
@@ -87,7 +87,7 @@ func (fp *FileSystemPanel) GetCellText(row, col int) string {
 	if col >= 0 && col < len(fp.table.Columns) {
 		width = fp.table.Columns[col].Width
 	}
-	return formatPanelFileName(e, width)
+	return formatPanelFileNameAt(e, width, fp.nameLeftPos)
 }
 
 // IsCellSelected implements vtui.TableCellColSelectProvider. Unlike a plain
@@ -170,12 +170,67 @@ func shouldSeparatePanelExtension(entry *fileEntry) bool {
 }
 
 func formatPanelFileName(entry *fileEntry, width int) string {
+	return formatPanelFileNameAt(entry, width, 0)
+}
+
+// panelNameOverflow reports how many display cells of entry's name do not
+// fit into a name column of the given width, i.e. how far the name can be
+// scrolled to the right before its end comes into view. It is 0 for names
+// that fit. In separate-extensions mode the extension keeps its right-aligned
+// field, so only the base name counts.
+func panelNameOverflow(entry *fileEntry, width int) int {
+	if width <= 0 {
+		return 0
+	}
+	if shouldSeparatePanelExtension(entry) {
+		if base, extension := splitFileExtension(entry.Name); extension != "" {
+			baseWidth := width - panelExtensionFieldWidth(extension) - 1
+			if baseWidth <= 0 {
+				return 0
+			}
+			return max(runewidth.StringWidth(entry.displayName(base))-baseWidth, 0)
+		}
+	}
+	return max(runewidth.StringWidth(entry.displayName(entry.Name))-width, 0)
+}
+
+// panelNameShift clamps a panel-wide scroll position to what this particular
+// name can absorb: a name that fits its column never moves, a longer one
+// stops once its last cell is visible (far2l's MakeCurLeftPos).
+func panelNameShift(entry *fileEntry, width, leftPos int) int {
+	if leftPos <= 0 {
+		return 0
+	}
+	return min(leftPos, panelNameOverflow(entry, width))
+}
+
+// scrollPanelName drops shift leading display cells from a name. A wide
+// character straddling the cut is replaced by a space so the visible
+// columns stay aligned.
+func scrollPanelName(name string, shift int) string {
+	if shift <= 0 {
+		return name
+	}
+	if runewidth.StringWidth(name) <= shift {
+		return ""
+	}
+	return runewidth.TruncateLeft(name, shift, "")
+}
+
+func panelExtensionFieldWidth(extension string) int {
+	return max(runewidth.StringWidth(extension), 3)
+}
+
+// formatPanelFileNameAt renders the name column cell for entry with the
+// panel's name scroll position applied (see nameLeftPos). Only the part of
+// the name that overflows the column can scroll out of view on the left.
+func formatPanelFileNameAt(entry *fileEntry, width, leftPos int) string {
 	if !shouldSeparatePanelExtension(entry) || width <= 0 {
-		return entry.displayName(entry.Name)
+		return scrollPanelName(entry.displayName(entry.Name), panelNameShift(entry, width, leftPos))
 	}
 	base, extension := splitFileExtension(entry.Name)
 	if extension == "" {
-		return entry.displayName(entry.Name)
+		return scrollPanelName(entry.displayName(entry.Name), panelNameShift(entry, width, leftPos))
 	}
 
 	extensionWidth := runewidth.StringWidth(extension)
@@ -189,7 +244,8 @@ func formatPanelFileName(entry *fileEntry, width int) string {
 		}
 		return runewidth.Truncate(extension, width, "")
 	}
-	left := runewidth.Truncate(entry.displayName(base), width-extensionFieldWidth-1, "")
+	left := scrollPanelName(entry.displayName(base), panelNameShift(entry, width, leftPos))
+	left = runewidth.Truncate(left, width-extensionFieldWidth-1, "")
 	leftWidth := runewidth.StringWidth(left)
 	padding := width - leftWidth - extensionFieldWidth
 	if padding < 0 {
@@ -228,9 +284,18 @@ func clippedPanelMatchSpan(start, width, cellWidth int) (panelMatchSpan, bool) {
 }
 
 func panelFileNameMatchSpans(entry *fileEntry, width, matchStartRunes, matchedRunes int) []panelMatchSpan {
+	return panelFileNameMatchSpansAt(entry, width, 0, matchStartRunes, matchedRunes)
+}
+
+// panelFileNameMatchSpansAt is panelFileNameMatchSpans for a name column
+// scrolled by leftPos cells: the highlighted cells move left together with
+// the name (the right-aligned extension field does not scroll), and spans
+// that scrolled out of the column are clipped away.
+func panelFileNameMatchSpansAt(entry *fileEntry, width, leftPos, matchStartRunes, matchedRunes int) []panelMatchSpan {
 	if matchStartRunes < 0 || matchedRunes <= 0 || width <= 0 {
 		return nil
 	}
+	shift := panelNameShift(entry, width, leftPos)
 	nameRunes := []rune(entry.Name)
 	if matchStartRunes >= len(nameRunes) {
 		return nil
@@ -246,7 +311,7 @@ func panelFileNameMatchSpans(entry *fileEntry, width, matchStartRunes, matchedRu
 
 	if !shouldSeparatePanelExtension(entry) {
 		if span, ok := clippedPanelMatchSpan(
-			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes])),
+			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes]))-shift,
 			runewidth.StringWidth(string(nameRunes[matchStartRunes:matchEndRunes])), width,
 		); ok {
 			return []panelMatchSpan{span}
@@ -257,7 +322,7 @@ func panelFileNameMatchSpans(entry *fileEntry, width, matchStartRunes, matchedRu
 	base, extension := splitFileExtension(entry.Name)
 	if extension == "" {
 		if span, ok := clippedPanelMatchSpan(
-			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes])),
+			prefixWidth+runewidth.StringWidth(string(nameRunes[:matchStartRunes]))-shift,
 			runewidth.StringWidth(string(nameRunes[matchStartRunes:matchEndRunes])), width,
 		); ok {
 			return []panelMatchSpan{span}
@@ -284,7 +349,7 @@ func panelFileNameMatchSpans(entry *fileEntry, width, matchStartRunes, matchedRu
 	if baseMatchStart < baseMatchEnd && extensionFieldWidth < width {
 		leftWidth := width - extensionFieldWidth - 1
 		if span, ok := clippedPanelMatchSpan(
-			prefixWidth+runewidth.StringWidth(string(baseRunes[:baseMatchStart])),
+			prefixWidth+runewidth.StringWidth(string(baseRunes[:baseMatchStart]))-shift,
 			runewidth.StringWidth(string(baseRunes[baseMatchStart:baseMatchEnd])), leftWidth,
 		); ok {
 			spans = append(spans, span)
@@ -488,6 +553,13 @@ type FileSystemPanel struct {
 	fastFindMatcherKey         string
 	fastFindMatchers           []*vtui.FuzzyMatcher
 	showInactiveCursor         bool
+	// nameLeftPos is how many display cells the name columns are scrolled to
+	// the right (far2l's FileList::LeftPos, Alt+Left/Alt+Right). Names that
+	// fit their column never move; a longer name is shifted by at most its
+	// own overflow, and Show clamps the value to the longest visible name so
+	// it decays to 0 by itself once no long name is on screen. A scrolled
+	// name is marked with '{' in the cell left of its column.
+	nameLeftPos int
 
 	sortMode    SortMode
 	sortReverse bool
@@ -1352,6 +1424,133 @@ func (fp *FileSystemPanel) drawCursorSeparators(scr *vtui.ScreenBuf) {
 		scr.Write(x, y, vtui.StringToCharInfo("│", attr))
 		x++
 	}
+}
+
+// truncateNameKeepingEnd fits a name into width cells by dropping its
+// beginning, so a long file name still shows its extension.
+func truncateNameKeepingEnd(name string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	overflow := runewidth.StringWidth(name) - width
+	if overflow <= 0 {
+		return name
+	}
+	return runewidth.TruncateLeft(name, overflow, "")
+}
+
+// visibleNameCells calls fn for every name cell currently on screen with the
+// entry it shows, the cell's left screen column, its row and its width.
+func (fp *FileSystemPanel) visibleNameCells(fn func(entry *fileEntry, x, y, width int)) {
+	height := fp.table.ViewHeight
+	if height <= 0 {
+		return
+	}
+	columns := fp.gridColumnCount()
+	for rowOffset := 0; rowOffset < height; rowOffset++ {
+		row := fp.table.TopPos + rowOffset
+		y := fp.table.Y1 + fp.table.MarginTop + rowOffset
+		x := fp.table.X1
+		for column := 0; column < columns && column < len(fp.table.Columns); column++ {
+			width := fp.table.Columns[column].Width
+			entryIndex := row
+			if columns > 1 {
+				entryIndex += column * height
+			}
+			if entryIndex >= 0 && entryIndex < len(fp.entries) {
+				fn(fp.entries[entryIndex], x, y, width)
+			}
+			x += width + 1
+		}
+	}
+}
+
+// maxVisibleNameOverflow is the overflow of the longest name on screen: the
+// farthest the name columns can usefully be scrolled right now.
+func (fp *FileSystemPanel) maxVisibleNameOverflow() int {
+	maxOverflow := 0
+	fp.visibleNameCells(func(entry *fileEntry, _, _, width int) {
+		maxOverflow = max(maxOverflow, panelNameOverflow(entry, width))
+	})
+	return maxOverflow
+}
+
+// namesOverflow reports whether at least one name on screen is cut off, so
+// Alt+Left/Alt+Right have something to scroll.
+func (fp *FileSystemPanel) namesOverflow() bool {
+	return fp.maxVisibleNameOverflow() > 0
+}
+
+func (fp *FileSystemPanel) clampNameLeftPos() {
+	if fp.nameLeftPos <= 0 {
+		fp.nameLeftPos = 0
+		return
+	}
+	fp.nameLeftPos = min(fp.nameLeftPos, fp.maxVisibleNameOverflow())
+}
+
+// ScrollNames shifts the name columns by delta cells: positive brings the
+// end of long names into view, negative scrolls back toward their
+// beginning. It reports whether the position changed.
+func (fp *FileSystemPanel) ScrollNames(delta int) bool {
+	return fp.SetNameLeftPos(fp.nameLeftPos + delta)
+}
+
+// SetNameLeftPos scrolls the name columns to pos cells, clamped to the
+// longest visible name (so any large value means "to the end"). It reports
+// whether the position changed.
+func (fp *FileSystemPanel) SetNameLeftPos(pos int) bool {
+	pos = max(0, min(pos, fp.maxVisibleNameOverflow()))
+	if pos == fp.nameLeftPos {
+		return false
+	}
+	fp.nameLeftPos = pos
+	if vtui.FrameManager != nil {
+		vtui.FrameManager.Redraw()
+	}
+	return true
+}
+
+// drawNameScrollBrackets marks cut-off names the way far2l does: '{' in the
+// cell left of a name whose beginning is scrolled out of view, '}' in the
+// cell right of a name whose end is still hidden. Those cells are the panel
+// border or the column separator; on the cursor row they take the cursor's
+// background like drawCursorSeparators does.
+func (fp *FileSystemPanel) drawNameScrollBrackets(scr *vtui.ScreenBuf) {
+	if !fp.table.IsVisible() {
+		return
+	}
+	bracketAttr := func(neighborX, y int) uint64 {
+		attr := vtui.Palette[ColPanelBox]
+		cellAttr := scr.GetCell(neighborX, y).Attributes
+		if cellAttr&vtui.IsBgRGB != 0 {
+			attr = vtui.SetRGBBack(attr, vtui.GetRGBBack(cellAttr))
+		} else {
+			attr = vtui.SetIndexBack(attr, vtui.GetIndexBack(cellAttr))
+		}
+		return (attr &^ vtui.BackgroundIntensity) | (cellAttr & vtui.BackgroundIntensity)
+	}
+	fp.visibleNameCells(func(entry *fileEntry, x, y, width int) {
+		overflow := panelNameOverflow(entry, width)
+		if overflow <= 0 {
+			return
+		}
+		shift := panelNameShift(entry, width, fp.nameLeftPos)
+		if shift > 0 && x-1 >= fp.X1 {
+			attr := vtui.Palette[ColPanelBox]
+			if x-1 > fp.X1 {
+				attr = bracketAttr(x, y)
+			}
+			scr.Write(x-1, y, vtui.StringToCharInfo("{", attr))
+		}
+		if overflow-shift > 0 && x+width <= fp.X2 {
+			attr := vtui.Palette[ColPanelBox]
+			if x+width < fp.X2 {
+				attr = bracketAttr(x+width-1, y)
+			}
+			scr.Write(x+width, y, vtui.StringToCharInfo("}", attr))
+		}
+	})
 }
 
 func (fp *FileSystemPanel) processScrollBarMouse(e *vtinput.InputEvent) bool {
@@ -2407,9 +2606,11 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		fp.table.ColorItemSelectCursorIdx = ColPanelSelectedCursor
 		fp.table.SetFocus(fp.IsFocused())
 	}
+	fp.clampNameLeftPos()
 	fp.table.Show(scr)
 	fp.drawFastFindMatches(scr)
 	fp.drawCursorSeparators(scr)
+	fp.drawNameScrollBrackets(scr)
 	fp.drawScrollBar(scr)
 
 	if AppConfig.ShowPanelFileInfo && fp.Y2-fp.Y1+1 > 6 {
@@ -2465,7 +2666,9 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 			rightW := runewidth.StringWidth(rightStr)
 
 			if availW > rightW+1 {
-				nameStr = runewidth.Truncate(nameStr, availW-rightW-1, "")
+				// far2l's status line is a right-aligned name column: a name
+				// that does not fit loses its beginning, not its extension.
+				nameStr = truncateNameKeepingEnd(nameStr, availW-rightW-1)
 			} else {
 				nameStr = ""
 				rightStr = runewidth.Truncate(rightStr, availW, "")
@@ -2698,7 +2901,7 @@ func (fp *FileSystemPanel) drawFastFindMatches(scr *vtui.ScreenBuf) {
 			if entryIndex >= 0 && entryIndex < len(fp.entries) {
 				entry := fp.entries[entryIndex]
 				matchStart, matchedRunes, _ := fp.fastFindMatch(entry.Name)
-				for _, span := range panelFileNameMatchSpans(entry, cellWidth, matchStart, matchedRunes) {
+				for _, span := range panelFileNameMatchSpansAt(entry, cellWidth, fp.nameLeftPos, matchStart, matchedRunes) {
 					for cellOffset := 0; cellOffset < span.width; cellOffset++ {
 						cell := scr.GetCell(x+span.start+cellOffset, y)
 						cell.Attributes = fastFindMatchAttr(cell.Attributes, matchAttr)

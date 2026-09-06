@@ -976,12 +976,19 @@ func init() {
 		Area:        "Shell",
 		Label:       "History Back",
 		LabelKey:    "Action.Panel.HistoryBack",
-		Description: "Move backward through folders history",
+		Description: "Scroll long file names left, or move backward through folders history",
 		DescKey:     "Action.Panel.HistoryBack.Desc",
 		DefaultKeys: []string{"AltLeft"},
 		MenuPath:    "Commands",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
+				// far2l scrolls long names with Alt+Left/Right (#890). Keep
+				// folder history on the same keys, but only when nothing on
+				// screen is cut off, so scrolling never jumps directories.
+				if fsp.namesOverflow() {
+					fsp.ScrollNames(-1)
+					return
+				}
 				pf.moveFolderHistory(fsp, -1)
 			}
 		}),
@@ -991,13 +998,71 @@ func init() {
 		Area:        "Shell",
 		Label:       "History Forward",
 		LabelKey:    "Action.Panel.HistoryForward",
-		Description: "Move forward through folders history",
+		Description: "Scroll long file names right, or move forward through folders history",
 		DescKey:     "Action.Panel.HistoryForward.Desc",
 		DefaultKeys: []string{"AltRight"},
 		MenuPath:    "Commands",
 		Handler: withPF(func(pf *PanelsFrame) {
 			if fsp := pf.getActivePanel(); fsp != nil {
+				if fsp.namesOverflow() {
+					fsp.ScrollNames(1)
+					return
+				}
 				pf.moveFolderHistory(fsp, 1)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ScrollNamesLeft",
+		Area:        "Shell",
+		Label:       "Scroll Names Left",
+		LabelKey:    "Action.Panel.ScrollNamesLeft",
+		Description: "Scroll long file names one cell left",
+		DescKey:     "Action.Panel.ScrollNamesLeft.Desc",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.ScrollNames(-1)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ScrollNamesRight",
+		Area:        "Shell",
+		Label:       "Scroll Names Right",
+		LabelKey:    "Action.Panel.ScrollNamesRight",
+		Description: "Scroll long file names one cell right",
+		DescKey:     "Action.Panel.ScrollNamesRight.Desc",
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.ScrollNames(1)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ScrollNamesHome",
+		Area:        "Shell",
+		Label:       "Scroll Names to Start",
+		LabelKey:    "Action.Panel.ScrollNamesHome",
+		Description: "Show the beginning of long file names",
+		DescKey:     "Action.Panel.ScrollNamesHome.Desc",
+		DefaultKeys: []string{"AltHome"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.SetNameLeftPos(0)
+			}
+		}),
+	})
+	RegisterAction(Action{
+		Name:        "Panel.ScrollNamesEnd",
+		Area:        "Shell",
+		Label:       "Scroll Names to End",
+		LabelKey:    "Action.Panel.ScrollNamesEnd",
+		Description: "Show the end of long file names",
+		DescKey:     "Action.Panel.ScrollNamesEnd.Desc",
+		DefaultKeys: []string{"AltEnd"},
+		Handler: withPF(func(pf *PanelsFrame) {
+			if fsp := pf.getActivePanel(); fsp != nil {
+				fsp.SetNameLeftPos(1 << 30)
 			}
 		}),
 	})
