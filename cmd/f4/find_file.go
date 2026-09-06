@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/charlievieth/strcase"
+	"github.com/coregx/coregex"
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -289,24 +290,26 @@ func ExecuteFindFile(pf *PanelsFrame, v vfs.VFS, startDir, mask, text string, op
 type findTextMatcher struct {
 	options FindFileOptions
 	needle  string
-	folded  string
-	regex   *regexp.Regexp
+	regex   *coregex.Regex
 }
 
+// newFindTextMatcher prepares the content filter for one Find File run. A
+// regular expression is handed to coregex, the engine the viewer and the
+// editor already search with, so a pattern that selects a file here selects
+// the same text once that file is opened. A literal pattern stays out of the
+// engine: strcase folds case while it scans, which is the same split the
+// editor makes between its regex and its plain-text search paths.
 func newFindTextMatcher(pattern string, options FindFileOptions) (*findTextMatcher, error) {
 	if pattern == "" {
 		return nil, nil
 	}
 	m := &findTextMatcher{options: options, needle: pattern}
-	if !options.CaseSensitive {
-		m.folded = strings.ToLower(pattern)
-	}
 	if options.Regex {
 		expression := pattern
 		if !options.CaseSensitive {
 			expression = "(?i:" + expression + ")"
 		}
-		compiled, err := regexp.Compile(expression)
+		compiled, err := coregex.Compile(expression)
 		if err != nil {
 			return nil, err
 		}
@@ -326,27 +329,48 @@ func (m *findTextMatcher) hasMatch(data []byte) bool {
 	if m == nil {
 		return false
 	}
-	s := string(data)
 	if m.regex != nil {
-		for _, indexes := range m.regex.FindAllStringIndex(s, -1) {
-			if !m.options.WholeWords || findTextWholeWord(s, indexes[0], indexes[1]) {
+		// coregex matches bytes, so the chunk does not have to be copied
+		// into a string first. Without whole-word filtering the first hit
+		// already answers the question and Match stops there instead of
+		// walking the rest of a 128K chunk collecting offsets nobody reads.
+		if !m.options.WholeWords {
+			return m.regex.Match(data)
+		}
+		for _, span := range m.regex.FindAllIndex(data, -1) {
+			if findTextWholeWord(data, span[0], span[1]) {
 				return true
 			}
 		}
 		return false
 	}
-	haystack, needle := s, m.needle
+	// Literal search. Offsets have to index the chunk itself, otherwise the
+	// whole-word check inspects the wrong neighbours — which rules out
+	// lowercasing the chunk first, since folding can change byte lengths
+	// ("İ" becomes two runes) and shift everything behind it. strcase folds
+	// as it scans and reports offsets into the original text; CutPrefix then
+	// gives back the length the match really occupied there.
+	haystack := string(data)
+	index := strings.Index
 	if !m.options.CaseSensitive {
-		haystack, needle = strings.ToLower(s), m.folded
+		index = strcase.Index
 	}
 	for from := 0; from <= len(haystack); {
-		at := strings.Index(haystack[from:], needle)
+		at := index(haystack[from:], m.needle)
 		if at < 0 {
-			break
+			return false
 		}
 		at += from
-		end := at + len(needle)
-		if !m.options.WholeWords || findTextWholeWord(s, at, end) {
+		end := at + len(m.needle)
+		if !m.options.CaseSensitive {
+			rest, ok := strcase.CutPrefix(haystack[at:], m.needle)
+			if !ok {
+				from = at + 1
+				continue
+			}
+			end = len(haystack) - len(rest)
+		}
+		if !m.options.WholeWords || findTextWholeWord(data, at, end) {
 			return true
 		}
 		from = at + 1
@@ -354,15 +378,20 @@ func (m *findTextMatcher) hasMatch(data []byte) bool {
 	return false
 }
 
-func findTextWholeWord(s string, start, end int) bool {
+// findTextWholeWord reports whether the match spanning [start, end) is
+// delimited by non-word runes. This stays a hand-rolled check instead of
+// wrapping the pattern in \b: Go's \b is defined over the ASCII \w class, so
+// a Cyrillic or Greek word has no boundary anywhere in it and whole-word
+// search would answer "no match" for every non-Latin query.
+func findTextWholeWord(data []byte, start, end int) bool {
 	wordBefore := false
 	if start > 0 {
-		r, _ := utf8.DecodeLastRuneInString(s[:start])
+		r, _ := utf8.DecodeLastRune(data[:start])
 		wordBefore = isFindTextWordRune(r)
 	}
 	wordAfter := false
-	if end < len(s) {
-		r, _ := utf8.DecodeRuneInString(s[end:])
+	if end < len(data) {
+		r, _ := utf8.DecodeRune(data[end:])
 		wordAfter = isFindTextWordRune(r)
 	}
 	return !wordBefore && !wordAfter

@@ -105,3 +105,38 @@ func TestOSVFSFindFilesOptions(t *testing.T) {
 		}
 	}
 }
+func TestFindQueryMatcherOptions(t *testing.T) {
+	cases := []struct {
+		name  string
+		data  string
+		query FindQuery
+		want  bool
+	}{
+		{name: "folded literal", data: "Needle", query: FindQuery{Text: "needle", IgnoreCase: true}, want: true},
+		{name: "case sensitive miss", data: "Needle", query: FindQuery{Text: "needle"}, want: false},
+		{name: "regexp", data: "file-42", query: FindQuery{Text: `file-[0-9]+`, Regex: true}, want: true},
+		{name: "regexp folded", data: "FILE-42", query: FindQuery{Text: `file-[0-9]+`, Regex: true, IgnoreCase: true}, want: true},
+		{name: "regexp whole word miss", data: "prefile-42x", query: FindQuery{Text: `file-[0-9]+`, Regex: true, WholeWords: true}, want: false},
+		// A multibyte neighbour has to be decoded as one rune; reading only
+		// its first byte would make "иголками" look like a whole word.
+		{name: "cyrillic whole word hit", data: "вот иголка тут", query: FindQuery{Text: "ИГОЛКА", IgnoreCase: true, WholeWords: true}, want: true},
+		{name: "cyrillic whole word miss", data: "иголками", query: FindQuery{Text: "иголка", IgnoreCase: true, WholeWords: true}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			matcher, err := newFindQueryMatcher(tc.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := matcher.hasMatch([]byte(tc.data)); got != tc.want {
+				t.Fatalf("hasMatch(%q, %q) = %v, want %v", tc.data, tc.query.Text, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFindQueryMatcherRejectsInvalidRegexp(t *testing.T) {
+	if _, err := newFindQueryMatcher(FindQuery{Text: "[", Regex: true}); err == nil {
+		t.Fatal("invalid regexp was accepted")
+	}
+}

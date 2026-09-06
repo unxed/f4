@@ -61,6 +61,15 @@ func TestFindTextMatcherOptions(t *testing.T) {
 		{name: "whole word miss", data: "needles", pattern: "needle", options: FindFileOptions{WholeWords: true}, want: false},
 		{name: "whole word hit", data: "a needle here", pattern: "needle", options: FindFileOptions{WholeWords: true}, want: true},
 		{name: "regexp", data: "file-42", pattern: `file-[0-9]+`, options: FindFileOptions{Regex: true, CaseSensitive: true}, want: true},
+		{name: "regexp folded", data: "FILE-42", pattern: `file-[0-9]+`, options: FindFileOptions{Regex: true}, want: true},
+		{name: "regexp case sensitive miss", data: "FILE-42", pattern: `file-[0-9]+`, options: FindFileOptions{Regex: true, CaseSensitive: true}, want: false},
+		{name: "regexp whole word hit", data: "a file-42 here", pattern: `file-[0-9]+`, options: FindFileOptions{Regex: true, CaseSensitive: true, WholeWords: true}, want: true},
+		{name: "regexp whole word miss", data: "prefile-42x", pattern: `file-[0-9]+`, options: FindFileOptions{Regex: true, CaseSensitive: true, WholeWords: true}, want: false},
+		// Whole-word boundaries are decided per rune, so a multibyte
+		// neighbour must be read as one letter and not as its first byte.
+		{name: "cyrillic whole word hit", data: "вот иголка тут", pattern: "ИГОЛКА", options: FindFileOptions{WholeWords: true}, want: true},
+		{name: "cyrillic whole word miss", data: "иголками", pattern: "иголка", options: FindFileOptions{WholeWords: true}, want: false},
+		{name: "cyrillic regexp whole word miss", data: "иголками", pattern: "игол[кс]а", options: FindFileOptions{Regex: true, WholeWords: true}, want: false},
 		{name: "not containing", data: "nothing here", pattern: "needle", options: FindFileOptions{NotContaining: true}, want: true},
 		{name: "not containing miss", data: "needle here", pattern: "needle", options: FindFileOptions{NotContaining: true}, want: false},
 	}
