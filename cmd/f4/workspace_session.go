@@ -282,6 +282,52 @@ func validSessionViewMode(mode int) ViewMode {
 	return viewMode
 }
 
+// navigatePanelTo moves a panel to path. What does not open as an object of its
+// own (an archive, a provider resource) stays a plain path in the current VFS;
+// a URI without its plugin is not even that.
+func navigatePanelTo(pf *PanelsFrame, panel *FileSystemPanel, path string) {
+	if path == "" || pf.NavigateToPath(panel, path) {
+		return
+	}
+	if vfs.IsURIPath(path) {
+		return
+	}
+	// A path that no longer exists leaves the VFS where it was, so re-reading
+	// the directory would only redraw the one already on screen.
+	if err := panel.vfs.SetPath(path); err != nil {
+		vtui.DebugLog("SESSION: cannot open %s: %v", path, err)
+		return
+	}
+	panel.ReadDirectory()
+}
+
+// applyStartupDirs opens left and right in the two panels, so `cd dir && f4`
+// shows dir and `f4 dir1 dir2` shows both, rather than session.ini's paths. It
+// runs after applyWorkspaceSession and therefore wins; an empty left changes
+// nothing, and an empty right sends both panels to left.
+//
+// A right that differs from left only ever comes from the command line, so it
+// also says the focus belongs on the directory named first.
+func applyStartupDirs(pf *PanelsFrame, left, right string) {
+	if pf == nil || left == "" {
+		return
+	}
+	fromCommandLine := right != "" && right != left
+	if right == "" {
+		right = left
+	}
+	for idx, dir := range [2]string{left, right} {
+		if fsp, ok := pf.panels[idx].(*FileSystemPanel); ok && fsp != nil {
+			navigatePanelTo(pf, fsp, dir)
+			// The pending cursor names a file of the directory just left.
+			fsp.pendingSelection = ""
+		}
+	}
+	if fromCommandLine {
+		pf.activeIdx = 0
+	}
+}
+
 func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, height int, restorePaths bool) {
 	if pf == nil {
 		return
@@ -306,18 +352,9 @@ func applyWorkspaceSession(pf *PanelsFrame, state workspaceSessionState, width, 
 	left.sortReverse, right.sortReverse = state.Left.SortReverse, state.Right.SortReverse
 	left.useSortGroups, right.useSortGroups = state.Left.UseSortGroups, state.Right.UseSortGroups
 
-	navigate := func(panel *FileSystemPanel, path string) {
-		if path == "" || pf.NavigateToPath(panel, path) {
-			return
-		}
-		if !vfs.IsURIPath(path) {
-			panel.vfs.SetPath(path)
-			panel.ReadDirectory()
-		}
-	}
 	if restorePaths {
-		navigate(left, state.Left.Path)
-		navigate(right, state.Right.Path)
+		navigatePanelTo(pf, left, state.Left.Path)
+		navigatePanelTo(pf, right, state.Right.Path)
 		left.pendingSelection, right.pendingSelection = state.Left.Cursor, state.Right.Cursor
 	}
 
