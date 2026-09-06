@@ -1877,11 +1877,61 @@ func readViewerSearchData(ctx context.Context, backend *ViewerBackend, progress 
 	return data, nil
 }
 
+// openPlayerPanel is the player when it is open on the passive side, which
+// is the only side it can be on while a file panel is active.
+func openPlayerPanel(pf *PanelsFrame) *PlayerPanel {
+	if pf == nil || !pf.showPanels || pf.activeIdx < 0 || pf.activeIdx > 1 {
+		return nil
+	}
+	player, _ := pf.altPanels[1-pf.activeIdx].(*PlayerPanel)
+	return player
+}
+
+// tryPlayInPlayerPanel is Enter on a recording while the player panel is
+// open: the file plays there at once, the file panel keeps the cursor, and
+// the rest of the panel's audio files become the queue. Without the player
+// open, Enter keeps its usual meaning — associations, then the system
+// opener — so the rule costs nobody anything they did not ask for.
+func tryPlayInPlayerPanel(pf *PanelsFrame, v vfs.VFS, path string) bool {
+	player := openPlayerPanel(pf)
+	if player == nil || !IsAudioFile(path) {
+		return false
+	}
+	osv, isLocal := v.(*vfs.OSVFS)
+	if !isLocal {
+		vtui.ShowMessage(Msg("Player.Title"), Msg("Player.LocalOnly"), []string{Msg("vtui.Ok")})
+		return true
+	}
+	fsp := pf.getActivePanel()
+	if fsp == nil {
+		return false
+	}
+	dir := v.Dir(path)
+	names, index := fsp.AudioSiblings()
+	if index < 0 || fsp.vfs.GetPath() != dir {
+		names, index = []string{v.Base(path)}, 0
+	}
+	files := make([]string, 0, len(names))
+	for _, n := range names {
+		abs, err := osv.Abs(filepath.Join(dir, n))
+		if err != nil {
+			abs = filepath.Join(dir, n)
+		}
+		files = append(files, abs)
+	}
+	player.PlayFile(files, index)
+	vtui.FrameManager.Redraw()
+	return true
+}
+
 func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 	// User-defined file associations for Enter (mirrors far2l F9 →
 	// Commands → File associations). A matching association intercepts
 	// before the runnable / xdg-open fallback; no match → default flow.
 	if tryFileAssociation(pf, AssocExecute) {
+		return
+	}
+	if tryPlayInPlayerPanel(pf, v, path) {
 		return
 	}
 	if _, isDisks := v.(*vfs.DisksVFS); isDisks {
@@ -2873,6 +2923,29 @@ func actionEditorSettings(pf *PanelsFrame) {
 	vtui.FrameManager.Push(dlg)
 }
 
+// stopPlayerForDelete lets go of a file the player is reading when it is
+// about to be deleted, so the delete succeeds on Windows and the player does
+// not stay on a file that is gone. Nothing happens for other files.
+func stopPlayerForDelete(pf *PanelsFrame, v vfs.VFS, basePath string, names []string) {
+	player := openPlayerPanel(pf)
+	if player == nil {
+		return
+	}
+	osv, isLocal := v.(*vfs.OSVFS)
+	if !isLocal {
+		return
+	}
+	paths := make([]string, 0, len(names))
+	for _, n := range names {
+		p := filepath.Join(basePath, n)
+		if abs, err := osv.Abs(p); err == nil {
+			p = abs
+		}
+		paths = append(paths, p)
+	}
+	player.StopIfPlaying(paths)
+}
+
 // actionDelete follows the global trash preference. The disposition is
 // resolved here, before a task can be queued, so later settings changes cannot
 // alter the meaning of an already confirmed operation.
@@ -2920,6 +2993,7 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 
 	if !AppConfig.ConfirmDelete {
 		fsp.pendingSelection = fsp.GetSuccessorName()
+		stopPlayerForDelete(pf, activeVfs, basePath, names)
 		go ExecuteDeleteOpWithDispositionAt(pf, activeVfs, basePath, names, AppConfig.DefaultFileOpMode, disposition, pf.RefreshAll)
 		return
 	}
@@ -2985,6 +3059,7 @@ func actionDeleteWithDisposition(pf *PanelsFrame, disposition vfs.DeleteDisposit
 		mode := comboMode.Menu.SelectPos
 		fsp.pendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
+		stopPlayerForDelete(pf, activeVfs, basePath, names)
 		go ExecuteDeleteOpWithDispositionAt(pf, activeVfs, basePath, names, mode, disposition, pf.RefreshAll)
 	}
 

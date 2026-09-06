@@ -393,7 +393,7 @@ Action.App.Spreadsheet.Desc=Open the spreadsheet workspace
 Action.App.SQLite=SQLite &client
 Action.App.SQLite.Desc=Open the SQLite client on the database under the cursor
 Action.Panel.TempPanel.Desc=Open the temporary panel or switch its saved list
-Action.Panel.Player.Desc=Toggle the MP3 player panel
+Action.Panel.Player.Desc=Toggle the audio player panel
 
 Link.Title= Link
 Link.Prompt=Create link to %s in:
@@ -1057,7 +1057,7 @@ QuickView.Binary=<binary content — hex preview>
 QuickView.ReadError=Read failed
 
 Player.Title= Player
-Player.Idle=Nothing playing. F5 in the other panel adds files to the playlist.
+Player.Idle=Nothing playing. F5 in the other panel adds files to the playlist; Enter on a recording plays it.
 Player.PausedMark=(paused)
 Player.Stereo=stereo
 Player.Mono=mono
@@ -1066,7 +1066,8 @@ Player.NewFolderTitle=New playlist folder
 Player.NewFolderPrompt=Folder name:
 Player.MoveRefused=The playlist keeps references only; use F5 to add tracks. F6 is disabled so nothing is moved on disk by accident.
 Player.LocalOnly=Only files from a local file system can be added to the playlist for now.
-Player.NothingAdded=No MP3 files were found in the selection.
+Player.NothingAdded=No audio files were found in the selection.
+Player.NeedFFmpeg=ffmpeg is needed to play %s files and it is not installed.
 
 MediaInfo.LanguageCode=en
 MediaInfo.Menu=&Media information

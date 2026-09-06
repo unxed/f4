@@ -57,7 +57,7 @@ func TestMissingMessage(t *testing.T) {
 	if !strings.Contains(msg, "ffmpeg") {
 		t.Errorf("the name must be in it: %q", msg)
 	}
-	if !strings.Contains(msg, "decoding video") {
+	if !strings.Contains(msg, "decoding video") || !strings.Contains(msg, "audio") {
 		t.Errorf("what it is for must be in it: %q", msg)
 	}
 }

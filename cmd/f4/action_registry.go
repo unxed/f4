@@ -1590,7 +1590,7 @@ func init() {
 		Area:        "Shell",
 		Label:       "Player",
 		LabelKey:    "Menu.Panel.Player",
-		Description: "Toggle the MP3 player panel",
+		Description: "Toggle the audio player panel",
 		DescKey:     "Action.Panel.Player.Desc",
 		DefaultKeys: []string{"CtrlShiftM"},
 		Handler: withPF(func(pf *PanelsFrame) {

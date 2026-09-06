@@ -37,7 +37,7 @@ var (
 	// instead.
 	toolFFmpeg = ExternalTool{
 		Names:   []string{"ffmpeg", "avconv"},
-		Purpose: "decoding video",
+		Purpose: "decoding video and the audio formats it has no decoder of its own for",
 		Install: map[string]string{
 			"apt":     "ffmpeg",
 			"dnf":     "ffmpeg",

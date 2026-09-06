@@ -12,14 +12,14 @@ import (
 	"time"
 
 	"github.com/ebitengine/oto/v3"
-	"github.com/hajimehoshi/go-mp3"
 	"github.com/unxed/vtui"
 )
 
 // audioEngine owns the single output device of the process and plays one
-// MP3 at a time. Decoding is go-mp3 (pure Go); output is oto, which talks to
+// track at a time. Decoding is audio_decode.go's business (pure Go for MP3,
+// WAV, FLAC and Vorbis, ffmpeg for the rest); output is oto, which talks to
 // ALSA / CoreAudio / WASAPI through purego, so no cgo is needed on the three
-// desktop platforms. Both were already in the module graph via ebiten.
+// desktop platforms.
 //
 // The oto context is created lazily on the first Load and its sample rate is
 // fixed for the life of the process, so a track recorded at another rate is
@@ -36,7 +36,7 @@ type audioEngine struct {
 	ctxErr  error
 
 	player *oto.Player
-	file   *os.File
+	source *audioSource
 	tap    *pcmTap
 	path   string
 
@@ -153,44 +153,36 @@ func (a *audioEngine) Load(path string) error {
 	vtui.DebugLog("AUDIO: load requested path=%q", path)
 	a.unloadLocked()
 
-	f, err := os.Open(path)
+	// ffmpeg is told the device rate when there already is a device, so
+	// that its output goes straight through; the native decoders run at
+	// the file's rate and are resampled below when that differs.
+	source, err := openAudioSource(path, a.ctxRate)
 	if err != nil {
-		vtui.DebugLog("AUDIO: load failed to open %q: %v", path, err)
+		vtui.DebugLog("AUDIO: load could not decode %q: %v", path, err)
 		return err
 	}
-	dec, err := mp3.NewDecoder(f)
-	if err != nil {
-		vtui.DebugLog("AUDIO: load MP3 decoder rejected %q: %v", path, err)
-		f.Close()
-		return err
-	}
-	srcRate := dec.SampleRate()
-	decodedLength := dec.Length()
-	vtui.DebugLog("AUDIO: MP3 decoder ready path=%q sample_rate=%d decoded_bytes=%d", path, srcRate, decodedLength)
+	srcRate := source.Rate
+	vtui.DebugLog("AUDIO: %s decoder ready path=%q sample_rate=%d decoded_bytes=%d", source.Codec, path, srcRate, source.Length)
 	if err := a.ensureContext(srcRate); err != nil {
 		vtui.DebugLog("AUDIO: load cannot initialize output for %q: %v", path, err)
-		f.Close()
+		source.Close()
 		return err
 	}
-	var src io.Reader = dec
+	var src io.Reader = source
 	if srcRate != a.ctxRate {
 		vtui.DebugLog("AUDIO: resampling path=%q from_rate=%d to_rate=%d", path, srcRate, a.ctxRate)
-		src = newLinearResampler(dec, srcRate, a.ctxRate)
+		src = newLinearResampler(source, srcRate, a.ctxRate)
 	}
-	a.duration = 0
-	if decodedLength > 0 {
-		a.duration = time.Duration(float64(decodedLength) / float64(srcRate*audioBytesPerFrame) * float64(time.Second))
-	}
-	a.info = audioTrackInfo{SampleRate: srcRate}
-	if st, err := f.Stat(); err == nil && a.duration > 0 {
+	a.duration = source.Duration
+	a.info = audioTrackInfo{SampleRate: srcRate, Mono: source.Mono, Codec: source.Codec}
+	if st, err := os.Stat(path); err == nil && a.duration > 0 {
 		a.info.BitrateKbps = int(math.Round(float64(st.Size()) * 8 / a.duration.Seconds() / 1000))
 	} else if err != nil {
 		vtui.DebugLog("AUDIO: stat failed for %q while calculating bitrate: %v", path, err)
 	}
-	a.info.Mono = mp3FirstFrameIsMono(path)
 
 	a.tap = newPCMTap(src, a.ctxRate)
-	a.file = f
+	a.source = source
 	a.player = a.ctx.NewPlayer(a.tap)
 	a.player.SetVolume(a.volume)
 	a.path = path
@@ -211,9 +203,9 @@ func (a *audioEngine) unloadLocked() {
 		// SA1019: (*github.com/ebitengine/oto/v3.Player).Close is deprecated: as of v3.4. you don't have to call Close. (staticcheck)
 		a.player = nil
 	}
-	if a.file != nil {
-		a.file.Close()
-		a.file = nil
+	if a.source != nil {
+		a.source.Close()
+		a.source = nil
 	}
 	a.tap = nil
 	a.path = ""

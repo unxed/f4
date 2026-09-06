@@ -1,4 +1,12 @@
-# MP3 player panel — status, design and plan
+# Audio player panel — status, design and plan
+
+**Formats (Sept 2026).** MP3, WAV, FLAC and Ogg Vorbis are decoded in Go
+(`go-mp3`, own RIFF reader, `mewkiz/flac`, `jfreymuth/oggvorbis`); AMR,
+AAC/M4A, Opus, WMA, APE and the rest go through `ffmpeg` writing raw PCM to
+a pipe (`audio_decode.go`). With the player open, Enter on an audio file in
+the file panel plays it at once and the panel's audio files become the
+queue (Far AudioPlayer style); F8 on the playing file stops it first. The
+text below predates this and still says MP3 in places.
 
 The entry point for the player work. Written so that it can be continued
 with nothing but the repository at hand. Related reading:

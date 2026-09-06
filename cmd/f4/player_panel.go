@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,14 @@ import (
 // Files reach the playlist by F5 from the opposite file panel (see
 // actionCopyMove); nothing is copied, the playlist keeps paths. F6 is
 // refused so a slip of the finger cannot move music around on disk.
+//
+// There is a second way to use it, for going through a folder of
+// recordings the way Far's AudioPlayer plugin does: with the player open,
+// Enter on an audio file in the file panel plays that file right away
+// without touching the playlist, and the panel stays where it was — so Ins
+// selects, F8 deletes, Down and Enter listens to the next one. When such a
+// file ends the next recording in the same panel plays, and |< >| step
+// through the panel's files instead of the playlist (see PlayFile).
 //
 // Keyboard model, chosen so that Tab keeps its f4 meaning (switch panels):
 // Up/Down walk one column that starts at the control row and continues into
@@ -41,6 +50,14 @@ type PlayerPanel struct {
 
 	current *playlistItem // the track loaded in the engine, if any
 	marquee int
+
+	// queue is the file panel's audio files when the current track came
+	// from Enter in the panel rather than the playlist; queuePos is the
+	// current one. Nil while the playlist drives playback.
+	queue    []string
+	queuePos int
+
+	ffmpegWarned bool // the install message is shown once per panel
 	//lastTick time.Time // fix linter error
 	status string // one-line error/notice shown instead of the title
 
@@ -259,8 +276,9 @@ func (pp *PlayerPanel) rebuildRows() {
 }
 
 // AddPaths is what F5 calls. Directories are walked and become folders;
-// anything that is not an .mp3 is ignored quietly — the user selected a
-// directory of music, not a list of files to be argued about.
+// anything that is not an audio file (see audioFormats) is ignored quietly
+// — the user selected a directory of music, not a list of files to be
+// argued about.
 func (pp *PlayerPanel) AddPaths(paths []string) int {
 	added := 0
 	for _, p := range paths {
@@ -317,16 +335,21 @@ func fillFolderFromDir(folder *playlistItem, dir string) int {
 }
 
 func playlistItemForFile(path string) *playlistItem {
-	if !strings.EqualFold(filepath.Ext(path), ".mp3") {
+	if !IsAudioFile(path) {
 		return nil
 	}
 	return &playlistItem{Name: trackDisplayName(path), Path: path}
 }
 
 // trackDisplayName is "Artist - Title" from ID3 when both are there, else
-// the file name without extension.
+// the file name without extension. Only MP3 carries ID3 in practice; for
+// anything else the name is the file name, which for a dictaphone
+// recording is the date and time and exactly what one wants to see.
 func trackDisplayName(path string) string {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if !strings.EqualFold(filepath.Ext(path), ".mp3") {
+		return base
+	}
 	f, err := id3.Open(path)
 	if err != nil {
 		return base
@@ -349,10 +372,21 @@ func (pp *PlayerPanel) playItem(it *playlistItem) bool {
 	if it == nil || it.Folder {
 		return false
 	}
+	// A playlist track takes over from the file panel queue.
+	if it.parent != nil {
+		pp.queue = nil
+	}
 	pp.status = ""
 	if err := pp.engine.Load(it.Path); err != nil {
 		pp.status = err.Error()
 		pp.current = nil
+		if errors.Is(err, errNeedFFmpeg) {
+			pp.status = fmt.Sprintf(Msg("Player.NeedFFmpeg"), filepath.Ext(it.Path))
+			if !pp.ffmpegWarned {
+				pp.ffmpegWarned = true
+				vtui.ShowMessage(Msg("Player.Title"), toolFFmpeg.MissingMessage(), []string{Msg("vtui.Ok")})
+			}
+		}
 		return false
 	}
 	pp.current = it
@@ -361,9 +395,76 @@ func (pp *PlayerPanel) playItem(it *playlistItem) bool {
 	return true
 }
 
+// PlayFile plays one file that is not in the playlist — the one under the
+// cursor of the file panel — and remembers its neighbours so that playback
+// can go on to the next recording, and |< >| move within the folder. The
+// list is the panel's audio files in panel order; pos is the one to play.
+func (pp *PlayerPanel) PlayFile(files []string, pos int) bool {
+	if pos < 0 || pos >= len(files) {
+		return false
+	}
+	it := &playlistItem{Name: trackDisplayName(files[pos]), Path: files[pos]}
+	if !pp.playItem(it) {
+		return false
+	}
+	pp.queue = append([]string(nil), files...)
+	pp.queuePos = pos
+	return true
+}
+
+// StopIfPlaying stops playback when the current track is one of paths.
+// The delete action calls it before removing files: an open file cannot be
+// deleted on Windows, and a player that carries on reading a file that is
+// gone is not what anybody expects on the others. The queue forgets the
+// files too so the player does not step onto them later.
+func (pp *PlayerPanel) StopIfPlaying(paths []string) {
+	set := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		set[filepath.Clean(p)] = true
+	}
+	if pp.current != nil && set[filepath.Clean(pp.current.Path)] {
+		pp.engine.Stop()
+		pp.current = nil
+	}
+	if pp.queue == nil {
+		return
+	}
+	kept := pp.queue[:0]
+	pos := pp.queuePos
+	for i, p := range pp.queue {
+		if set[filepath.Clean(p)] {
+			if i < pp.queuePos {
+				pos--
+			}
+			continue
+		}
+		kept = append(kept, p)
+	}
+	pp.queue = kept
+	pp.queuePos = max(-1, min(pos, len(kept)-1))
+}
+
+// playQueueRelative steps through the file panel's files. Files that have
+// gone since the list was taken (deleted from the panel meanwhile) are
+// skipped.
+func (pp *PlayerPanel) playQueueRelative(delta int) bool {
+	for i := pp.queuePos + delta; i >= 0 && i < len(pp.queue); i += delta {
+		if _, err := os.Stat(pp.queue[i]); err != nil {
+			continue
+		}
+		if pp.PlayFile(pp.queue, i) {
+			return true
+		}
+	}
+	return false
+}
+
 // playRelative plays the track delta positions away from the current one
 // in play order. With nothing current it starts from the ends.
 func (pp *PlayerPanel) playRelative(delta int) bool {
+	if pp.queue != nil {
+		return pp.playQueueRelative(delta)
+	}
 	list := pp.root.tracks(nil)
 	if len(list) == 0 {
 		return false
@@ -410,6 +511,7 @@ func (pp *PlayerPanel) pressButton(b int) {
 	case playerBtnStop:
 		pp.engine.Stop()
 		pp.current = nil
+		pp.queue = nil
 	case playerBtnNext:
 		pp.playRelative(+1)
 	case playerBtnVolume:
@@ -441,10 +543,29 @@ func (pp *PlayerPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	default:
 		handled = pp.playlistKey(e, ctrl)
 	}
+	if !handled && !ctrl && isFilePanelOnlyKey(e.VirtualKeyCode) {
+		// F3/F4/F5/F8 and their Shift variants, Ins, Del: with the player
+		// in the slot there is no file under the cursor, and letting them
+		// fall through would view, edit, copy or delete whatever the file
+		// panel behind the player happens to remember (#902). Swallow
+		// them; Tab, F1, F9, F10 and the Ctrl combinations still go on.
+		return true
+	}
 	if handled {
 		vtui.FrameManager.Redraw()
 	}
 	return handled
+}
+
+// isFilePanelOnlyKey lists the plain keys that only make sense with a
+// file under the cursor, so the player refuses to pass them on.
+func isFilePanelOnlyKey(vk uint16) bool {
+	switch vk {
+	case vtinput.VK_F3, vtinput.VK_F4, vtinput.VK_F5, vtinput.VK_F6,
+		vtinput.VK_F7, vtinput.VK_F8, vtinput.VK_INSERT, vtinput.VK_DELETE:
+		return true
+	}
+	return false
 }
 
 // globalChar handles the WinAmp letter keys and volume characters that
@@ -727,6 +848,9 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 			mode = Msg("Player.Mono")
 		}
 		facts = fmt.Sprintf("%dkbps %dkHz %s", info.BitrateKbps, info.SampleRate/1000, mode)
+		if info.Codec != "" {
+			facts = info.Codec + " " + facts
+		}
 	}
 	line := clock
 	if gap := w - runewidth.StringWidth(clock) - runewidth.StringWidth(facts); gap > 1 {

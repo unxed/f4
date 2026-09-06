@@ -12,12 +12,13 @@ import (
 
 // audioTrackInfo is what the panel prints in the "128kbps 44kHz stereo"
 // slot. Bitrate is the average over the file (size / duration), which is
-// what most players show for VBR anyway; the channel mode comes from the
-// first frame header because go-mp3 always emits stereo PCM.
+// what most players show for VBR anyway; for MP3 the channel mode comes from
+// the first frame header because go-mp3 always emits stereo PCM.
 type audioTrackInfo struct {
 	BitrateKbps int
 	SampleRate  int
 	Mono        bool
+	Codec       string
 }
 
 const audioBytesPerFrame = 4 // go-mp3 output: 16-bit LE stereo
