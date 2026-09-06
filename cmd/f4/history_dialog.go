@@ -17,21 +17,21 @@ import "fmt"
 import "time"
 
 type historySearch struct {
-	menu            *vtui.VMenu
-	title           string
-	hint            string
-	all             []HistoryRecord
-	secondary       []string
-	query           []rune
-	prefixOnly      bool
-	showSecond      bool
-	secondWidth     int
-	supportsLocks   bool
-	showDetails     bool
-	showTimes       bool
-	timeMode        int
-	showDirPrefix   bool
-	dirPrefixLen    int
+	menu          *vtui.VMenu
+	title         string
+	hint          string
+	all           []HistoryRecord
+	secondary     []string
+	query         []rune
+	prefixOnly    bool
+	showSecond    bool
+	secondWidth   int
+	supportsLocks bool
+	showDetails   bool
+	showTimes     bool
+	timeMode      int
+	showDirPrefix bool
+	dirPrefixLen  int
 	// pinSlotOf turns on the pinned area (issue #407): marked entries are
 	// listed above the chronological ones and carry the digit of the far2l
 	// bookmark slot they own instead of the plain lock star. It reports -1
