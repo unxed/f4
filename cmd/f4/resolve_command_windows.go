@@ -111,6 +111,16 @@ func appPathLookup(name string) string {
 	return ""
 }
 
+// isBatchCommand reports whether the first token of cmd is a .bat or .cmd file.
+func isBatchCommand(cmd string) bool {
+	_, _, token, ok := findCmdToken(cmd)
+	if !ok {
+		return false
+	}
+	token = strings.ToUpper(token)
+	return strings.HasSuffix(token, ".BAT") || strings.HasSuffix(token, ".CMD")
+}
+
 func appPathExts() []string {
 	var out []string
 	for _, ext := range strings.Split(os.Getenv("PATHEXT"), ";") {

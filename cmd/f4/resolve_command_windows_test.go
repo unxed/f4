@@ -14,3 +14,24 @@ func TestFindCmdTokenRejectsUnmatchedQuote(t *testing.T) {
 		t.Fatalf("findCmdToken did not treat a Windows single quote as a literal token: name=%q ok=%v", name, ok)
 	}
 }
+
+func TestIsBatchCommand(t *testing.T) {
+	cases := map[string]bool{
+		`foo.bat`:                true,
+		`foo.cmd`:                true,
+		`FOO.BAT`:                true,
+		`foo.Bat`:                true,
+		`"my script.bat"`:        true,
+		`"my script.cmd" arg1`:   true,
+		`foo.exe`:                false,
+		`foo.com`:                false,
+		`dir`:                    false,
+		`foo.bat arg1 & bar.exe`: true,
+		``:                       false,
+	}
+	for cmd, want := range cases {
+		if got := isBatchCommand(cmd); got != want {
+			t.Errorf("isBatchCommand(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}

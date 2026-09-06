@@ -1981,6 +1981,9 @@ func actionExecute(pf *PanelsFrame, v vfs.VFS, dir, name, path string) {
 					}
 					pf.writePTY(activePty, []byte(cmdToWire))
 					if isWindowsShell {
+						if isBatchCommand(historyCmd) {
+							pf.cmdSession.noteBatchExecution()
+						}
 						pf.noteLocalShellLineSent(activePty)
 					}
 					pf.showPanels = false
