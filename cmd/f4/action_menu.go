@@ -82,7 +82,7 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		}
 		m.items = append(m.items, vtui.MenuItem{
 			Text:     text,
-			Shortcut: command.Shortcut,
+			Shortcut: pluginCommandShortcut(command),
 			UserData: menuHistoryItemKey("plugin:" + command.ID),
 			OnClick: func() {
 				if pf := findPanelsFrameAnyScreen(); pf != nil {

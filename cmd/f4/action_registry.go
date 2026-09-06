@@ -128,6 +128,9 @@ func RunAction(name string) bool {
 		}
 		return a.Handler()
 	}
+	if a, ok := pluginActionForName(name); ok && a.Handler != nil {
+		return a.Handler()
+	}
 	return false
 }
 
@@ -155,6 +158,9 @@ func GetOrderedActions() []Action {
 // GetAction returns an action by name.
 func GetAction(name string) (Action, bool) {
 	a, ok := actionRegistry[strings.ToLower(name)]
+	if !ok {
+		return pluginActionForName(name)
+	}
 	return a, ok
 }
 

@@ -27,15 +27,20 @@ type Plugin interface {
 	GetName() string
 }
 type PluginMenuItem struct {
-	Label   string
-	Handler func(app vfs.App)
+	ActionName string
+	Label      string
+	Handler    func(app vfs.App)
 }
 
 var PluginMenuItems []PluginMenuItem
 
 func RegisterPluginMenuItem(label string, handler func(app vfs.App)) {
 	pluginRegistryMu.Lock()
-	PluginMenuItems = append(PluginMenuItems, PluginMenuItem{Label: label, Handler: handler})
+	PluginMenuItems = append(PluginMenuItems, PluginMenuItem{
+		ActionName: legacyPluginActionName(len(PluginMenuItems)),
+		Label:      label,
+		Handler:    handler,
+	})
 	pluginRegistryMu.Unlock()
 }
 

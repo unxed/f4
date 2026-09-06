@@ -313,6 +313,33 @@ func buildHotkeyRows(draft *HotkeyManager) []hotkeyRow {
 		}
 	}
 
+	// Plugin menu commands live outside the built-in action registry, but they
+	// use the same persisted binding format. Show every loaded command so a
+	// shortcut can be prepared even while its context-sensitive menu item is
+	// currently hidden.
+	for _, act := range pluginHotkeyActionsSnapshot() {
+		if assignedActions[strings.ToLower(act.Name)] {
+			continue
+		}
+		key := pluginActionShortcut(act.Name)
+		if key == "" {
+			key = pluginActionDefaultShortcut(act.Name)
+		}
+		rawKey := ""
+		if configured := pluginActionConfiguredKey(act.Name); configured != "" {
+			rawKey = configured
+		}
+		hkRows = append(hkRows, hotkeyRow{
+			Action:   act.Name,
+			Label:    plainLabel(act.DisplayLabel()),
+			Area:     act.Area,
+			Key:      key,
+			RawKey:   rawKey,
+			Editable: true,
+			Desc:     act.DisplayDescription(),
+		})
+	}
+
 	sort.Slice(hkRows, func(i, j int) bool {
 		if hkRows[i].Area != hkRows[j].Area {
 			// Rows without an area (shouldn't happen) go last

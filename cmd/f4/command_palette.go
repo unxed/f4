@@ -344,7 +344,7 @@ func commandPalettePluginEntries(pf *PanelsFrame) []commandPaletteEntry {
 				EnglishDescription: englishDescription,
 				ID:                 command.ID,
 				Category:           category,
-				Shortcut:           command.Shortcut,
+				Shortcut:           pluginCommandShortcut(command),
 				SearchFields:       searchFields,
 				source:             commandPaletteSourcePlugin,
 				pluginLocation:     location,
@@ -353,6 +353,10 @@ func commandPalettePluginEntries(pf *PanelsFrame) []commandPaletteEntry {
 		}
 	}
 	for index, item := range pluginMenuItemsSnapshot() {
+		actionName := item.ActionName
+		if actionName == "" {
+			actionName = legacyPluginActionName(index)
+		}
 		label := plainLabel(item.Label)
 		searchFields := []string{Msg("CommandPalette.CategoryLegacyPlugin")}
 		searchFields = append(searchFields, commandPaletteTranslations(
@@ -364,6 +368,7 @@ func commandPalettePluginEntries(pf *PanelsFrame) []commandPaletteEntry {
 			Label:        label,
 			EnglishLabel: label,
 			Category:     Msg("CommandPalette.CategoryPlugin"),
+			Shortcut:     pluginActionShortcut(actionName),
 			SearchFields: searchFields,
 			source:       commandPaletteSourceLegacyPlugin,
 			legacyIndex:  index,

@@ -35,7 +35,7 @@ To expose a VFS, an external plugin registers handlers for these requests:
 
 When the user selects a command, f4 calls `Plugin.RunCommand` with its ID. Contributions are tied to the RPC session and disappear when the plugin disconnects. `VFS.ProcessKey` and `Host.RegisterGlobalHotkey` remain supported for compatibility, but they carry no command name or search metadata; plugins should publish a matching command descriptor for every semantic operation reachable only through one of those raw-key callbacks.
 
-The Go SDK exposes this as the optional `f4plugin.CommandProvider` interface, so existing plugins do not need to change. See `plugins/dummy_rpc/main.go` for a drive-scoped, multilingual example.
+The Go SDK exposes this as the optional `f4plugin.CommandProvider` interface, so existing plugins do not need to change. A user can select a command in the `F11` plugin menu and press `F4` to assign or change its f4 shortcut; the binding is stored in the profile's `hotkeys.ini`. See `plugins/dummy_rpc/main.go` for a drive-scoped, multilingual example.
 
 ### C. Editor Syntax Highlighting (Highlighter API)
 
