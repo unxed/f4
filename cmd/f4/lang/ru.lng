@@ -106,7 +106,7 @@ Delete.BtnAbort=Прерв&ать
 Delete.OperationFailed=Удаление не выполнено:\n%v
 
 Trash.Title= Перемещение в корзину
-Trash.Confirm=Переместить\n%s\nв корзину?
+Trash.Confirm=Переместить в корзину\n%s?
 Trash.Btn=В &корзину
 Trash.Unsupported=Эта файловая система не поддерживает корзину. Для безвозвратного удаления используйте Shift+Del.
 

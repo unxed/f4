@@ -106,7 +106,7 @@ Delete.BtnAbort=&Abort
 Delete.OperationFailed=Deletion failed:\n%v
 
 Trash.Title= Move to Recycle Bin
-Trash.Confirm=Move\n%s\nto Recycle Bin?
+Trash.Confirm=Move to Recycle Bin\n%s?
 Trash.Btn=Move to &Recycle Bin
 Trash.Unsupported=Recycle Bin is not available for this file system. Use Shift+Del to delete permanently.
 
