@@ -11,14 +11,25 @@ import "strings"
 // Only the last component is inspected. A wildcard earlier in the path names
 // a directory that either exists or does not, and either way the operation
 // fails on its own terms rather than producing a surprise.
+//
+// A trailing slash means the destination is a directory and nothing else.
+// far2l reads the mask through PointToName(Dest), so a slash-terminated
+// destination has an empty last component, ConvertWildcards finds no wildcard
+// in it and returns FALSE, leaving the path literal (processname.cpp:113-119).
+// That rule matters here beyond parity: the copy dialog opens on the passive
+// panel's path with a separator appended, so trimming the slash first would
+// read a directory whose own name holds '*' or '?' as a mask and scatter the
+// files one level up under generated names.
 func destMask(destInput string) string {
-	trimmed := strings.TrimRight(destInput, "/\\")
-	if trimmed == "" {
+	if destInput == "" {
 		return ""
 	}
-	last := trimmed
-	if i := strings.LastIndexAny(trimmed, "/\\"); i >= 0 {
-		last = trimmed[i+1:]
+	if strings.HasSuffix(destInput, "/") || strings.HasSuffix(destInput, "\\") {
+		return ""
+	}
+	last := destInput
+	if i := strings.LastIndexAny(destInput, "/\\"); i >= 0 {
+		last = destInput[i+1:]
 	}
 	if strings.ContainsAny(last, "*?") {
 		return last
@@ -27,7 +38,8 @@ func destMask(destInput string) string {
 }
 
 // destWithoutMask is the destination directory left once the mask component
-// is taken off. A bare mask means the destination panel's own directory.
+// is taken off. A bare mask means the source panel's own directory, which is
+// what makes "*.bak" the in-place backup idiom.
 func destWithoutMask(destInput string) string {
 	trimmed := strings.TrimRight(destInput, "/\\")
 	if i := strings.LastIndexAny(trimmed, "/\\"); i >= 0 {
@@ -40,6 +52,27 @@ func destWithoutMask(destInput string) string {
 
 // applyFileMask generates a name from a source name and a wildcard mask, port
 // of far2l's ConvertWildcards (src/mix/processname.cpp).
+//
+// Two parameters of the original are deliberately absent, both checked
+// against far2l rather than assumed:
+//
+// SelectedFolderNameLength is dead weight inside ShellCopy. copy.cpp:1583-1585
+// sets it to the whole length of the selected name for a directory and to
+// zero for a file; at the whole length Truncate is a no-op and the remainder
+// appended afterwards is empty, at zero the block is skipped entirely, so both
+// branches generate from the same name. The documented dir1 + dir1/file1 case
+// needs a length that is neither, which only the plugin API can pass
+// (ProcessName with PN_GENERATENAME). Nothing to port.
+//
+// BeforeNameLength is reachable but not wanted here yet. When the destination
+// is a bare mask, far2l puts the source item's own directory back in front of
+// the generated name, so "*.bak" over a search panel writes each copy beside
+// its original. f4 does have names carrying a path — the temporary panel lists
+// references by full path, and panelized search results land there — but a
+// bare mask cannot reach a temporary panel at all today: it resolves to that
+// panel's synthetic root, which refuses Create. Porting the rule now would add
+// only unreachable code. Into a real directory ("/target/*.bak") the mask
+// already applies to the final component, as far2l does.
 //
 // The rules are not the ones a glob matcher uses, and they are worth stating:
 // '?' takes one character of the source, '*' takes source characters until the

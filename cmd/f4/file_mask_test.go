@@ -33,6 +33,15 @@ func TestDestMask(t *testing.T) {
 		{"", "", ""},
 		// A wildcard in a directory component is not a rename mask.
 		{"/tmp/a*/dest", "", ""},
+		// A trailing slash names a directory, so far2l's PointToName finds
+		// an empty last component and ConvertWildcards leaves the path
+		// literal. The copy dialog appends that slash to the passive
+		// panel's path, so a panel sitting in a directory whose name holds
+		// a wildcard must not be read as a mask.
+		{"/tmp/dest/*.bak/", "", ""},
+		{"/home/u/notes*/", "", ""},
+		{`C:\dest\notes*\`, "", ""},
+		{"*.bak/", "", ""},
 	}
 	for _, c := range cases {
 		if got := destMask(c.in); got != c.mask {
