@@ -338,6 +338,10 @@ type F4Config struct {
 	// back verbatim on SaveConfig so f4 doesn't strip far2l-only options
 	// from a shared config file.
 	LayoutExtras map[string]string
+
+	// Compare keeps what the folder comparison dialog was last set to,
+	// the way Far3's Advanced Compare remembers its own options.
+	Compare compareOptions
 }
 
 var AppConfig = F4Config{
@@ -452,6 +456,7 @@ var AppConfig = F4Config{
 	HighlightPriority:        0,
 	LastUpdateCheck:          0,
 	LastUpdateVersion:        "",
+	Compare:                  defaultCompareOptions(),
 }
 
 var getUserConfigIniPath = func() string {
@@ -724,6 +729,7 @@ func LoadConfig() {
 	fmt.Sscanf(ini.GetString("Images", "X11OverlayOffsetY", "0"), "%d", &AppConfig.ImageX11OffsetY)
 	AppConfig.TTYXKeys = ini.GetString("TTYXi", "Keys", "1") == "1"
 	AppConfig.TTYXKeyList = ini.GetString("TTYXi", "KeyList", defaultTTYXKeyList)
+	AppConfig.Compare = loadCompareOptions(ini)
 	AppConfig.ImageDecoderPriority = ini.GetString("Images", "DecoderPriority", "")
 	SetImageDecoderPriorities(ParseImageDecoderPriorities(AppConfig.ImageDecoderPriority))
 	AppConfig.UseExternalEditor = ini.GetString("Editor", "UseExternalEditor", "0") == "1"
@@ -955,6 +961,8 @@ func saveConfigWithWindowSize(windowSize bool) {
 	fmt.Fprintf(&sb, "SlideShowDelay = %d\n", AppConfig.SlideShowDelay)
 	fmt.Fprintf(&sb, "ExternalTimeout = %d\n", AppConfig.ImageExternalTimeout)
 	fmt.Fprintf(&sb, "DecoderPriority = %s\n", AppConfig.ImageDecoderPriority)
+	sb.WriteString("\n[Compare]\n")
+	writeCompareOptions(&sb, AppConfig.Compare)
 	sb.WriteString("\n[Plugins]\n")
 	fmt.Fprintf(&sb, "List = %s\n", strings.Join(AppConfig.RegisteredPlugins, "|"))
 

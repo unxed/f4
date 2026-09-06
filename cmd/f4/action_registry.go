@@ -822,6 +822,17 @@ func init() {
 		Handler:     withPF(func(pf *PanelsFrame) { actionFindDuplicates(pf) }),
 	})
 	RegisterAction(Action{
+		Name:        "Panel.CompareFolders",
+		Area:        "Shell",
+		Label:       "Compare Folders",
+		LabelKey:    "Menu.Commands.CompareFolders",
+		Description: "Compare the two panels and mark what differs",
+		DescKey:     "Action.Panel.CompareFolders.Desc",
+		MenuPath:    "Commands",
+		Visible:     panelCanCompareFolders,
+		Handler:     withPF(func(pf *PanelsFrame) { ShowCompareFoldersDialog(pf) }),
+	})
+	RegisterAction(Action{
 		Name:        "File.RunRemoteCommand",
 		Area:        "Shell",
 		Label:       "Run Command Remotely",
