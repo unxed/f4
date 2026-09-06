@@ -2774,6 +2774,9 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		if e.Name != ".." && e.Selected {
 			if e.IsDir {
 				selDirs++
+				if e.SizeCalculated {
+					selSize += e.Size
+				}
 			} else {
 				selFiles++
 				selSize += e.Size

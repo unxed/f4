@@ -689,7 +689,7 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "file1.txt", Size: 1234567, IsDir: false}, Selected: true},
-		{VFSItem: vfs.VFSItem{Name: "folder1", IsDir: true}, Selected: true},
+		{VFSItem: vfs.VFSItem{Name: "folder1", Size: 200, IsDir: true}, SizeCalculated: true, Selected: true},
 		{VFSItem: vfs.VFSItem{Name: "file2.txt", Size: 50, IsDir: false}, Selected: false},
 	}
 	fp.Refresh()
@@ -718,7 +718,7 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 	}
 
 	result := sb.String()
-	expectedBytes := "1234567"
+	expectedBytes := "1234767"
 	if !strings.Contains(result, "Bytes:") || !strings.Contains(result, expectedBytes) {
 		t.Errorf("Expected bottom bar to contain formatted bytes %q, got: %q", expectedBytes, result)
 	}
