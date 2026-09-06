@@ -19,30 +19,84 @@ import (
 	"golang.org/x/term"
 )
 
-// startupDirEnv carries the directory f4 was called from to the process that
-// draws the panels. That process cannot ask itself: the GUI restarts detached
-// and the daemon is spawned by the client, and a Dock start would answer with
-// the bundle's own directory.
-const startupDirEnv = "F4_STARTUP_DIR"
+// startupDirEnv and startupDirRightEnv carry the panel directories of this
+// start to the process that draws them. That process cannot work them out
+// itself: the GUI restarts detached, the daemon is spawned by the client, and a
+// Dock start would answer with the bundle's own directory. The right-hand one
+// is set only when the command line named a directory, which is also what tells
+// the panels that the left one was asked for rather than merely inherited.
+const (
+	startupDirEnv      = "F4_STARTUP_DIR"
+	startupDirRightEnv = "F4_STARTUP_DIR_RIGHT"
+)
 
-// rememberStartupDir records the working directory, but only for a start from a
+// startupDirsFor resolves what `f4`, `f4 dir` and `f4 dir1 dir2` mean, in the
+// order the panels are drawn: left first. One directory leaves the right panel
+// in the current one, matching mc. Relative paths are resolved here, while cwd
+// is still the shell's; a third argument and beyond has no panel to go to.
+func startupDirsFor(cwd string, args []string) (left, right string) {
+	abs := func(path string) string {
+		if filepath.IsAbs(path) {
+			return filepath.Clean(path)
+		}
+		return filepath.Join(cwd, path)
+	}
+	switch len(args) {
+	case 0:
+		return cwd, ""
+	case 1:
+		return abs(args[0]), cwd
+	default:
+		return abs(args[0]), abs(args[1])
+	}
+}
+
+// startupDirArgs picks the panel directories out of a command line: the words
+// before the first switch, plus everything after a "--" separator. --gui and
+// --tty take their backend as a separate word, so a word after a switch could
+// be either that backend or a directory; f4 does not guess between them.
+func startupDirArgs(args []string) []string {
+	var dirs []string
+	beforeSwitches := true
+	for i, arg := range args {
+		switch {
+		case arg == "--":
+			return append(dirs, args[i+1:]...)
+		case strings.HasPrefix(arg, "-"):
+			beforeSwitches = false
+		case beforeSwitches:
+			dirs = append(dirs, arg)
+		}
+	}
+	return dirs
+}
+
+// rememberStartupDirs records those directories, but only for a start from a
 // terminal. It must run before checkAndDetach and before the daemon is spawned:
-// both hand the next process /dev/null on stdin. An inherited value wins.
-func rememberStartupDir() {
+// both hand the next process /dev/null on stdin. Values inherited from the
+// parent win, they are the answer that process already worked out.
+func rememberStartupDirs(args []string) {
 	if os.Getenv(startupDirEnv) != "" {
 		return
 	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return
 	}
-	if dir, err := os.Getwd(); err == nil {
-		_ = os.Setenv(startupDirEnv, dir)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	left, right := startupDirsFor(cwd, args)
+	_ = os.Setenv(startupDirEnv, left)
+	if right != "" {
+		_ = os.Setenv(startupDirRightEnv, right)
 	}
 }
 
-// startupDir is that directory; empty means the panels keep the restored paths.
-func startupDir() string {
-	return os.Getenv(startupDirEnv)
+// startupDirs are those directories; an empty left one means the panels keep
+// the restored paths, and an empty right one means both take the left.
+func startupDirs() (left, right string) {
+	return os.Getenv(startupDirEnv), os.Getenv(startupDirRightEnv)
 }
 
 // SelectedTTYBackend holds the user-chosen or auto-detected console renderer name ("ansi" or "winapi").
@@ -111,7 +165,6 @@ func sudoStartupMode(args []string, askpassParent bool) (dispatcher string, askp
 
 func main() {
 	vtui.AppName = "f4"
-	rememberStartupDir()
 	configureF4DebugLogPath(GetF4ConfigDir())
 	if archivePath, archiveKind, found, err := parseUpdateHelperArgs(os.Args[1:]); found {
 		if err != nil {
@@ -357,6 +410,7 @@ func main() {
 			}
 		}
 	}
+	rememberStartupDirs(startupDirArgs(os.Args[1:]))
 	configureF4DebugLogPath(GetF4ConfigDir())
 
 	if version {
@@ -366,7 +420,10 @@ func main() {
 	if print_help {
 		fmt.Printf(`f4 version: %s
 f4 is efficient and cozy two-panel file manager in go
-Usage: f4 [switches]
+Usage: f4 [folder1 [folder2]] [switches]
+Folders come before the switches, or after a "--" separator. Without them both
+panels open the current directory; folder1 alone opens in the left panel and
+leaves the right one on the current directory.
 The following switches may be used in the command line:
  -h, -?, --help         This help and exit
  -v, --version          Displays the current version and exit
@@ -749,9 +806,10 @@ func SetupUI() {
 	if len(states) > 0 {
 		applyWorkspaceSession(panels, states[0], width, height, AppConfig.SavePanelPaths)
 	}
-	// The startup directory outranks the restored paths. A client attaching to a
-	// running daemon brings its own instead -- see attachPayload.
-	applyStartupDir(panels, startupDir())
+	// The startup directories outrank the restored paths. A client attaching to
+	// a running daemon brings its own instead -- see attachPayload.
+	startLeft, startRight := startupDirs()
+	applyStartupDirs(panels, startLeft, startRight)
 	vtui.FrameManager.Push(panels)
 	if len(states) > 1 {
 		// AddScreenBackground inserts immediately after the active workspace;

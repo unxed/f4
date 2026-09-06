@@ -320,7 +320,8 @@ func runClient(sockPath string, serverPID int) {
 	oob := syscall.UnixRights(0, 1, notifyPipe[1])
 	vtui.DebugLog("CLIENT: FDs to send: In:0 Out:1 Pipe:%d", notifyPipe[1])
 
-	n, oobn, err := conn.WriteMsgUnix(attachPayload(editFilePath, startupDir()), oob, raddr)
+	startLeft, startRight := startupDirs()
+	n, oobn, err := conn.WriteMsgUnix(attachPayload(editFilePath, startLeft, startRight), oob, raddr)
 	if err != nil {
 		vtui.DebugLog("CLIENT: ATTACH FAILURE: Failed to send FDs to daemon at %s: %v", sockPath, err)
 		fmt.Fprintf(os.Stderr, "f4: failed to attach to session at %s: %v\n", sockPath, err)
@@ -380,7 +381,8 @@ type attachRequest struct {
 	notifyPipeWriteEnd int
 	rawFds             []int
 	editPath           string
-	startDir           string
+	startLeft          string
+	startRight         string
 }
 
 // attachPayload builds the ATTACH datagram body. Plain "ATTACH" when no
@@ -389,30 +391,39 @@ type attachRequest struct {
 // server and vice versa); "ATTACH <path>" when -e named a file, parsed
 // back out in runServer's accept loop below.
 //
-// The working directory rides on a second line, so an older server still reads
-// exactly "ATTACH" on the first. It is left out next to -e, where that server
-// would take the whole datagram as the file name.
-func attachPayload(editPath, cwd string) []byte {
+// The panel directories ride on further lines, so an older server still reads
+// exactly "ATTACH" on the first. They are left out next to -e, where that
+// server would take the whole datagram as the file name.
+func attachPayload(editPath, left, right string) []byte {
 	if editPath != "" {
 		return []byte("ATTACH " + editPath)
 	}
-	if cwd == "" {
+	if left == "" {
 		return []byte("ATTACH")
 	}
-	return []byte("ATTACH\nCWD " + cwd)
+	msg := "ATTACH\nCWD " + left
+	if right != "" && right != left {
+		msg += "\nCWD2 " + right
+	}
+	return []byte(msg)
 }
 
-// parseAttachPayload reads back what attachPayload wrote. An unknown extra
-// line is ignored rather than refused, so a future client stays attachable.
-func parseAttachPayload(msg string) (editPath, cwd string) {
-	head, rest, _ := strings.Cut(msg, "\n")
-	if strings.HasPrefix(head, "ATTACH ") {
-		editPath = head[len("ATTACH "):]
+// parseAttachPayload reads back what attachPayload wrote. Unknown lines are
+// ignored rather than refused, so a future client stays attachable.
+func parseAttachPayload(msg string) (editPath, left, right string) {
+	lines := strings.Split(msg, "\n")
+	if strings.HasPrefix(lines[0], "ATTACH ") {
+		editPath = lines[0][len("ATTACH "):]
 	}
-	if strings.HasPrefix(rest, "CWD ") {
-		cwd = rest[len("CWD "):]
+	for _, line := range lines[1:] {
+		switch {
+		case strings.HasPrefix(line, "CWD2 "):
+			right = line[len("CWD2 "):]
+		case strings.HasPrefix(line, "CWD "):
+			left = line[len("CWD "):]
+		}
 	}
-	return editPath, cwd
+	return editPath, left, right
 }
 
 func runServer(sockPath string) {
@@ -481,7 +492,7 @@ func runServer(sockPath string) {
 
 			setCloseOnExec(fds)
 
-			editPath, startDir := parseAttachPayload(string(buf[:n]))
+			editPath, startLeft, startRight := parseAttachPayload(string(buf[:n]))
 
 			req := attachRequest{
 				in:                 os.NewFile(uintptr(fds[0]), "/dev/stdin"),
@@ -489,7 +500,8 @@ func runServer(sockPath string) {
 				notifyPipeWriteEnd: fds[2],
 				rawFds:             fds,
 				editPath:           editPath,
-				startDir:           startDir,
+				startLeft:          startLeft,
+				startRight:         startRight,
 			}
 
 			// Preempt the current attached session (if any) so the new client takes over.
@@ -518,7 +530,7 @@ func runServer(sockPath string) {
 		newStdout := req.out
 		notifyPipeWriteEnd := req.notifyPipeWriteEnd
 		attachEditPath := req.editPath
-		attachStartDir := req.startDir
+		attachStartLeft, attachStartRight := req.startLeft, req.startRight
 
 		vtui.DebugLog("SERVER: FDs received (In:%d Out:%d Pipe:%d). Goroutines: %d. Attaching terminal.", fds[0], fds[1], fds[2], runtime.NumGoroutine())
 
@@ -620,10 +632,10 @@ func runServer(sockPath string) {
 
 		// A client that attached to a running daemon moves its workspace to its
 		// own directory, as a normal start would.
-		if attachStartDir != "" {
+		if attachStartLeft != "" {
 			if top := vtui.FrameManager.GetTopFrame(); top != nil {
 				if pf, ok := top.(*PanelsFrame); ok && pf != nil {
-					applyStartupDir(pf, attachStartDir)
+					applyStartupDirs(pf, attachStartLeft, attachStartRight)
 				}
 			}
 		}

@@ -292,19 +292,30 @@ func navigatePanelTo(pf *PanelsFrame, panel *FileSystemPanel, path string) {
 	panel.ReadDirectory()
 }
 
-// applyStartupDir opens dir in both panels, so `cd dir && f4` shows dir and not
-// session.ini's paths. It runs after applyWorkspaceSession and therefore wins;
-// an empty dir changes nothing.
-func applyStartupDir(pf *PanelsFrame, dir string) {
-	if pf == nil || dir == "" {
+// applyStartupDirs opens left and right in the two panels, so `cd dir && f4`
+// shows dir and `f4 dir1 dir2` shows both, rather than session.ini's paths. It
+// runs after applyWorkspaceSession and therefore wins; an empty left changes
+// nothing, and an empty right sends both panels to left.
+//
+// A right that differs from left only ever comes from the command line, so it
+// also says the focus belongs on the directory named first.
+func applyStartupDirs(pf *PanelsFrame, left, right string) {
+	if pf == nil || left == "" {
 		return
 	}
-	for _, p := range pf.panels {
-		if fsp, ok := p.(*FileSystemPanel); ok && fsp != nil {
+	fromCommandLine := right != "" && right != left
+	if right == "" {
+		right = left
+	}
+	for idx, dir := range [2]string{left, right} {
+		if fsp, ok := pf.panels[idx].(*FileSystemPanel); ok && fsp != nil {
 			navigatePanelTo(pf, fsp, dir)
 			// The pending cursor names a file of the directory just left.
 			fsp.pendingSelection = ""
 		}
+	}
+	if fromCommandLine {
+		pf.activeIdx = 0
 	}
 }
 
