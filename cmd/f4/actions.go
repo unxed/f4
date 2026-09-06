@@ -2337,7 +2337,8 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 		return
 	}
 
-	dlg := vtui.NewCenteredDialog(50, 11, title)
+	width, height := currentFileDialogWidth(), 11
+	dlg := vtui.NewCenteredDialog(width, height, title)
 	dlg.ShowClose = true
 
 	promptLbl := vtui.NewLabel(0, 0, fmt.Sprintf(prompt, len(names)), nil)
@@ -2381,11 +2382,11 @@ func actionCopyMove(pf *PanelsFrame, isMove bool) {
 	dlg.AddItem(comboMode)
 
 	// Layout Engine
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 50-4, 11-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 50-4, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
@@ -2411,7 +2412,7 @@ func actionRename(pf *PanelsFrame) {
 		return
 	}
 
-	vtui.InputBox(Msg("Dialog.RenameTitle"), fmt.Sprintf(Msg("Dialog.RenamePrompt"), name), name, func(newName string) {
+	fileInputBox(Msg("Dialog.RenameTitle"), fmt.Sprintf(Msg("Dialog.RenamePrompt"), name), name, func(newName string) {
 		if newName == "" || newName == name {
 			return
 		}
@@ -2591,7 +2592,7 @@ func actionCopyInPlace(pf *PanelsFrame) {
 
 	sourceVFS := fsp.vfs
 	sourceBasePath := sourceVFS.GetPath()
-	vtui.InputBox(" Copy ", "Copy '"+name+"' to:", name, func(newName string) {
+	fileInputBox(" Copy ", "Copy '"+name+"' to:", name, func(newName string) {
 		if newName == "" || newName == name {
 			return
 		}
