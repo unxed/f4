@@ -2501,20 +2501,39 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		}
 	}
 
+	// far2l (FileList::ShowSelectedSize) keeps the two summaries apart when
+	// the status line is on: the selection summary sits centred on the
+	// separator above the status line, and the panel total stays on the
+	// bottom border underneath it. Only with the status line off do they
+	// share the bottom border, where the selection summary wins (#394).
+	fileInfoShown := AppConfig.ShowPanelFileInfo && fp.Y2-fp.Y1+1 > 6
+	availBottom := fp.X2 - fp.X1 - 1
+
+	selStr := ""
+	if selFiles > 0 || selDirs > 0 {
+		selStr = fmt.Sprintf(" "+Msg("Panel.SelectedInfo")+" ", formatIntWithSpaces(selSize), selFiles, selDirs)
+	}
+
 	totalStr := ""
 	var attrTotal uint64
-	if selFiles > 0 || selDirs > 0 {
-		totalStr = fmt.Sprintf(" "+Msg("Panel.SelectedInfo")+" ", formatIntWithSpaces(selSize), selFiles, selDirs)
+	if selStr != "" && !fileInfoShown {
+		totalStr = selStr
 		attrTotal = vtui.Palette[ColPanelSelectedInfo]
 	} else if totCount > 0 {
 		totalStr = fmt.Sprintf(" %s (%d) ", formatIntWithSpaces(totSize), totCount)
 		attrTotal = vtui.Palette[ColPanelTotalInfo]
 	}
 
+	if selStr != "" && fileInfoShown {
+		if selW := runewidth.StringWidth(selStr); selW < availBottom {
+			p := vtui.NewPainter(scr)
+			p.DrawString(fp.X1+1+(availBottom-selW)/2, fp.Y2-2, selStr, vtui.Palette[ColPanelSelectedInfo])
+		}
+	}
+
 	totalStart := fp.X2
 	if totalStr != "" {
 		totalW := runewidth.StringWidth(totalStr)
-		availBottom := fp.X2 - fp.X1 - 1
 		if totalW < availBottom {
 			totalStart = fp.X1 + 1 + (availBottom-totalW)/2
 			p := vtui.NewPainter(scr)

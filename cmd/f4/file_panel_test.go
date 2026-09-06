@@ -696,15 +696,20 @@ func TestFileSystemPanel_SelectedInfo(t *testing.T) {
 
 	fp.Show(scr)
 
-	// Verify that the color of the bottom bar is ColPanelSelectedInfo when items are selected
-	cell := scr.GetCell(40, 23)
+	// With the status line on, the selection summary is drawn on the
+	// separator above it (#394) while the panel total keeps the bottom
+	// border, so the two never overlap.
+	cell := scr.GetCell(40, 21)
 	if cell.Attributes != vtui.Palette[ColPanelSelectedInfo] {
 		t.Errorf("Expected Selected Info color %X, got %X", vtui.Palette[ColPanelSelectedInfo], cell.Attributes)
+	}
+	if cell = scr.GetCell(40, 23); cell.Attributes != vtui.Palette[ColPanelTotalInfo] {
+		t.Errorf("Expected Total Info color %X on the bottom border, got %X", vtui.Palette[ColPanelTotalInfo], cell.Attributes)
 	}
 
 	var sb strings.Builder
 	for x := 0; x < 80; x++ {
-		cell := scr.GetCell(x, 23)
+		cell := scr.GetCell(x, 21)
 		if cell.Char != 0 && cell.Char != ' ' {
 			if _, err := sb.WriteRune(vtui.CellBaseRune(cell.Char)); err != nil {
 				t.Fatal(err)
