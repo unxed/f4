@@ -37,8 +37,8 @@ require (
 	github.com/unxed/localecp v0.1.6
 	github.com/unxed/sevenzip v0.0.0-20260826171606-a536eac9d163
 	github.com/unxed/tar v0.1.128
-	github.com/unxed/vtinput v0.1.7
-	github.com/unxed/vtui v0.1.317
+	github.com/unxed/vtinput v0.1.8
+	github.com/unxed/vtui v0.1.318
 	github.com/unxed/zip v0.1.131
 	github.com/unxed/zipper v0.1.153
 	github.com/vmihailenco/msgpack/v5 v5.4.1

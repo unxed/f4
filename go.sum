@@ -279,10 +279,10 @@ github.com/unxed/sevenzip v0.0.0-20260826171606-a536eac9d163 h1:W6gTpRrFLHf21VDF
 github.com/unxed/sevenzip v0.0.0-20260826171606-a536eac9d163/go.mod h1:TNoSyjZMrUb8V4NRPGz9k3EyJQyROCslmsGhKuU7Xdk=
 github.com/unxed/tar v0.1.128 h1:bZlTfutkerCpfTzIa9NI+shYmGN0Kkmbm7ajiv8x/2I=
 github.com/unxed/tar v0.1.128/go.mod h1:r5i7gm2krYXoWnH4hPM5hBHMx4jp00aPonAJnpF1Eso=
-github.com/unxed/vtinput v0.1.7 h1:rUrAwJOhS0BuRA9V94ZGEVS0r6dKSKoknygSgiyrYO8=
-github.com/unxed/vtinput v0.1.7/go.mod h1:ZOqbBmEzYb33FrwsJf0y1QSJLo378ciXEgZWD4cTqGU=
-github.com/unxed/vtui v0.1.317 h1:i6e34T7E6qoaMz1Ug5kDgX1SMwzr6Ei/xptWzczExfk=
-github.com/unxed/vtui v0.1.317/go.mod h1:NfkTjfUk6dkwbE4kM+E6x1CSlwiM0/hpn2mKMWQeiSM=
+github.com/unxed/vtinput v0.1.8 h1:fo2LKaJZZGARq4SiXk3PGKBE0Ozy3Yy90E06RrTXDcY=
+github.com/unxed/vtinput v0.1.8/go.mod h1:ZOqbBmEzYb33FrwsJf0y1QSJLo378ciXEgZWD4cTqGU=
+github.com/unxed/vtui v0.1.318 h1:pyBMAmw3BDo3Ou3kgsq/5z9uqQeeBpicBODV5vP2PH8=
+github.com/unxed/vtui v0.1.318/go.mod h1:ZwLfQXYe4ZXMNCvzhWPZzOIZJPjWSIIyCKtjSQiiW5M=
 github.com/unxed/wayland v0.0.0-20260904142929-d13d49067138 h1:5wngwWulp+xQ/kxMwlhQuTYUO7IYH1GPPTDwE6AFFdY=
 github.com/unxed/wayland v0.0.0-20260904142929-d13d49067138/go.mod h1:ZPUsmrcHQDH9q26qvwrrlCJpo4HjfNiAZvbbWrLMMBo=
 github.com/unxed/winkeys v0.1.1 h1:CeRhzQLrZtO2aVq8C8gPX1ySdbbvPombbUZ15cRjFTI=
