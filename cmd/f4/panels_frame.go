@@ -3727,6 +3727,13 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 // runProgressTaskAfter starts the worker immediately but postpones showing its
 // dialog. A task that completes before delay never creates a visible screen,
 // avoiding a one-frame flash for fast remote operations.
+// progressBlockedByModal reports whether a modal frame currently owns the
+// active screen, so a progress screen must not be placed over it.
+func progressBlockedByModal(frames interface{ GetTopFrame() vtui.Frame }) bool {
+	top := frames.GetTopFrame()
+	return top != nil && top.IsModal()
+}
+
 func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 	dlg := vtui.NewCenteredDialog(50, 12, title)
 	dlg.AttentionSuppressed = true
@@ -3784,8 +3791,11 @@ func (pf *PanelsFrame) runProgressTaskAfter(delay time.Duration, title, startMsg
 		// password) before this delayed progress screen is due to appear.
 		// Do not put the progress screen on a new active screen while that
 		// prompt is waiting on the old one: it would hide the prompt and leave
-		// the worker blocked forever. Retry after the modal dialog is dismissed.
-		if top := uiFrames.GetTopFrame(); top != nil && top.IsModal() {
+		// the worker blocked forever. The prompt cycle is also held by the
+		// worker itself (vfs.HoldInteractivePrompt), which covers the gap
+		// between a rejected answer and the next dialog, when no modal frame
+		// is on screen yet. Retry after the prompt is over.
+		if vfs.InteractivePromptPending() || progressBlockedByModal(uiFrames) {
 			time.AfterFunc(50*time.Millisecond, func() {
 				uiFrames.PostTask(showDialog)
 			})
@@ -3874,8 +3884,9 @@ func (pf *PanelsFrame) RunAdvancedProgressTask(title string, forked bool, worker
 		default:
 		}
 		// Keep a password or other modal prompt reachable if the worker posts
-		// it before this progress screen reaches the UI queue.
-		if top := uiFrames.GetTopFrame(); top != nil && top.IsModal() {
+		// it before this progress screen reaches the UI queue, and stay away
+		// while the worker is between two prompts of the same cycle.
+		if vfs.InteractivePromptPending() || progressBlockedByModal(uiFrames) {
 			time.AfterFunc(50*time.Millisecond, func() {
 				uiFrames.PostTask(showDialog)
 			})

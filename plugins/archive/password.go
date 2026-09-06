@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/klauspost/compress/flate"
 	"github.com/unxed/archives"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/sevenzip"
 	"github.com/unxed/vtui"
 	"github.com/unxed/zip"
@@ -171,8 +173,20 @@ func promptArchivePasswordUntilProvided(ctx context.Context, displayName string)
 	}
 }
 
+// openArchiveFSWithPasswordPrompt opens the archive and, when it needs a
+// password, keeps asking until the archive opens or the user gives up. The
+// whole ask/retry cycle is held as one interactive prompt: the retry with a
+// wrong password fails within milliseconds and brings the dialog back, and
+// without the hold the delayed "Opening..." progress screen could appear in
+// that gap with the next password dialog on top of it (issue #816).
 func openArchiveFSWithPasswordPrompt(ctx context.Context, localPath, displayName string, backing io.Closer) (zipperarchive.FileSystem, string, bool, error) {
 	var password string
+	var release func()
+	defer func() {
+		if release != nil {
+			release()
+		}
+	}()
 	for {
 		fsys, cleanupTransferred, err := openArchiveFSWithContext(ctx, localPath, displayName, backing, password)
 		if err == nil {
@@ -182,6 +196,9 @@ func openArchiveFSWithPasswordPrompt(ctx context.Context, localPath, displayName
 			return nil, "", cleanupTransferred, err
 		}
 
+		if release == nil {
+			release = vfs.HoldInteractivePrompt()
+		}
 		password, err = promptArchivePasswordUntilProvided(ctx, displayName)
 		if err != nil {
 			return nil, "", cleanupTransferred, err
@@ -229,6 +246,13 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 	}
 	v.mu.Unlock()
 
+	// Hold the prompt for the whole ask/verify cycle, including the
+	// caller's retry that follows a lazily rejected password: the retry
+	// fails in milliseconds and lands here again, and a progress screen
+	// showing up in between would end up underneath the next dialog.
+	release := vfs.HoldInteractivePrompt()
+	defer v.releasePasswordPromptAfterRetry(release)
+
 	for {
 		password, err := promptArchivePasswordUntilProvided(ctx, displayName)
 		if err != nil {
@@ -245,6 +269,24 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 		return v.installPasswordFS(fsys, password)
 	}
 }
+
+// releasePasswordPromptAfterRetry ends the interactive prompt hold taken
+// by openWithPassword. A lazily rejected password is only discovered by
+// the caller's retry, which then calls openWithPassword again; keeping the
+// hold for a moment after returning covers that retry, so the delayed
+// progress screen does not slip in between two password dialogs. The
+// grace period is longer than the progress screen's retry interval and
+// far longer than a rejected retry takes; a successful retry simply
+// releases the hold a little later than strictly necessary.
+func (v *ArchiveVFS) releasePasswordPromptAfterRetry(release func()) {
+	time.AfterFunc(passwordRetryGrace, release)
+}
+
+// passwordRetryGrace is how long openWithPassword keeps the interactive
+// prompt hold after returning, so that the caller's retry of a lazily
+// rejected password reaches the next prompt before any progress screen
+// appears.
+const passwordRetryGrace = 250 * time.Millisecond
 
 func (v *ArchiveVFS) installPasswordFS(fsys zipperarchive.FileSystem, password string) error {
 	v.mu.Lock()

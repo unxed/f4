@@ -187,12 +187,23 @@ func extractArchiveAsync(app vfs.App, srcPath, destDir string) {
 
 func extractArchiveWithPasswordPrompt(ctx context.Context, srcPath, destDir string, reporter vfs.TaskReporter) error {
 	var password string
+	var release func()
+	defer func() {
+		if release != nil {
+			release()
+		}
+	}()
 	for {
 		err := extractArchiveOnce(ctx, srcPath, destDir, password, reporter)
 		if err == nil || !isArchivePasswordRetryError(err) {
 			return err
 		}
 
+		// One hold for the whole ask/retry cycle; see
+		// openArchiveFSWithPasswordPrompt.
+		if release == nil {
+			release = vfs.HoldInteractivePrompt()
+		}
 		password, err = promptArchivePasswordUntilProvided(ctx, filepath.Base(srcPath))
 		if err != nil {
 			return err
