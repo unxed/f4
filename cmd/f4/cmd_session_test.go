@@ -217,10 +217,9 @@ func TestCmdSessionConsoleChildHoldsTheTerminal(t *testing.T) {
 	})
 }
 
-// A nested cmd is the shell now. It prints the same prompt, accepts the same
-// lines, and its prompt ends the outer command's wait instead of holding it
-// -- this is the case that hung the terminal until Ctrl+O.
-func TestCmdSessionNestedCmdIsTheShellNow(t *testing.T) {
+// A nested cmd keeps the terminal: its child process holds it until exit.
+// The panels stay hidden while the user interacts with the nested shell.
+func TestCmdSessionNestedCmdHoldsTerminal(t *testing.T) {
 	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
 		sim.start()
 		sim.run("cmd")
@@ -228,22 +227,25 @@ func TestCmdSessionNestedCmdIsTheShellNow(t *testing.T) {
 		sim.feed("Microsoft Windows [Version 10.0]\r\n\r\n")
 		sim.prompt("")
 		sim.wait(settledWithin)
-		sim.expectExecuting(false, "at the nested shell's prompt")
+		sim.expectExecuting(true, "at the nested shell's prompt")
 
-		// A command typed into the nested shell works the same way.
+		// A command typed into the nested shell keeps executing.
 		sim.run("dir")
 		sim.feed("file.txt\r\n\r\n")
 		sim.prompt("")
 		sim.wait(settledWithin)
-		sim.expectExecuting(false, "after dir in the nested shell")
+		sim.expectExecuting(true, "after dir in the nested shell")
 
-		// And exit brings the outer prompt back.
+		// exit closes the nested shell; the outer prompt ends the wait.
 		sim.run("exit")
 		sim.pty.setChildren()
 		sim.feed("\r\n")
 		sim.prompt("")
 		sim.wait(settledWithin)
 		sim.expectExecuting(false, "after exit")
+		if !sim.pf.showPanels {
+			t.Error("panels did not come back after exit")
+		}
 	})
 }
 
@@ -339,7 +341,7 @@ func TestChildHoldsTerminal(t *testing.T) {
 		{nil, false},
 		{[]childProcess{childPing}, true},
 		{[]childProcess{childTimeout}, true},
-		{[]childProcess{childNestedCmd}, false},
+		{[]childProcess{childNestedCmd}, true}, // cmd.exe keeps the terminal until exit
 		{[]childProcess{childNotepad}, false},
 		{[]childProcess{childNestedCmd, childPing}, true}, // ping inside the nested cmd
 		{[]childProcess{{Name: "powershell.exe"}}, true},  // rejects cd /d: stays raw
@@ -403,5 +405,38 @@ func TestCmdSessionFlickeringPromptIsReleased(t *testing.T) {
 		}
 		drainUITasks()
 		sim.expectExecuting(false, "after a prompt that never settled was released")
+	})
+}
+
+// When a batch file calls cmd, the nested shell's prompt must not end the
+// batch's execution: the batch will continue after the nested cmd exits.
+// The panels must stay hidden until the batch truly finishes.
+func TestCmdSessionBatchWithNestedCmdDoesNotRelease(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("foo.bat")
+		sim.pty.setChildren(childNestedCmd)
+		sim.feed("Microsoft Windows [Version 10.0]\r\n\r\n")
+		sim.pf.cmdSession.noteBatchExecution()
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(true, "at the nested cmd prompt inside a batch")
+
+		// Nested cmd exits; batch continues.
+		sim.run("exit")
+		sim.pty.setChildren()
+		sim.feed("\r\n")
+		sim.prompt("echo done\r\ndone\r\n\r\n")
+		sim.wait(settledWithin)
+		sim.expectExecuting(true, "while the batch continues after nested cmd")
+
+		// Batch finishes.
+		sim.feed("\r\n\r\n")
+		sim.prompt("")
+		sim.wait(settledWithin)
+		sim.expectExecuting(false, "after the batch's final prompt")
+		if !sim.pf.showPanels {
+			t.Error("panels did not come back after batch finished")
+		}
 	})
 }
