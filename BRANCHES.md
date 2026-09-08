@@ -1,7 +1,7 @@
 # Ветки Лунобота
 
 Инвентарь веток и рабочих деревьев, проверенный 08-09-2026 по текущему `main`
-(`3030f014e1127d886c590e143b878e1832d530d0`), списку PR GitHub и локальному
+(`a782f44766b4f7d96d4218ea5a45ea6274f4c7c5`), списку PR GitHub и локальному
 `git worktree list`.
 
 Статус `слита` означает, что соответствующий PR уже в `main`. Статус
@@ -31,6 +31,8 @@
 | `codex/lunobot2-672-status` | PR #939, слита; remote ref ещё существует |
 | `codex/lunobot2-607-status` | PR #958, слита; remote ref ещё существует |
 | `codex/lunobot2-901-status` | PR #956, слита; remote ref ещё существует |
+| `codex/branches-doc` | PR #959, слита; remote ref после merge не обнаружен |
+| `codex/lunobot2-branches-fix` | PR #960, слита; remote ref ещё существует |
 | `codex/lunobot-1-511-status` | PR #947, слита; remote ref ещё существует |
 | `codex/lunobot-1-screen-dump` | PR #933, слита; remote ref ещё существует |
 | `codex/lunobot-1-status-docs` | PR #953, слита; remote ref ещё существует |
@@ -60,12 +62,6 @@
 | `codex/fix-836-bookmark-ctrl` | локальная ветка и рабочее дерево `/tmp/f4-issue-836`, prunable |
 | `codex/fix-manual-update-ci` | локальная ветка и рабочее дерево `/tmp/f4-fix-manual-update-ci`, prunable |
 | `codex/conpty-idea-c` | устаревший remote-tracking ref, активного PR не найдено |
-
-## Ветка текущего обновления
-
-| Ветка | Назначение |
-| --- | --- |
-| `codex/lunobot2-branches-fix` | исправление этого реестра после PR #959; PR ещё не создан |
 
 ## Правило обновления
 
