@@ -1,7 +1,7 @@
 # Ветки Лунобота
 
 Инвентарь веток и рабочих деревьев, проверенный 08-09-2026 по текущему `main`
-(`4a67ab655bb3031fda5b9095a465691c37d4bcce`), списку PR GitHub и локальному
+(`5f6d95c2d31ed0dd047a9e46847cab150bc9cba9`), списку PR GitHub и локальному
 `git worktree list`.
 
 Статус `слита` означает, что соответствующий PR уже в `main`. Статус
@@ -31,8 +31,11 @@
 | `codex/lunobot2-672-status` | PR #939, слита; remote ref ещё существует |
 | `codex/lunobot2-607-status` | PR #958, слита; remote ref ещё существует |
 | `codex/lunobot2-901-status` | PR #956, слита; remote ref ещё существует |
+| `codex/lunobot2-378-status` | PR #963, слита; remote ref ещё существует |
 | `codex/branches-doc` | PR #959, слита; remote ref после merge не обнаружен |
 | `codex/branches-audit-final` | PR #962, слита; remote ref после merge не обнаружен |
+| `codex/branches-audit-cleanup` | PR #964, слита; remote ref после merge не обнаружен |
+| `codex/lunobot-1-branches-refresh` | PR #965, слита; remote ref после merge не обнаружен |
 | `codex/lunobot2-branches-fix` | PR #960, слита; remote ref ещё существует |
 | `codex/lunobot-1-511-status` | PR #947, слита; remote ref ещё существует |
 | `codex/lunobot-1-screen-dump` | PR #933, слита; remote ref ещё существует |
@@ -68,7 +71,7 @@
 
 | Ветка | Назначение |
 | --- | --- |
-| `codex/lunobot2-378-status` | status-документ по #378; PR ещё не создан |
+| `codex/branches-audit-latest` | PR #966, обновление снимка после PR #965 |
 
 ## Правило обновления
 
