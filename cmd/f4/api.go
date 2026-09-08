@@ -40,6 +40,7 @@ func (c *coreAPI) RegisterHighlighter(p vtui.HighlighterProvider) {
 }
 func (c *coreAPI) RegisterDrive(name string, factory func() vfs.VFS) {
 	RegisterDrive(name, factory)
+	registerDriveCommandPrefix(name)
 }
 
 func (c *coreAPI) RegisterGlobalHotkey(vk uint16, mods vtinput.ControlKeyState, handler func(app vfs.App)) {

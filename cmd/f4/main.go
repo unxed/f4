@@ -826,6 +826,7 @@ func SetupUI() {
 		GlobalPluginManager = nil
 		vtui.DebugLog("CORE: Plugins disabled by --no-plugins flag")
 	}
+	registerBuiltInCommandPrefixes()
 
 	LoadSession()
 	vtui.ManageCursorStyle = !AppConfig.KeepTerminalCursor
