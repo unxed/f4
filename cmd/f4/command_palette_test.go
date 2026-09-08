@@ -16,8 +16,33 @@ func TestCommandPaletteActionIsRegistered(t *testing.T) {
 	if !ok {
 		t.Fatalf("%s is not registered", commandPaletteActionName)
 	}
-	if action.Area != "Common" || !reflect.DeepEqual(action.DefaultKeys, []string{"CtrlShiftP"}) {
+	if action.Area != "Common" || !reflect.DeepEqual(action.DefaultKeys, []string{"CtrlShiftP"}) ||
+		!reflect.DeepEqual(action.NativeKeys, []string{"CtrlAltP"}) {
 		t.Fatalf("palette action = %#v, want Common with CtrlShiftP", action)
+	}
+}
+
+func TestCommandPaletteLegacyShortcutHonorsExplicitHotkeyOverrides(t *testing.T) {
+	previous := GlobalHotkeysMgr
+	GlobalHotkeysMgr = &HotkeyManager{
+		Bindings: map[string]map[string]string{},
+		Defaults: map[string]map[string]string{},
+	}
+	t.Cleanup(func() { GlobalHotkeysMgr = previous })
+
+	e := ParseFarKey(commandPaletteLegacyKey)
+	if !commandPaletteLegacyShortcut("Shell", e) {
+		t.Fatal("unclaimed Ctrl+Alt+P did not remain available as the legacy fallback")
+	}
+
+	GlobalHotkeysMgr.Bindings["Common"] = map[string]string{commandPaletteLegacyKey: "None"}
+	if commandPaletteLegacyShortcut("Shell", e) {
+		t.Fatal("explicitly silenced Ctrl+Alt+P was reclaimed by the legacy fallback")
+	}
+
+	GlobalHotkeysMgr.Bindings["Common"][commandPaletteLegacyKey] = "Panel.TogglePassivePanel"
+	if commandPaletteLegacyShortcut("Shell", e) {
+		t.Fatal("explicit Ctrl+Alt+P binding was reclaimed by the legacy fallback")
 	}
 }
 

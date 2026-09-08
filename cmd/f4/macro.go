@@ -488,6 +488,10 @@ func (m *MacroManager) Filter(e *vtinput.InputEvent) bool {
 				return true
 			}
 		}
+		if commandPaletteLegacyShortcut(currentArea, e) {
+			RunAction(commandPaletteActionName)
+			return true
+		}
 	}
 
 	// Once the palette is open, its remaining query and navigation keys belong

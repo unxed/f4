@@ -361,13 +361,17 @@ func init() {
 		Handler:     actionReloadLuaMacros,
 	})
 	RegisterAction(Action{
-		Name:                commandPaletteActionName,
-		Area:                "Common",
-		Label:               "Command Palette",
-		LabelKey:            "Action.App.CommandPalette",
-		Description:         "Search and run available commands",
-		DescKey:             "Action.App.CommandPalette.Desc",
-		DefaultKeys:         []string{"CtrlShiftP"},
+		Name:        commandPaletteActionName,
+		Area:        "Common",
+		Label:       "Command Palette",
+		LabelKey:    "Action.App.CommandPalette",
+		Description: "Search and run available commands",
+		DescKey:     "Action.App.CommandPalette.Desc",
+		DefaultKeys: []string{"CtrlShiftP"},
+		// Legacy terminals cannot distinguish Ctrl+Shift+letter from Ctrl+letter.
+		// MacroManager.Filter handles this additional escape hatch without
+		// claiming Ctrl+Alt+P as a configurable default.
+		NativeKeys:          []string{"CtrlAltP"},
 		MenuPath:            "Commands",
 		MenuSeparatorBefore: true,
 		MenuLast:            true,

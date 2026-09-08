@@ -5,10 +5,12 @@ works one layer below: it substitutes one key for another as the keystroke
 arrives, before anything in f4 has looked at it. Two problems need that layer.
 
 Before reaching for either file: **`Ctrl+Shift+P` opens the command palette**,
-which finds any command by name and shows the key it currently sits on. When a
-multiplexer has eaten one chord, or a laptop has no `F5`, running the command
-from the palette is usually faster than writing a rule, and it is the only
-thing needed when the key was never the point.
+which finds any command by name and shows the key it currently sits on. On a
+legacy terminal that cannot distinguish `Ctrl+Shift+letter` from `Ctrl+letter`,
+use the built-in **`Ctrl+Alt+P`** fallback. When a multiplexer has eaten one
+chord, or a laptop has no `F5`, running the command from the palette is usually
+faster than writing a rule, and it is the only thing needed when the key was
+never the point.
 
 **A terminal multiplexer takes the chord first.** tmux, zellij, GNU screen and
 dvtm own their prefixes upstream of f4, so those keys never reach the
