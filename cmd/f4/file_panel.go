@@ -2849,8 +2849,16 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 					curStr = "UP-DIR"
 				}
 			}
+			if e.IsSymlink && fp.vfs != nil {
+				if target, err := vfs.Readlink(context.Background(), fp.vfs, fp.vfs.Join(fp.vfs.GetPath(), e.Name)); err == nil && target != "" {
+					curStr = "→ " + target
+				}
+			}
 			curStr = " ▸ " + curStr + " "
-			if curW := runewidth.StringWidth(curStr); fp.X1+1+curW < totalStart {
+			if maxCurW := totalStart - (fp.X1 + 1); maxCurW > 0 {
+				if runewidth.StringWidth(curStr) > maxCurW {
+					curStr = runewidth.Truncate(curStr, maxCurW, "")
+				}
 				p := vtui.NewPainter(scr)
 				p.DrawString(fp.X1+1, fp.Y2, curStr, vtui.Palette[ColPanelText])
 			}

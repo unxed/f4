@@ -4917,12 +4917,17 @@ func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 	AppConfig.ShowPanelFileInfo = false
 	t.Cleanup(func() { AppConfig.ShowPanelFileInfo = was })
 
-	fp := NewFileSystemPanel(0, 0, 60, 20, vfs.NewOSVFS(t.TempDir()))
+	root := t.TempDir()
+	if err := os.Symlink("target.txt", filepath.Join(root, "link.txt")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	fp := NewFileSystemPanel(0, 0, 60, 20, vfs.NewOSVFS(root))
 	waitForLoad(t, fp)
 	fp.entries = []*fileEntry{
 		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "sub", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "big.bin", Size: 1234567}},
+		{VFSItem: vfs.VFSItem{Name: "link.txt", Size: 10, IsSymlink: true}},
 	}
 	fp.isLoading = false
 	if fp.loadingTimer != nil {
@@ -4951,6 +4956,11 @@ func TestFileSystemPanel_BottomFrameShowsCursorEntry(t *testing.T) {
 	fp.Show(scr)
 	if got := bottom(); !strings.Contains(got, "▸ UP-DIR") {
 		t.Errorf("bottom frame for the up-dir: %q", got)
+	}
+	fp.SetCursorIndex(3)
+	fp.Show(scr)
+	if got := bottom(); !strings.Contains(got, "▸ → target.txt") {
+		t.Errorf("bottom frame for a symlink: %q", got)
 	}
 
 	// With the far2l status line on, the marker steps aside.
