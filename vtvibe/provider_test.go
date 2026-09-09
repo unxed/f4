@@ -89,7 +89,7 @@ func TestChatErrors(t *testing.T) {
 		status   int
 		response string
 		wantErr  string
-		}{
+	}{
 		{name: "api error", response: `{"error":{"message":"denied"}}`, wantErr: "denied"},
 		{name: "no choices", response: `{"choices":[]}`, wantErr: "the model returned no answer"},
 		{name: "empty answer", response: `{"choices":[{"message":{"content":"  "}}]}`, wantErr: "the model returned an empty answer"},
