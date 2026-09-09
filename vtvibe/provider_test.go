@@ -62,7 +62,7 @@ func TestConfigChat(t *testing.T) {
 			t.Errorf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = io.WriteString(w, `{"choices":[{"message":{"content":[{"type":"text","text":"first "},{"type":"text","text":"second"}]}}],"usage":{"prompt_tokens":3,"completion_tokens":5}}`)
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":[{"type":"text","text":"first "},{"type":"text","text":"second"}]}}],"usage":{"prompt_tokens":3,"completion_tokens":5}}`)
 	}))
 	defer server.Close()
 
@@ -103,7 +103,7 @@ func TestChatErrors(t *testing.T) {
 				if tt.status != 0 {
 					w.WriteHeader(tt.status)
 				}
-				_ = io.WriteString(w, tt.response)
+				_, _ = io.WriteString(w, tt.response)
 			}))
 			defer server.Close()
 			_, _, err := (Config{BaseURL: server.URL, Model: "test", APIKey: "key"}).Chat(context.Background(), nil)
@@ -124,7 +124,7 @@ func TestConfigModels(t *testing.T) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/models" {
 			t.Errorf("request = %s %s, want GET /v1/models", r.Method, r.URL.Path)
 		}
-		_ = io.WriteString(w, `{"data":[{"id":"models/gemini"},{"id":"plain"}]}`)
+		_, _ = io.WriteString(w, `{"data":[{"id":"models/gemini"},{"id":"plain"}]}`)
 	}))
 	defer server.Close()
 	got, err := (Config{BaseURL: server.URL + "/v1/", APIKey: "key"}).Models(context.Background())
@@ -150,7 +150,7 @@ func TestModelsErrors(t *testing.T) {
 		{"not json", "invalid character"},
 	}
 	for _, tt := range responses {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = io.WriteString(w, tt.body) }))
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, tt.body) }))
 		_, err := (Config{BaseURL: server.URL, APIKey: "key"}).Models(context.Background())
 		server.Close()
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -164,7 +164,7 @@ func TestDoRetriesAndCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(http.StatusBadGateway)
-		_ = io.WriteString(w, `{"error":{"message":"try again"}}`)
+		_, _ = io.WriteString(w, `{"error":{"message":"try again"}}`)
 	}))
 	defer server.Close()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -185,7 +185,7 @@ func TestDoRetriesThenSucceeds(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
-		_ = io.WriteString(w, "ok")
+		_, _ = io.WriteString(w, "ok")
 	}))
 	defer server.Close()
 	got, err := (Config{}).do(context.Background(), http.MethodGet, server.URL, nil)
