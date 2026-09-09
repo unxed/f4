@@ -16,7 +16,7 @@ import (
 func TestArtifactName(t *testing.T) {
 	tests := []struct {
 		info string
-		want	string
+		want string
 	}{
 		{"go", ""},
 		{"go:main.go", "main.go"},
@@ -85,10 +85,10 @@ func TestConfigChat(t *testing.T) {
 
 func TestChatErrors(t *testing.T) {
 	tests := []struct {
-		name	string
-		status	int
-		response	string
-		wantErr	string
+		name     string
+		status   int
+		response string
+		wantErr  string
 		}{
 		{name: "api error", response: `{"error":{"message":"denied"}}`, wantErr: "denied"},
 		{name: "no choices", response: `{"choices":[]}`, wantErr: "the model returned no answer"},
@@ -143,7 +143,7 @@ func TestConfigModels(t *testing.T) {
 func TestModelsErrors(t *testing.T) {
 	responses := []struct {
 		body string
-		want	string
+		want string
 	}{
 		{`{"error":{"message":"models unavailable"}}`, "models unavailable"},
 		{"not json", "invalid character"},
@@ -234,8 +234,8 @@ func TestStatusErrorAndBackoff(t *testing.T) {
 
 func TestDecodeContent(t *testing.T) {
 	tests := []struct {
-		raw	string
-		want	string
+		raw  string
+		want string
 	}{
 		{`"plain"`, "plain"},
 		{`[{"type":"text","text":"a"},{"type":"text","text":"b"}]`, "ab"},
