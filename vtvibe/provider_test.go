@@ -212,7 +212,7 @@ func TestStatusErrorAndBackoff(t *testing.T) {
 		t.Errorf("statusError plain = %q", got)
 	}
 	long := strings.Repeat("x", 401)
-	if got := (&statusError{code: http.StatusTeapot, body: []byte(long)}).Error(); len(got) != len("HTTP 418: ")+404 {
+	if got := (&statusError{code: http.StatusTeapot, body: []byte(long)}).Error(); len(got) != len("HTTP 418: ")+403 {
 		t.Errorf("statusError long length = %d", len(got))
 	}
 	if got := (&statusError{code: http.StatusTeapot}).Error(); got != "HTTP 418" {
