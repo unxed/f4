@@ -207,6 +207,36 @@ func TestActionMkDir_Flow(t *testing.T) {
 	vtui.FrameManager.Pop()
 }
 
+func TestActionMkDirDoesNotUseLastHistory(t *testing.T) {
+	oldHistory := vtui.GlobalHistoryProvider
+	t.Cleanup(func() { vtui.GlobalHistoryProvider = oldHistory })
+	provider := history.NewProviderAtPath(filepath.Join(t.TempDir(), "history.json"))
+	provider.SaveHistory(history.NewFolderHistoryID, []string{"test"})
+	vtui.GlobalHistoryProvider = provider
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	theme.SetDefaultF4Palette()
+
+	pf := panel.NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionMkDir(pf)
+
+	top := vtui.FrameManager.GetTopFrame()
+	dlg, ok := top.(*vtui.Window)
+	if !ok {
+		t.Fatalf("expected MkDir window, got %T", top)
+	}
+	edit := history.InputBoxEdit(dlg)
+	if edit == nil {
+		t.Fatal("MkDir dialog has no input field")
+	}
+	if got := edit.GetText(); got != "" {
+		t.Fatalf("MkDir field inherited the last history entry %q", got)
+	}
+
+	top.SetExitCode(-1)
+	vtui.FrameManager.Pop()
+}
 func TestActionCalcDirSize_IgnoresParentRow(t *testing.T) {
 	fsp := &panel.FileSystemPanel{
 		Entries: []*panel.FileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
@@ -260,7 +290,7 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	paneltest.WaitForLoad(t, pf.Panels[0].(*panel.FileSystemPanel))
 	paneltest.WaitForLoad(t, pf.Panels[1].(*panel.FileSystemPanel))
 
-	// Создаем мок-VFS, который запретит удаление "fail.txt"
+	// ??????? ???-VFS, ??????? ???????? ???????? "fail.txt"
 	mv := &mockDeletionFailingVFS{
 		VFS:         vfs.NewOSVFS(t.TempDir()),
 		failedFiles: []string{"fail.txt"},
@@ -269,25 +299,25 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	fsp := pf.Panels[0].(*panel.FileSystemPanel)
 	fsp.Vfs = mv
 
-	// Подготавливаем список файлов: f1.txt (ок), fail.txt (ошибка), f2.txt (ок)
+	// ?????????????? ?????? ??????: f1.txt (??), fail.txt (??????), f2.txt (??)
 	fsp.Entries = []*panel.FileEntry{
 		{VFSItem: vfs.VFSItem{Name: ".."}},
 		{VFSItem: vfs.VFSItem{Name: "f1.txt"}},
 		{VFSItem: vfs.VFSItem{Name: "fail.txt"}},
 		{VFSItem: vfs.VFSItem{Name: "f2.txt"}},
 	}
-	// Выделяем все три файла
+	// ???????? ??? ??? ?????
 	fsp.Entries[1].Selected = true
 	fsp.Entries[2].Selected = true
 	fsp.Entries[3].Selected = true
 
-	// ВАЖНО: делаем панель с файлами активной
+	// ?????: ?????? ?????? ? ??????? ????????
 	pf.ActiveIdx = 0
 
-	// 1. Инициируем удаление
+	// 1. ?????????? ????????
 	actionDelete(pf)
 
-	// 2. Находим кнопку "Delete" в диалоге подтверждения и нажимаем её
+	// 2. ??????? ?????? "Delete" ? ??????? ????????????? ? ???????? ??
 	// In test, force mode to Foreground Lock (2) so it runs synchronously
 	dlgConfirm1 := fm.GetTopFrame().(vtui.Container)
 	for _, child := range dlgConfirm1.GetChildren() {
@@ -316,7 +346,7 @@ func TestActionDelete_BulkErrorAccumulation(t *testing.T) {
 	}
 	btnDel.OnClick()
 
-	// 3. Прокручиваем очередь задач, ожидая появления диалога с итогами ошибок
+	// 3. ???????????? ??????? ?????, ?????? ????????? ??????? ? ??????? ??????
 	timeout := time.After(2 * time.Second)
 	var progress *fileops.FileOpProgressDialog
 	summaryShown := false
@@ -329,7 +359,7 @@ Loop:
 				progress = top
 			}
 
-			// Если выскочил диалог ошибки удаления (fileops.AskError), нажимаем Skip
+			// ???? ???????? ?????? ?????? ???????? (fileops.AskError), ???????? Skip
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				if dlg, ok := fm.GetTopFrame().(vtui.Container); ok {
 					for _, itm := range dlg.GetChildren() {
@@ -341,7 +371,7 @@ Loop:
 				}
 			}
 
-			// Ждем, когда на вершине стека окажется диалог с заголовком " Deletion Errors "
+			// ????, ????? ?? ??????? ????? ???????? ?????? ? ?????????? " Deletion Errors "
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == i18n.Msg("FileOp.DeletionErrors") {
 				summaryShown = true
 			}
@@ -362,8 +392,8 @@ Loop:
 	// Validate layout of the Deletion Errors dialog
 	vtui.AssertLayout(t, fm.GetTopFrame().(vtui.Container))
 
-	// 4. Проверяем результаты
-	// Должно быть 2 успешных удаления (f1.txt и f2.txt)
+	// 4. ????????? ??????????
+	// ?????? ???? 2 ???????? ???????? (f1.txt ? f2.txt)
 	if len(mv.deletedFiles) != 2 {
 		t.Errorf("Expected 2 files deleted, got %d: %v", len(mv.deletedFiles), mv.deletedFiles)
 	}
@@ -414,7 +444,7 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 
 	mv := &mockRetryDeleteVFS{
 		VFS:      vfs.NewOSVFS(t.TempDir()),
-		attempts: map[string]int{"retry.txt": 1}, // Упадёт 1 раз
+		attempts: map[string]int{"retry.txt": 1}, // ?????? 1 ???
 	}
 
 	pf := panel.NewPanelsFrame()
@@ -427,7 +457,7 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 
 	actionDelete(pf)
 
-	// 1. Подтверждаем удаление
+	// 1. ???????????? ????????
 	dlgConfirm := fm.GetTopFrame().(vtui.Container)
 	for _, child := range dlgConfirm.GetChildren() {
 		if c, ok := child.(*vtui.ComboBox); ok {
@@ -436,7 +466,7 @@ func TestActionDelete_RetrySuccess(t *testing.T) {
 	}
 	testutil.ClickDialogButton(t, dlgConfirm, "Delete")
 
-	// 2. Ждем диалог ошибки и жмем Retry
+	// 2. ???? ?????? ?????? ? ???? Retry
 	timeout := time.After(2 * time.Second)
 	retryClicked := false
 	var progress *fileops.FileOpProgressDialog
@@ -508,7 +538,7 @@ func TestActionDelete_Abort(t *testing.T) {
 	}
 	testutil.ClickDialogButton(t, dlgConfirm, "Delete")
 
-	// Ждем ошибку и жмем Abort
+	// ???? ?????? ? ???? Abort
 	timeout := time.After(2 * time.Second)
 	abortClicked := false
 	var progress *fileops.FileOpProgressDialog
@@ -537,7 +567,7 @@ Loop:
 		}
 	}
 
-	// Проверяем, что список удаленных пуст (первый упал, второй не начинали)
+	// ?????????, ??? ?????? ????????? ???? (?????? ????, ?????? ?? ????????)
 	if len(mv.deletedFiles) != 0 {
 		t.Errorf("Abort failed: some files were deleted: %v", mv.deletedFiles)
 	}
@@ -551,7 +581,7 @@ func TestActionDelete_SkipAll(t *testing.T) {
 	fm.Init(scr)
 	theme.SetDefaultF4Palette()
 
-	// Два файла, оба упадут
+	// ??? ?????, ??? ??????
 	mv := &mockDeletionFailingVFS{
 		VFS:         vfs.NewOSVFS(t.TempDir()),
 		failedFiles: []string{"fail1.txt", "fail2.txt"},
@@ -574,7 +604,7 @@ func TestActionDelete_SkipAll(t *testing.T) {
 
 	actionDelete(pf)
 
-	// 1. Подтверждаем удаление (Foreground mode)
+	// 1. ???????????? ???????? (Foreground mode)
 	dlgConfirm := fm.GetTopFrame().(vtui.Container)
 	for _, child := range dlgConfirm.GetChildren() {
 		if c, ok := child.(*vtui.ComboBox); ok {
@@ -583,7 +613,7 @@ func TestActionDelete_SkipAll(t *testing.T) {
 	}
 	testutil.ClickDialogButton(t, dlgConfirm, "Delete")
 
-	// 2. Ждем первую ошибку и жмем "Skip All"
+	// 2. ???? ?????? ?????? ? ???? "Skip All"
 	timeout := time.After(2 * time.Second)
 	skipAllClicked := false
 	var progress *fileops.FileOpProgressDialog
@@ -600,7 +630,7 @@ Loop:
 			if !skipAllClicked && fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == " Error " {
 				if dlg, ok := fm.GetTopFrame().(vtui.Container); ok {
 					for _, itm := range dlg.GetChildren() {
-						if b, ok := itm.(*vtui.Button); ok && (strings.Contains(b.GetText(), "Skip All") || strings.Contains(b.GetText(), "S&kip All") || strings.Contains(b.GetText(), "ропустить")) {
+						if b, ok := itm.(*vtui.Button); ok && (strings.Contains(b.GetText(), "Skip All") || strings.Contains(b.GetText(), "S&kip All") || strings.Contains(b.GetText(), "?????????")) {
 							b.OnClick()
 							skipAllClicked = true
 							break
@@ -609,7 +639,7 @@ Loop:
 				}
 			}
 
-			// Ждем финальный диалог со списком ошибок
+			// ???? ????????? ?????? ?? ??????? ??????
 			if fm.GetTopFrameType() == vtui.TypeDialog && fm.GetTopFrame().GetTitle() == i18n.Msg("FileOp.DeletionErrors") {
 				summaryShown = true
 			}
@@ -627,7 +657,7 @@ Loop:
 		}
 	}
 
-	// 3. Проверяем, что в итоговом списке 2 ошибки, но диалог показывался только один раз
+	// 3. ?????????, ??? ? ???????? ?????? 2 ??????, ?? ?????? ??????????? ?????? ???? ???
 	top := fm.GetTopFrame().(vtui.Container)
 	foundErrors := 0
 	for _, itm := range top.GetChildren() {
@@ -648,7 +678,7 @@ Loop:
 }
 func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	// paneltest.SetupMockPanelsFrame и mockPty определены в других тестовых файлах того же пакета
+	// paneltest.SetupMockPanelsFrame ? mockPty ?????????? ? ?????? ???????? ?????? ???? ?? ??????
 	pf := paneltest.SetupMockPanelsFrame(t)
 	defer pf.Close()
 	pty := pf.Pty.(*paneltest.MockPty)
@@ -665,12 +695,12 @@ func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 
 	v := vfs.NewOSVFS(tmp)
 
-	// Очищаем буфер terminal.PTY перед тестом
+	// ??????? ????? terminal.PTY ????? ??????
 	pty.Written = nil
 
 	actionExecute(pf, v, tmp, fileName, FilePath)
 
-	// Прокачиваем задачи FrameManager
+	// ??????????? ?????? FrameManager
 	timeout := time.After(2 * time.Second)
 	for pf.ShowPanels {
 		select {
@@ -681,17 +711,17 @@ func TestActionExecute_PtyCommandFormatting(t *testing.T) {
 		}
 	}
 
-	// В реальном приложении данные из terminal.PTY проходят через terminal.AnsiParser, который
-	// вырезает технические команды (cd /d) перед отображением. Эмулируем это:
+	// ? ???????? ?????????? ?????? ?? terminal.PTY ???????? ????? terminal.AnsiParser, ???????
+	// ???????? ??????????? ??????? (cd /d) ????? ????????????. ????????? ???:
 	pf.Parser.Process(pty.Written)
 	result := string(pf.TermView.GetAllLogBytes())
 
 	if runtime.GOOS == "windows" {
-		// Проверяем отсутствие технической обертки 'cd /d' в выводе после парсера
+		// ????????? ?????????? ??????????? ??????? 'cd /d' ? ?????? ????? ???????
 		if strings.Contains(result, "cd /d") {
 			t.Errorf("Technical 'cd /d' wrapper should be removed by parser, but found in log: %q", result)
 		}
-		// Команда должна присутствовать в логе (парсер вырезает cd /d, оставляя саму команду)
+		// ??????? ?????? ?????????????? ? ???? (?????? ???????? cd /d, ???????? ???? ???????)
 		if !strings.Contains(result, "app.exe") {
 			t.Errorf("PTY command should appear in terminal log after cd excision, got log: %q", result)
 		}
@@ -768,7 +798,7 @@ func TestActionDelete_SuccessorLogic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Создаем 4 файла: f1, f2, f3, f4
+	// ??????? 4 ?????: f1, f2, f3, f4
 	files := []string{"f1.txt", "f2.txt", "f3.txt", "f4.txt"}
 	for _, f := range files {
 		if err := os.WriteFile(filepath.Join(tmp, f), []byte("data"), 0600); err != nil {
@@ -776,8 +806,8 @@ func TestActionDelete_SuccessorLogic(t *testing.T) {
 		}
 	}
 
-	// 1. Удаляем f2 и f3 (выделенные)
-	// Дожидаемся загрузки
+	// 1. ??????? f2 ? f3 (??????????)
+	// ?????????? ????????
 	fsp.ReadDirectory()
 	for fsp.IsLoading {
 		select {
@@ -788,22 +818,22 @@ func TestActionDelete_SuccessorLogic(t *testing.T) {
 		}
 	}
 
-	// Выделяем f2 и f3 (индексы 2 и 3, т.к. 0 - "..", 1 - "f1")
+	// ???????? f2 ? f3 (??????? 2 ? 3, ?.?. 0 - "..", 1 - "f1")
 	fsp.Entries[2].Selected = true
 	fsp.Entries[3].Selected = true
 
-	// По логике Successor, после удаления блока f2, f3 курсор должен встать на f4.
+	// ?? ?????? Successor, ????? ???????? ????? f2, f3 ?????? ?????? ?????? ?? f4.
 	successor := fsp.GetSuccessorName()
 	if successor != "f4.txt" {
 		t.Errorf("Expected successor f4.txt, got %q", successor)
 	}
 
-	// 2. Удаляем последний файл (f4)
+	// 2. ??????? ????????? ???? (f4)
 	fsp.Entries[2].Selected = false
 	fsp.Entries[3].Selected = false
 	fsp.SetCursorIndex(4) // f4
 	successor = fsp.GetSuccessorName()
-	// Если удаляем последний, курсор прыгает на предыдущий (f3)
+	// ???? ??????? ?????????, ?????? ??????? ?? ?????????? (f3)
 	if successor != "f3.txt" {
 		t.Errorf("Expected successor f3.txt when deleting tail, got %q", successor)
 	}
@@ -1267,7 +1297,7 @@ func TestActionOpenEditor_AlreadyOpened(t *testing.T) {
 	actionOpenEditor(pf, v, path)
 
 	// Wait for the reprompt dialog. Per #379 this is a choice
-	// ("switch / reload / new instance / cancel"), not a warning —
+	// ("switch / reload / new instance / cancel"), not a warning ?
 	// so the dialog now carries the semantic FileOp.AlreadyOpenedTitle
 	// and must render on the neutral (non-warning) palette.
 	wantTitle := i18n.Msg("FileOp.AlreadyOpenedTitle")
@@ -1482,7 +1512,7 @@ func TestActionFindFile_Persistence(t *testing.T) {
 }
 
 func TestSession_DiskPersistence(t *testing.T) {
-	// Создаем временную директорию для теста
+	// ??????? ????????? ?????????? ??? ?????
 	tmpDir := t.TempDir()
 	t.Cleanup(paneltest.SwapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
@@ -1520,8 +1550,8 @@ func TestSession_DiskPersistence(t *testing.T) {
 	config.App.AutoSavePanelSettings = true
 	config.App.AutoSaveCurrentPanel = true
 
-	// Перехватываем путь к ini файлу (в реальном коде он завязан на os.UserConfigDir)
-	// Для теста мы просто вручную вызовем SaveSession и проверим результат в файле.
+	// ????????????? ???? ? ini ????? (? ???????? ???? ?? ??????? ?? os.UserConfigDir)
+	// ??? ????? ?? ?????? ??????? ??????? SaveSession ? ???????? ????????? ? ?????.
 	origPathFunc := getSessionIniPath
 	getSessionIniPath = func() string { return filepath.Join(tmpDir, "session.ini") }
 	t.Cleanup(func() { getSessionIniPath = origPathFunc })
@@ -1554,7 +1584,7 @@ func TestSession_DiskPersistence(t *testing.T) {
 
 	SaveSession()
 
-	// Сбрасываем и загружаем
+	// ?????????? ? ?????????
 	panel.LastLeftPath = ""
 	panel.LastRightPath = ""
 	panel.LastLeftCursor = ""
@@ -1628,7 +1658,7 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 		t.Fatalf("Expected Panel Settings dialog, got %v", top)
 	}
 
-	// Проверяем наличие чекбокса для сохранения путей
+	// ????????? ??????? ???????? ??? ?????????? ?????
 	dlg := top.(vtui.Container)
 	found := false
 	for _, itm := range dlg.GetChildren() {
@@ -1644,7 +1674,7 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 		t.Error("Save paths checkbox not found in Panel Settings dialog")
 	}
 
-	// Проверяем наличие чекбокса автодополнения
+	// ????????? ??????? ???????? ??????????????
 	foundAc := false
 	for _, itm := range dlg.GetChildren() {
 		if chk, ok := itm.(*vtui.Checkbox); ok {
@@ -1944,22 +1974,22 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 	fsp.SetCursorIndex(0)
 	pf.ActiveIdx = 0
 
-	// Заполняем кэш данными
+	// ????????? ??? ???????
 	fsp.DirCache[fsp.CacheKey(fsp.Vfs.GetPath())] = panel.DirCacheEntry{Items: []vfs.VFSItem{{Name: "old.txt"}}}
 
-	// 1. Тест успешного переименования
-	// Перехватываем InputBox внутри actionRename (в тестах он не блокирует)
-	// Мы вручную вызовем логику, которую должен был вызвать InputBox
+	// 1. ???? ????????? ??????????????
+	// ????????????? InputBox ?????? actionRename (? ?????? ?? ?? ?????????)
+	// ?? ??????? ??????? ??????, ??????? ?????? ??? ??????? InputBox
 	newName := "new.txt"
 	oldPath := fsp.Vfs.Join(fsp.Vfs.GetPath(), "old.txt")
 	newPath := fsp.Vfs.Join(fsp.Vfs.GetPath(), newName)
 
-	// Симулируем успешный асинхронный ответ
+	// ?????????? ???????? ??????????? ?????
 	if err := fsp.Vfs.Rename(context.Background(), oldPath, newPath); err != nil {
 		t.Fatal(err)
 	}
 
-	// Выполняем UI-часть из actionRename (успех)
+	// ????????? UI-????? ?? actionRename (?????)
 	delete(fsp.DirCache, fsp.CacheKey(fsp.Vfs.GetPath()))
 	fsp.PendingSelection = newName
 	pf.RefreshAll()
@@ -1971,12 +2001,12 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 		t.Errorf("Pending selection not set correctly: %q", fsp.PendingSelection)
 	}
 
-	// 2. Тест ошибки переименования
+	// 2. ???? ?????? ??????????????
 	fsp.PendingSelection = ""
 	fsp.Vfs = &mockRenameVFS{VFS: fsp.Vfs, renameErr: os.ErrPermission}
 
-	// Выполняем UI-часть из actionRename (ошибка)
-	fsp.PendingSelection = "old.txt" // Должно вернуться к старому имени
+	// ????????? UI-????? ?? actionRename (??????)
+	fsp.PendingSelection = "old.txt" // ?????? ????????? ? ??????? ?????
 	pf.RefreshAll()
 
 	if fsp.PendingSelection != "old.txt" {
@@ -1984,19 +2014,19 @@ func TestActionRename_CacheAndSelection(t *testing.T) {
 	}
 }
 func TestActionExecute_WindowsFormatSimulation(t *testing.T) {
-	// Тестируем, что формат команды, который мы выбрали для Windows,
-	// корректно «проглатывается» парсером.
+	// ?????????, ??? ?????? ???????, ??????? ?? ??????? ??? Windows,
+	// ????????? ???????????????? ????????.
 	tv := terminal.NewTerminalView(80, 24)
 	p := terminal.NewAnsiParser(tv, nil)
 
 	dir := "C:\\Users\\f4\\Desktop"
 	cmd := "echo \"hello world\""
 
-	// Имитируем создание команды для Windows (как в panels_frame.go / actions.go)
-	// Используем %q для путей
+	// ????????? ???????? ??????? ??? Windows (??? ? panels_frame.go / actions.go)
+	// ?????????? %q ??? ?????
 	wireCmd := fmt.Sprintf("cd /d %q & %s\r\n", dir, cmd)
 
-	// Проверяем, что в сформированной строке есть разделитель, на который завязан парсер
+	// ?????????, ??? ? ?????????????? ?????? ???? ???????????, ?? ??????? ??????? ??????
 	if !strings.Contains(wireCmd, "\" & ") {
 		t.Fatalf("Generated wire command format changed! Parser relies on '\" & ' separator. Got: %q", wireCmd)
 	}
@@ -2561,7 +2591,7 @@ func TestActionAppearanceSettingsSavesWorkspaceTabNumbering(t *testing.T) {
 // TestActionAppearanceSettings_CancelPreservesPalette locks in the
 // fix: farcolors.ini overrides applied at startup were wiped when
 // the user opened Appearance settings and pressed Cancel, because
-// the dialog restored via theme.ApplyColorStyle(originalStyle) — a clean
+// the dialog restored via theme.ApplyColorStyle(originalStyle) ? a clean
 // re-apply of the named base style with no room for runtime
 // overrides. Snapshot-and-copy the whole palette instead, so
 // Cancel returns exactly what was on screen before the dialog
@@ -2601,7 +2631,7 @@ func TestActionAppearanceSettings_CancelPreservesPalette(t *testing.T) {
 	if combo == nil {
 		t.Fatal("style combobox not found in Appearance dialog")
 	}
-	// Pick the *other* end of the list — different from whatever
+	// Pick the *other* end of the list ? different from whatever
 	// index the config currently points to.
 	target := 0
 	if combo.Menu.SelectPos == 0 && len(combo.Menu.Items) > 1 {
@@ -2609,7 +2639,7 @@ func TestActionAppearanceSettings_CancelPreservesPalette(t *testing.T) {
 	}
 	combo.Menu.OnAction(target)
 	if vtui.Palette[theme.ColPanelText] == sentinel {
-		t.Fatal("test setup: live preview didn't overwrite the sentinel — need a different palette slot or style pair")
+		t.Fatal("test setup: live preview didn't overwrite the sentinel ? need a different palette slot or style pair")
 	}
 
 	testutil.ClickDialogButton(t, top, "Cancel")

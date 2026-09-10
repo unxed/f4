@@ -39,7 +39,7 @@ import (
 
 const openingProgressDelay = 250 * time.Millisecond
 
-// editorHeaderIsBinary: NUL in the header means binary — text in any codepage
+// editorHeaderIsBinary: NUL in the header means binary ? text in any codepage
 // (cp1251 included, which the viewer's utf8 check would call binary) has none.
 func editorHeaderIsBinary(header []byte, cpID int) bool {
 	// DecodeBytes is a no-op for 65001 and leaves the data alone on error.
@@ -77,7 +77,7 @@ func actionFoldersHistory(pf *panel.PanelsFrame) {
 	// Folder bookmarks and folder history are one list now (#407). Fold the
 	// bookmark table in before the emptiness check, so a profile whose only
 	// saved folders are bookmarks still opens the dialog, and hand the marks
-	// their digits straight away — a folder locked before this existed picks
+	// their digits straight away ? a folder locked before this existed picks
 	// up a hotkey the first time the dialog is opened.
 	var pins *panel.FolderPins
 	if folderHP != nil {
@@ -145,7 +145,7 @@ func actionFoldersHistory(pf *panel.PanelsFrame) {
 		search.cleanup()
 		menu.Close()
 		if targetPanel := pf.GetActivePanel(); targetPanel != nil {
-			// The menu is oldest → newest. If the selected path disappeared,
+			// The menu is oldest ? newest. If the selected path disappeared,
 			// navigateAvailableFolderHistory walks toward newer entries.
 			pf.NavigateAvailableFolderHistory(targetPanel, h, pos, -1)
 		}
@@ -170,7 +170,7 @@ func actionFoldersHistory(pf *panel.PanelsFrame) {
 		}
 
 		// Alt+digit reaches the pinned folders by their slot digit, the same
-		// table RightCtrl+digit uses from the panel — that hotkey cannot get
+		// table RightCtrl+digit uses from the panel ? that hotkey cannot get
 		// through while this dialog is on top of the frame stack (#407).
 		if pins != nil && alt && !shift &&
 			e.VirtualKeyCode >= vtinput.VK_0 && e.VirtualKeyCode <= vtinput.VK_9 {
@@ -332,7 +332,7 @@ func actionCommandHistory(pf *panel.PanelsFrame) {
 		pf.CmdLine.Edit.HistoryPos = -1
 	}
 	// VMenu.ProcessMouse calls SetExitCode after OnAction, so click closes
-	// the menu automatically — pasteRecord only does the side effect.
+	// the menu automatically ? pasteRecord only does the side effect.
 	menu.OnAction = func(int) {
 		_, rec, ok := search.selected()
 		if ok {
@@ -578,7 +578,7 @@ func actionSortMenuForPanel(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel) {
 	for idx, entry := range entries {
 		prefix := "  "
 		if entry.mode == fsp.SortMode {
-			prefix = "✓ "
+			prefix = "? "
 			selected = idx
 		}
 		menu.AddItem(vtui.MenuItem{
@@ -591,7 +591,7 @@ func actionSortMenuForPanel(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel) {
 	// groups" below the mode list. Its index is len(entries).
 	groupsPrefix := "  "
 	if fsp.UseSortGroups {
-		groupsPrefix = "✓ "
+		groupsPrefix = "? "
 	}
 	menu.AddItem(vtui.MenuItem{
 		Text:     groupsPrefix + i18n.Msg("Menu.SortUseGroups"),
@@ -854,8 +854,8 @@ func showEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtClose
 			// A local file is mapped rather than read: the mapping is one
 			// contiguous buffer, so the piece table can hand windows onto it
 			// and a search scans the file itself instead of a copy of it.
-			// Everything else — remote, empty, or a mapping the kernel
-			// refused — keeps the lazily fetched chunk buffer.
+			// Everything else ? remote, empty, or a mapping the kernel
+			// refused ? keeps the lazily fetched chunk buffer.
 			if config.App.EditorMemoryMap {
 				var mapErr error
 				mapped, mapErr = editor.MapEditorFileWithOffset(v, f, dataOffset)
@@ -885,7 +885,7 @@ func showEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtClose
 	}
 
 	// A mapped or lazily loaded file is indexed by StartIndexing below; anything
-	// else — an empty buffer, or a file decoded into memory — has its index
+	// else ? an empty buffer, or a file decoded into memory ? has its index
 	// built with it, as it always has.
 	var ev *editor.EditorView
 	if mapped != nil || buf != nil {
@@ -969,7 +969,7 @@ func actionOpenEditor(pf *panel.PanelsFrame, v vfs.VFS, path string) {
 
 		vtui.FrameManager.PostTask(func() {
 			// This is a choice dialog ("switch / reload / new instance / cancel"),
-			// not a warning — render on the neutral dialog palette. See #379.
+			// not a warning ? render on the neutral dialog palette. See #379.
 			dlg := vtui.ShowMessageEx(i18n.Msg("FileOp.AlreadyOpenedTitle"), fmt.Sprintf(i18n.Msg("FileOp.AlreadyOpened"), vtui.TruncateMiddle(v.Base(path), 40)), buttons, vtui.MessageInfo)
 			dlg.OnResult = func(res int) {
 				if res == 0 {
@@ -1141,7 +1141,7 @@ func actionOpenViewer(pf *panel.PanelsFrame, v vfs.VFS, path string) {
 	existingViewer, screenIdx := findOpenedViewer(v, path)
 	if existingViewer != nil {
 		vtui.FrameManager.PostTask(func() {
-			// Same as actionOpenEditor above — this is a choice
+			// Same as actionOpenEditor above ? this is a choice
 			// dialog, render on the neutral dialog palette. See #379.
 			dlg := vtui.ShowMessageEx(i18n.Msg("FileOp.AlreadyViewedTitle"), fmt.Sprintf(i18n.Msg("FileOp.AlreadyViewed"), vtui.TruncateMiddle(v.Base(path), 40)), []string{i18n.Msg("FileOp.BtnCurrent"), i18n.Msg("FileOp.BtnReload"), i18n.Msg("FileOp.BtnNewInstance"), i18n.Msg("vtui.Cancel")}, vtui.MessageInfo)
 			dlg.OnResult = func(res int) {
@@ -1172,7 +1172,7 @@ func actionSwitchEditorToViewer(ev *editor.EditorView) {
 		} else if ev.Li != nil && ev.CursorLine >= 0 {
 			// The index owns the answer to "where is line N", and on a file
 			// that is still being scanned it may not have reached the cursor
-			// yet — which used to open the viewer at the top of the file
+			// yet ? which used to open the viewer at the top of the file
 			// instead of where the editor was.
 			ev.EnsureIndexedToLine(ev.CursorLine)
 			if ev.CursorLine < ev.Li.LineCount() {
@@ -1337,7 +1337,7 @@ func actionSwitchViewerToEditor(vv *viewer.ViewerView) {
 
 	// Same rule as opening from the panel: a file the indexer owns must not be
 	// indexed on the way in, or switching to the ev pays the whole file's
-	// scan on the UI thread before it appears — twenty seconds of it on the
+	// scan on the UI thread before it appears ? twenty seconds of it on the
 	// 8 GB test file.
 	var ev *editor.EditorView
 	if mapped != nil || buf != nil {
@@ -1367,8 +1367,8 @@ func actionSwitchViewerToEditor(vv *viewer.ViewerView) {
 			line = ev.CursorLine
 			pos = ev.CursorPos
 		} else {
-			// The file has not been read that far — a chunk of a lazily
-			// loaded one is still on its way — so the offset has no line yet.
+			// The file has not been read that far ? a chunk of a lazily
+			// loaded one is still on its way ? so the offset has no line yet.
 			// The ev opens at the top and the scan puts the cursor where
 			// the viewer was when it reads past it, rather than guessing now.
 			vtui.DebugLog("EDITOR: viewer offset %d is past the index; the scan will place it",
@@ -1773,8 +1773,8 @@ func openPlayerPanel(pf *panel.PanelsFrame) *panel.PlayerPanel {
 // tryPlayInPlayerPanel is Enter on a recording while the player panel is
 // open: the file plays there at once, the file panel keeps the cursor, and
 // the rest of the panel's audio files become the queue. Without the player
-// open, Enter keeps its usual meaning — associations, then the system
-// opener — so the rule costs nobody anything they did not ask for.
+// open, Enter keeps its usual meaning ? associations, then the system
+// opener ? so the rule costs nobody anything they did not ask for.
 func tryPlayInPlayerPanel(pf *panel.PanelsFrame, v vfs.VFS, path string) bool {
 	player := openPlayerPanel(pf)
 	if player == nil || !media.IsAudioFile(path) {
@@ -1808,9 +1808,9 @@ func tryPlayInPlayerPanel(pf *panel.PanelsFrame, v vfs.VFS, path string) bool {
 }
 
 func actionExecute(pf *panel.PanelsFrame, v vfs.VFS, dir, name, path string) {
-	// User-defined file associations for Enter (mirrors far2l F9 →
-	// Commands → File associations). A matching association intercepts
-	// before the runnable / xdg-open fallback; no match → default flow.
+	// User-defined file associations for Enter (mirrors far2l F9 ?
+	// Commands ? File associations). A matching association intercepts
+	// before the runnable / xdg-open fallback; no match ? default flow.
 	if panel.TryFileAssociation(pf, panel.AssocExecute) {
 		return
 	}
@@ -1881,7 +1881,7 @@ func actionExecute(pf *panel.PanelsFrame, v vfs.VFS, dir, name, path string) {
 					} else {
 						// On Unix, use single quotes for paths to prevent Bash history expansion
 						sqCmd := strings.ReplaceAll(cmd, "'", "'\\''")
-						// Используем OSC 133 для уведомления терминала о начале и конце выполнения.
+						// ?????????? OSC 133 ??? ??????????? ????????? ? ?????? ? ????? ??????????.
 						if actualDir != "" {
 							sqDir := strings.ReplaceAll(actualDir, "'", "'\\''")
 							cmdToWire = fmt.Sprintf(" set +H; cd '%s' && { trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; ./'%s' ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }\r", sqDir, sqCmd)
@@ -2196,7 +2196,7 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	}
 
 	// A move takes the cursor's entry away with it, so the panel is told where
-	// to land before the operation starts — afterwards the name it would look
+	// to land before the operation starts ? afterwards the name it would look
 	// for is gone.
 	if isMove {
 		if fsp := pf.GetActivePanel(); fsp != nil {
@@ -2497,7 +2497,7 @@ func actionCopyInPlace(pf *panel.PanelsFrame) {
 	})
 }
 func actionEditorSettings(pf *panel.PanelsFrame) {
-	// Height sized so the 3×2 checkbox grid stacks tight (no blank
+	// Height sized so the 3?2 checkbox grid stacks tight (no blank
 	// rows between rows of the grid). See #298.
 	width, height := 78, 27
 	checkCaptions := []string{
@@ -3020,7 +3020,7 @@ func actionMkDir(pf *panel.PanelsFrame) {
 
 	editName := vtui.NewEdit(0, 0, 10, "")
 	editName.PathHintsEnabled = true
-	history.AttachHistoryUseLast(editName, history.NewFolderHistoryID)
+	history.AttachHistory(editName, history.NewFolderHistoryID)
 	lblPrompt := vtui.NewLabel(0, 0, i18n.Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)
@@ -3599,13 +3599,13 @@ func actionPanelSettings(pf *panel.PanelsFrame) {
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 56, 20)
-	// First checkbox cluster — stack tight, no blank rows between.
+	// First checkbox cluster ? stack tight, no blank rows between.
 	vbox.Add(chkHidden, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkDirPrefix, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkHighlightMarks, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkSeparateExtensions, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkFileInfo, vtui.Margins{}, vtui.AlignLeft)
-	// Blank row before the scrollbar combo — transition to a different
+	// Blank row before the scrollbar combo ? transition to a different
 	// widget kind, worth the visual separator.
 	rowScrollbars := vtui.NewHBoxLayout(0, 0, 56, 1)
 	rowScrollbars.Add(lblScrollbars, vtui.Margins{Right: 1}, vtui.AlignLeft)
@@ -3619,7 +3619,7 @@ func actionPanelSettings(pf *panel.PanelsFrame) {
 	vbox.Add(btnAutoSaveDetails, vtui.Margins{Top: 1, Left: 2}, vtui.AlignLeft)
 	vbox.Add(chkUseTrash, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkCmdAc, vtui.Margins{}, vtui.AlignLeft)
-	// Navigation radio group — its own visual island.
+	// Navigation radio group ? its own visual island.
 	vbox.Add(lblNavigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(navigation, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(chkStayFocused, vtui.Margins{Left: 2}, vtui.AlignLeft)
@@ -4301,7 +4301,7 @@ func actionAppearanceSettings(pf *panel.PanelsFrame) {
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("AppearanceSettings.Title"))
 	dlg.ShowClose = true
 	// Snapshot the whole palette (not just the style name) so a
-	// Cancel restores every runtime tweak — farcolors.ini overrides
+	// Cancel restores every runtime tweak ? farcolors.ini overrides
 	// loaded at startup, Colorer editor-background pushes, anything
 	// else that touched vtui.Palette. Re-applying originalStyle
 	// alone would wipe those.
