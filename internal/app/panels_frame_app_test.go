@@ -14,6 +14,7 @@ import (
 	"github.com/unxed/f4/internal/plughost"
 	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/internal/theme"
+	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -179,6 +180,121 @@ func TestPanelsFrame_ProcessMouse_DoubleClickFile(t *testing.T) {
 	}
 	if pf.ShowPanels {
 		t.Error("Double clicking a runnable file should hide the panels")
+	}
+}
+
+func setupArchiveEntryPanel(t *testing.T) (*panel.PanelsFrame, *panel.FileSystemPanel, string) {
+	t.Helper()
+	t.Cleanup(paneltest.SwapFrameManager(t))
+
+	pf := paneltest.SetupMockPanelsFrame(t)
+	pf.ResizeConsole(80, 25)
+
+	tmp := t.TempDir()
+	archivePath := filepath.Join(tmp, "payload.zip")
+	if err := os.WriteFile(archivePath, []byte("not opened by this regression test"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	fsp := pf.Panels[0].(*panel.FileSystemPanel)
+	fsp.SetViewMode(panel.ViewModeDetailed)
+	if err := fsp.Vfs.SetPath(tmp); err != nil {
+		t.Fatal(err)
+	}
+	fsp.Entries = []*panel.FileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "payload.zip", IsDir: false}},
+	}
+	fsp.Refresh()
+	fsp.SetCursorIndex(1)
+	pf.ActiveIdx = 0
+
+	archiveProvider := &archive.ArchiveProvider{}
+	vfs.RegisterProvider(archiveProvider)
+	t.Cleanup(func() {
+		if !vfs.UnregisterProvider(archiveProvider) {
+			t.Errorf("archive provider was not registered")
+		}
+	})
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	vtui.FrameManager.Push(pf)
+	return pf, fsp, tmp
+}
+
+func TestPanelsFrame_EnterArchiveFileRequiresExplicitAction(t *testing.T) {
+	pf, fsp, tmp := setupArchiveEntryPanel(t)
+	defer pf.Close()
+
+	if !pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	}) {
+		t.Fatal("plain Enter on an archive file must be handled")
+	}
+	if fsp.ProviderOpenTask != nil {
+		t.Fatal("plain Enter on an archive file must not start a provider transition")
+	}
+	if got := fsp.Vfs.GetPath(); filepath.Clean(got) != filepath.Clean(tmp) {
+		t.Fatalf("plain Enter changed the panel path to %q", got)
+	}
+	if !pf.ShowPanels {
+		t.Fatal("plain Enter on an archive file must not launch it")
+	}
+}
+
+func TestPanelsFrame_ProcessMouse_DoubleClickArchiveFileRequiresExplicitAction(t *testing.T) {
+	pf, fsp, tmp := setupArchiveEntryPanel(t)
+	defer pf.Close()
+
+	handled := pf.ProcessMouse(&vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		KeyDown:         true,
+		MouseX:          checkedMouseCoordinate(t, fsp.Table.X1),
+		MouseY:          checkedMouseCoordinate(t, fsp.Table.Y1+fsp.Table.MarginTop+1),
+		ButtonState:     vtinput.FromLeft1stButtonPressed,
+		MouseEventFlags: vtinput.DoubleClick,
+	})
+	if !handled {
+		t.Fatal("double click on an archive file must be handled")
+	}
+	if got := fsp.GetRawSelectedName(); got != "payload.zip" {
+		t.Fatalf("double click selected %q, want payload.zip", got)
+	}
+	if fsp.ProviderOpenTask != nil {
+		t.Fatal("double click on an archive file must not start a provider transition")
+	}
+	if got := fsp.Vfs.GetPath(); filepath.Clean(got) != filepath.Clean(tmp) {
+		t.Fatalf("double click changed the panel path to %q", got)
+	}
+	if !pf.ShowPanels {
+		t.Fatal("double click on an archive file must not launch it")
+	}
+}
+
+func TestPanelsFrame_ProcessMouse_MiddleClickArchiveFileRequiresExplicitAction(t *testing.T) {
+	pf, fsp, tmp := setupArchiveEntryPanel(t)
+	defer pf.Close()
+
+	handled := pf.ProcessMouse(&vtinput.InputEvent{
+		Type:        vtinput.MouseEventType,
+		KeyDown:     true,
+		MouseX:      checkedMouseCoordinate(t, fsp.Table.X1),
+		MouseY:      checkedMouseCoordinate(t, fsp.Table.Y1+fsp.Table.MarginTop+1),
+		ButtonState: vtinput.FromLeft2ndButtonPressed,
+	})
+	if !handled {
+		t.Fatal("middle click on an archive file must be handled")
+	}
+	if fsp.ProviderOpenTask != nil {
+		t.Fatal("middle click on an archive file must not start a provider transition")
+	}
+	if got := fsp.Vfs.GetPath(); filepath.Clean(got) != filepath.Clean(tmp) {
+		t.Fatalf("middle click changed the panel path to %q", got)
+	}
+	if !pf.ShowPanels {
+		t.Fatal("middle click on an archive file must not launch it")
 	}
 }
 

@@ -676,6 +676,12 @@ func isNilVFS(v vfs.VFS) bool {
 	return false
 }
 
+// PanelEnterDirectoryInputSource marks the explicit Ctrl+PgDn action. Plain
+// Enter and mouse double-click must not silently enter archive files: users
+// asked for archive entry to be an intentional action, while ordinary
+// directories and executable files retain their existing Enter behaviour.
+const PanelEnterDirectoryInputSource = "panel-enter-directory"
+
 // isArchiveProvider reports whether p is the archive/zip plugin's provider,
 // so archive open failures get an "Open Error" dialog instead of the
 // network-oriented "Connection Error" used by remote VFS plugins.
@@ -3422,6 +3428,12 @@ func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
 				}
 			}
 			if provider != nil {
+				if !selected.IsDir && isArchiveProvider(provider) && e.InputSource != PanelEnterDirectoryInputSource {
+					// Archive entry is deliberately explicit. In particular, the
+					// synthetic Enter emitted for a mouse double-click must not
+					// turn an archive into a directory or launch an archive reader.
+					return true
+				}
 				sourceVFS := fp.Vfs
 				selectedName := selected.Name
 				return fp.openVFSAsync(
