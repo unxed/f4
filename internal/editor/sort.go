@@ -66,9 +66,39 @@ func sortedLinesData(data []byte, ascending, caseSensitive bool) []byte {
 		return lines[i].key > lines[j].key
 	})
 
+	// An unterminated final line is a valid file ending, but it cannot stay
+	// unterminated after sorting into the middle of the block: it would join
+	// with the following line. Move that missing separator to the new final
+	// line so sorting preserves both logical lines and the file's final-newline
+	// state.
+	finalNewline := bytes.HasSuffix(data, []byte{'\n'})
+	separator := []byte{'\n'}
+	if !finalNewline {
+		for _, line := range lines {
+			if bytes.HasSuffix(line.raw, []byte{'\n'}) {
+				separator = []byte{'\n'}
+				if len(line.raw) > 1 && line.raw[len(line.raw)-2] == '\r' {
+					separator = []byte{'\r', '\n'}
+				}
+				break
+			}
+		}
+	}
+
 	result := make([]byte, 0, len(data))
-	for _, line := range lines {
-		result = append(result, line.raw...)
+	for i, line := range lines {
+		raw := line.raw
+		if !finalNewline && i == len(lines)-1 {
+			if bytes.HasSuffix(raw, []byte{'\n'}) {
+				raw = raw[:len(raw)-1]
+				if len(raw) > 0 && raw[len(raw)-1] == '\r' {
+					raw = raw[:len(raw)-1]
+				}
+			}
+		} else if !finalNewline && i < len(lines)-1 && !bytes.HasSuffix(raw, []byte{'\n'}) {
+			raw = append(append([]byte(nil), raw...), separator...)
+		}
+		result = append(result, raw...)
 	}
 	return result
 }
