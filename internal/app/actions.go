@@ -3020,7 +3020,10 @@ func actionMkDir(pf *panel.PanelsFrame) {
 
 	editName := vtui.NewEdit(0, 0, 10, "")
 	editName.PathHintsEnabled = true
-	history.AttachHistoryUseLast(editName, history.NewFolderHistoryID)
+	// Keep the history available through its button and navigation keys, but
+	// do not insert the last folder automatically: F7 should start with an
+	// empty name unless the user explicitly chooses a history entry.
+	history.AttachHistory(editName, history.NewFolderHistoryID)
 	lblPrompt := vtui.NewLabel(0, 0, i18n.Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)

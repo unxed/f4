@@ -289,7 +289,7 @@ func TestAssocEditor_SharesMaskHistory(t *testing.T) {
 	}
 }
 
-func TestMkDirDialog_PreFillsFromNewFolderHistory(t *testing.T) {
+func TestMkDirDialog_DoesNotPreFillFromNewFolderHistory(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	theme.SetDefaultF4Palette()
 	store := useStubHistory(t)
@@ -306,14 +306,21 @@ func TestMkDirDialog_PreFillsFromNewFolderHistory(t *testing.T) {
 	defer vtui.FrameManager.Pop()
 
 	edit := findHistoryEdit(t, dlg, history.NewFolderHistoryID)
-	// far2l's mkdir field carries DIF_USELASTHISTORY, so the empty prompt
-	// opens on the last folder that was created.
-	if got := edit.GetText(); got != "build" {
-		t.Errorf("folder name field is %q, want %q", got, "build")
+	// F7 must not create a folder from a stale history entry when the user
+	// starts typing a new name.
+	if got := edit.GetText(); got != "" {
+		t.Errorf("folder name field is %q, want empty", got)
 	}
 	edit.InsertString("dist")
 	if got := edit.GetText(); got != "dist" {
-		t.Errorf("typing over the pre-filled name gave %q, want %q", got, "dist")
+		t.Errorf("typing into the empty name field gave %q, want %q", got, "dist")
+	}
+	if len(edit.History) != 1 || edit.History[0] != "build" {
+		t.Errorf("folder history is not available for explicit selection: %v", edit.History)
+	}
+	edit.HistoryUp()
+	if got := edit.GetText(); got != "build" {
+		t.Errorf("explicit history selection gave %q, want %q", got, "build")
 	}
 }
 
