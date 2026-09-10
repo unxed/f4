@@ -14,8 +14,9 @@ import (
 var errSortIndexIncomplete = errors.New("the line index is not complete")
 
 type sortableLine struct {
-	raw []byte
-	key string
+	raw        []byte
+	key        string
+	terminated bool
 }
 
 // splitSortableLines keeps each line terminator attached to its line. This
@@ -33,15 +34,18 @@ func splitSortableLines(data []byte) []sortableLine {
 		}
 
 		contentEnd := end
+		terminated := false
 		if end > start && data[end-1] == '\n' {
+			terminated = true
 			contentEnd--
 			if contentEnd > start && data[contentEnd-1] == '\r' {
 				contentEnd--
 			}
 		}
 		lines = append(lines, sortableLine{
-			raw: append([]byte(nil), data[start:end]...),
-			key: string(data[start:contentEnd]),
+			raw:        append([]byte(nil), data[start:end]...),
+			key:        string(data[start:contentEnd]),
+			terminated: terminated,
 		})
 		start = end
 	}
@@ -52,6 +56,10 @@ func sortedLinesData(data []byte, ascending, caseSensitive bool) []byte {
 	lines := splitSortableLines(data)
 	if len(lines) < 2 {
 		return append([]byte(nil), data...)
+	}
+	unterminatedLine := -1
+	if !lines[len(lines)-1].terminated {
+		unterminatedLine = len(lines) - 1
 	}
 	if !caseSensitive {
 		for i := range lines {
@@ -65,6 +73,27 @@ func sortedLinesData(data []byte, ascending, caseSensitive bool) []byte {
 		}
 		return lines[i].key > lines[j].key
 	})
+
+	// A missing final terminator belongs to the file, not to the line that
+	// happened to be last before sorting. Transfer the final sorted line's
+	// terminator to the unterminated line when that line moved, so the lines
+	// stay separate while the file keeps its original no-newline-at-EOF state.
+	if unterminatedLine >= 0 {
+		for i := range lines {
+			if !lines[i].terminated {
+				unterminatedLine = i
+				break
+			}
+		}
+		if unterminatedLine != len(lines)-1 {
+			last := &lines[len(lines)-1]
+			term := trailingLineTerminator(last.raw)
+			if len(term) > 0 {
+				lines[unterminatedLine].raw = append(lines[unterminatedLine].raw, term...)
+				last.raw = last.raw[:len(last.raw)-len(term)]
+			}
+		}
+	}
 
 	result := make([]byte, 0, len(data))
 	for _, line := range lines {
