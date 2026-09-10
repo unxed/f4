@@ -38,6 +38,8 @@ type helpZoomState struct {
 
 var currentHelpZoom *helpZoomState
 
+const helpWindowBottomInset = 4
+
 // ResetHelpState drops the search and zoom a help window accumulated. Both are
 // package state that outlives the window, so a test that opened one has to say
 // so before the next opens another.
@@ -344,7 +346,7 @@ func ToggleHelpZoom(frame vtui.Frame) bool {
 	} else {
 		currentHelpZoom = &helpZoomState{frame: frame, saved: helpWindowBounds{x1, y1, x2, y2}}
 		width, height := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
-		target = helpWindowBounds{0, 0, width - 1, height - 3}
+		target = helpWindowBounds{0, 0, width - 1, height - helpWindowBottomInset}
 	}
 	lastW, okW := nestedHelpInt(reflect.ValueOf(frame), "lastW")
 	lastH, okH := nestedHelpInt(reflect.ValueOf(frame), "lastH")
@@ -362,7 +364,7 @@ func ToggleHelpZoom(frame vtui.Frame) bool {
 
 func fitHelpBounds(bounds helpWindowBounds) helpWindowBounds {
 	maxX := vtui.FrameManager.GetScreenSize() - 1
-	maxY := vtui.FrameManager.GetScreenHeight() - 3
+	maxY := vtui.FrameManager.GetScreenHeight() - helpWindowBottomInset
 	width, height := bounds.x2-bounds.x1+1, bounds.y2-bounds.y1+1
 	if width > maxX+1 {
 		bounds.x1, bounds.x2 = 0, maxX
