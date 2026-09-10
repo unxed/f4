@@ -111,7 +111,6 @@ func TestKittyCoverageFileSafetyAndRanges(t *testing.T) {
 		t.Fatalf("offset and size read = %v, %v", got, err)
 	}
 
-
 	for _, bad := range []string{"", "/proc/self/status", "/sys/kernel", "/dev/null", filepath.Join(dir, "missing")} {
 		if _, err := kittyReadFile(bad, 'f', 0, 0); err == nil {
 			t.Errorf("%q was accepted", bad)
