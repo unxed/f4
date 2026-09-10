@@ -1004,6 +1004,39 @@ func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
 	}
 }
 
+func TestPanelsFrame_ActiveMenuBarAppearsAfterWorkspaceInset(t *testing.T) {
+	t.Cleanup(swapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	theme.SetDefaultF4Palette()
+	oldAlways := config.App.AlwaysShowMenuBar
+	config.App.AlwaysShowMenuBar = false
+	t.Cleanup(func() { config.App.AlwaysShowMenuBar = oldAlways })
+
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+	vtui.FrameManager.AddScreenBackground(vtui.NewDesktop())
+
+	if inset := vtui.FrameManager.WorkspaceTopInset(); inset != 1 {
+		t.Fatalf("workspace top inset = %d, want 1 with multiple workspaces", inset)
+	}
+	pf.MenuBar.Active = true
+	pf.Show(vtui.FrameManager.Screen())
+
+	_, menuY, _, _ := pf.MenuBar.GetPosition()
+	if menuY != 1 || !pf.MenuBar.IsVisible() {
+		t.Fatalf("active menu bar position/visibility = (%d, %v), want (1, true)", menuY, pf.MenuBar.IsVisible())
+	}
+
+	pf.MenuBar.Active = false
+	pf.Show(vtui.FrameManager.Screen())
+	_, menuY, _, _ = pf.MenuBar.GetPosition()
+	if menuY >= 0 || pf.MenuBar.IsVisible() {
+		t.Fatalf("inactive menu bar position/visibility = (%d, %v), want off-screen and hidden", menuY, pf.MenuBar.IsVisible())
+	}
+}
+
 // TestPanelsFrame_HiddenTerminalFirstRowDoesNotOpenMenu covers issue #1093:
 // a click on the first line of micro (or far2l started from f4) used to hit
 // f4's stale menu-bar geometry and open the f4 menu over the terminal app.
