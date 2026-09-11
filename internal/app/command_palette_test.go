@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -50,6 +51,43 @@ func TestCommandPaletteLegacyShortcutHonorsExplicitHotkeyOverrides(t *testing.T)
 	keymap.GlobalHotkeysMgr.Bindings["Common"][commandPaletteLegacyKey] = "Panel.TogglePassivePanel"
 	if commandPaletteLegacyShortcut("Shell", e) {
 		t.Fatal("explicit Ctrl+Alt+P binding was reclaimed by the legacy fallback")
+	}
+}
+
+// A fallback that the built-in bindings themselves claim is not a fallback.
+// Debug.ScreenDump held Common/CtrlAltP as a DefaultKey, and the manager falls
+// back from any area to Common, so ConfiguredHotkeyAction answered
+// "Debug.ScreenDump" for every area and commandPaletteLegacyShortcut stood
+// down — on exactly the legacy terminals where Ctrl+Shift+P cannot arrive at
+// all (issue #980). The manager here is the real one, built from the action
+// registry, because the collision lived in the defaults and nowhere else: the
+// test above builds an empty one and passes either way.
+func TestCommandPaletteLegacyShortcutSurvivesTheBuiltInBindings(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	previous := keymap.GlobalHotkeysMgr
+	manager := keymap.NewHotkeyManager(filepath.Join(t.TempDir(), "hotkeys.ini"))
+	keymap.GlobalHotkeysMgr = manager
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = previous })
+
+	for _, area := range []string{"Shell", "Editor", "Viewer", "Terminal", "Common"} {
+		if got := manager.GetAction(area, commandPaletteLegacyKey); got != "" {
+			t.Errorf("%s in area %s is claimed by %q in the built-in bindings", commandPaletteLegacyKey, area, got)
+		}
+		if !commandPaletteLegacyShortcut(area, keymap.ParseFarKey(commandPaletteLegacyKey)) {
+			t.Errorf("%s did not open the palette in area %s", commandPaletteLegacyKey, area)
+		}
+	}
+
+	// The chord is also what the menu and the palette itself advertise next
+	// to the command, and a native key another action holds is not shown.
+	palette, ok := GetAction(commandPaletteActionName)
+	if !ok {
+		t.Fatalf("%s is not registered", commandPaletteActionName)
+	}
+	if got := keymap.NativeShortcutsForAction("Shell", palette); len(got) == 0 {
+		t.Fatalf("the legacy fallback is not advertised anywhere: %v", got)
 	}
 }
 

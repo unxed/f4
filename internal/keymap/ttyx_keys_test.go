@@ -122,6 +122,21 @@ func TestDefaultTTYXKeyListHasCtrlEnter(t *testing.T) {
 	t.Errorf("Ctrl+Enter is missing from the built-in list: %+v", got)
 }
 
+// Ctrl+Shift+P is the command palette, and on a terminal with no extended
+// keyboard protocol it is delivered as a bare Ctrl+P: Shift over a letter does
+// not change the control byte. VTE implements none of the protocols vtinput
+// asks for, so on GNOME Terminal the X server is the only place the real chord
+// can be had (issue #980).
+func TestDefaultTTYXKeyListHasCommandPalette(t *testing.T) {
+	got, _ := parseTTYXCombos(config.DefaultTTYXKeyList)
+	for _, c := range got {
+		if c.Keysym == 'p' && c.Mods == (ttyx.ModCtrl|ttyx.ModShift) {
+			return
+		}
+	}
+	t.Errorf("Ctrl+Shift+P is missing from the built-in list: %+v", got)
+}
+
 // Every method has to survive being called on a nil keyboard, because that is
 // what "not available here" looks like to the session loop.
 func TestTTYXKeyboardNilIsSafe(t *testing.T) {

@@ -78,9 +78,17 @@ const DefaultSlideShowDelay = 5
 // nothing else is said. Every entry is a combination f4 binds and a plain TTY
 // cannot distinguish from a simpler one, and nothing here is a combination a
 // desktop is likely to want for itself.
+//
+// Ctrl+Shift+P is in the list for the same reason as the rest of it and not
+// as a special case: it is the command palette, and Shift over a bare letter
+// does not change the control byte a TTY sends, so it arrives as Ctrl+P — the
+// passive-panel command — unless an extended keyboard protocol is running.
+// vtinput asks every terminal for one at startup; VTE answers none of them,
+// which is what issue #980 is. Where there is an X server the real chord is
+// still there to be taken.
 const DefaultTTYXKeyList = "Ctrl+Shift+Up, Ctrl+Shift+Down, Ctrl+Shift+Left, Ctrl+Shift+Right, " +
 	"Ctrl+Enter, Shift+Enter, Ctrl+Shift+Enter, Ctrl+Tab, Ctrl+Shift+Tab, " +
-	"Alt+Shift+F3, Alt+Shift+F4"
+	"Alt+Shift+F3, Alt+Shift+F4, Ctrl+Shift+P"
 
 // ---- from gui_font.go ----
 func DefaultGuiFontSize(goos string) int {

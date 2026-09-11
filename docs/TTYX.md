@@ -305,6 +305,21 @@ KeyList=Ctrl+Shift+Up, Ctrl+Enter, Ctrl+Tab
 found a setting does not work, and far2l asks nobody either. The setting is the
 way out for whoever disagrees about which combinations are worth taking.
 
+`KeyList` defaults to `config.DefaultTTYXKeyList`: the Ctrl+Shift arrows, the
+Enter and Tab chords, `Alt+Shift+F3`/`F4`, and `Ctrl+Shift+P`. The last one is
+the command palette. Shift over a bare letter does not change the control byte
+a TTY sends, so `Ctrl+Shift+P` reaches f4 as `Ctrl+P` — the passive-panel
+command — on any terminal without an extended keyboard protocol. vtinput asks
+for three of them at startup (Kitty, win32-input-mode, far2l); VTE answers
+none, which is why the palette could not be opened by its own documented chord
+in GNOME Terminal (issue #980). Taking the key from the X server is the only
+route to the real chord there.
+
+This is an X11 route and nothing else. Under Wayland the terminal is a Wayland
+client, `ttyx.Open` does not find a window for it, and the grab never happens:
+`Ctrl+Alt+P` remains the fallback there, as it does wherever there is no
+graphical session at all.
+
 ### Why a grab, and why only while focused
 
 A grab is shared state on the X server, and this uses one deliberately, for two

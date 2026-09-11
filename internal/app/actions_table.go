@@ -327,16 +327,23 @@ func init() {
 		LabelKey:    "Action.Debug.ScreenDump",
 		Description: "Write the current screen buffer to vtui.screen.log",
 		DescKey:     "Action.Debug.ScreenDump.Desc",
-		// CtrlShiftP (and any other Ctrl+Shift+<letter> combo) collapses to
-		// plain Ctrl+<letter> on a legacy ANSI terminal — Shift over a letter
-		// doesn't change the control byte sent, and disambiguating it needs
-		// an extended keyboard protocol (Kitty / win32-input-mode) that Wine's
-		// tty backend does not implement (see WINE.md §15.1). CtrlAlt<letter>
-		// survives that path: Alt is delivered as an ESC prefix, so it stays
-		// unambiguous even over a bare control byte. Same pattern already
-		// used by Panel.CopySelectedRealPaths (CtrlAltIns) above.
-		DefaultKeys: []string{"CtrlAltP"},
-		Handler:     actionScreenDump,
+		// No hotkey. The dump is reached from the command palette, which is
+		// how it was registered before CtrlAltP was tried here.
+		//
+		// CtrlAltP was taken to reach the dump on a Wine tty, where
+		// Ctrl+Shift+<letter> collapses to plain Ctrl+<letter> and only an
+		// ESC-prefixed chord should have survived (WINE.md §15.1). It did not
+		// survive either — Wine's tty backend does not deliver
+		// Ctrl+Alt+<letter> at all, measured on live Wine (WINE.md §15.2) —
+		// and the -e flag replaced the need for a keyboard route entirely.
+		//
+		// What the binding did do was claim Common/CtrlAltP in
+		// HotkeyManager.Defaults, and that is the chord App.CommandPalette
+		// advertises as its legacy fallback. commandPaletteLegacyShortcut
+		// stands down for any bound action and NativeShortcutsForAction hides
+		// a native key another action holds, so the fallback neither fired
+		// nor was shown anywhere (issue #980).
+		Handler: actionScreenDump,
 	})
 
 	// --- Shell (panels) actions ---
