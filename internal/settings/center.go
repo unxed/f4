@@ -9,6 +9,7 @@ import (
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/i18n"
+	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/sdk/f4settings"
 	"github.com/unxed/vtinput"
@@ -51,6 +52,7 @@ func (b *settingsCheckbox) Show(scr *vtui.ScreenBuf) {
 // settingsViewport clips only the page, leaving the window chrome fixed.
 // It remains a Group/FocusContainer so native focus and UI inspection work.
 type settingsViewport struct {
+	fullPage vtui.UIElement
 	*vtui.Group
 	rows          []*settingsRow
 	scroll, total int
@@ -74,6 +76,13 @@ func newSettingsViewport() *settingsViewport {
 }
 func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 	v.Group.SetPosition(x1, y1, x2, y2)
+	if v.fullPage != nil {
+		v.fullPage.SetPosition(x1, y1, x2, y2)
+		v.total = 0
+		v.scroll = 0
+		v.boxes = nil
+		return
+	}
 	v.bar.SetPosition(x2, y1, x2, y2)
 	v.total = 0
 	v.boxes = nil
@@ -201,6 +210,10 @@ func (v *settingsViewport) positionRows() {
 	v.bar.SetParams(v.scroll, 0, max(0, v.total-v.bar.PgStep))
 }
 func (v *settingsViewport) Show(scr *vtui.ScreenBuf) {
+	if v.fullPage != nil {
+		v.Group.Show(scr)
+		return
+	}
 	v.ScreenObject.Show(scr)
 	scr.PushClipRect(v.X1, v.Y1, v.X2, v.Y2)
 	defer scr.PopClipRect()
@@ -287,6 +300,11 @@ func (v *settingsViewport) notifyFocus() {
 	}
 }
 func (v *settingsViewport) ProcessKey(e *vtinput.InputEvent) bool {
+	// Embedded pages own navigation; wrapping the single child can re-enter
+	// that same group while it is preparing a backwards focus transition.
+	if v.fullPage != nil {
+		return v.fullPage.ProcessKey(e)
+	}
 	v.WrapFocus = true
 	handled := v.Group.ProcessKey(e)
 	v.notifyFocus()
@@ -296,6 +314,9 @@ func (v *settingsViewport) ProcessKey(e *vtinput.InputEvent) bool {
 	return handled
 }
 func (v *settingsViewport) ProcessMouse(e *vtinput.InputEvent) bool {
+	if v.fullPage != nil {
+		return v.Group.ProcessMouse(e)
+	}
 	if v.bar.IsMouseCaptured() {
 		v.bar.ProcessMouse(e)
 		return true
@@ -342,8 +363,11 @@ func newSettingsHelp() *settingsHelp {
 	h.bar.OnScroll = func(n int) { h.top = n }
 	return h
 }
-func (h *settingsHelp) CanFocus() bool { return true }
+func (h *settingsHelp) CanFocus() bool { return !h.IsDisabled() }
 func (h *settingsHelp) Show(scr *vtui.ScreenBuf) {
+	if h.IsDisabled() {
+		return
+	}
 	h.ScreenObject.Show(scr)
 	scr.PushClipRect(h.X1, h.Y1, h.X2, h.Y2)
 	defer scr.PopClipRect()
@@ -362,6 +386,9 @@ func (h *settingsHelp) Show(scr *vtui.ScreenBuf) {
 	}
 }
 func (h *settingsHelp) ProcessKey(e *vtinput.InputEvent) bool {
+	if h.IsDisabled() {
+		return false
+	}
 	if !e.KeyDown {
 		return false
 	}
@@ -380,6 +407,9 @@ func (h *settingsHelp) ProcessKey(e *vtinput.InputEvent) bool {
 	return true
 }
 func (h *settingsHelp) ProcessMouse(e *vtinput.InputEvent) bool {
+	if h.IsDisabled() {
+		return false
+	}
 	if h.bar.IsMouseCaptured() {
 		h.bar.ProcessMouse(e)
 		return true
@@ -480,6 +510,7 @@ var lastSettingsCategory string
 var lastSettingsOffsets = map[string]int{}
 
 type settingsCenter struct {
+	hotkeyPage                            vtui.UIElement
 	searchCacheQuery, searchCacheLanguage string
 	categoryMatchCache                    map[string]int
 	recordMatchCache                      map[settingsRecordMatchKey]bool
@@ -650,7 +681,11 @@ func (c *settingsCenter) layoutWindow() {
 	c.sidebar.SetPosition(x0+2, y0+4, x0+side, bottom)
 	c.layoutSearch()
 	px := x0 + side + 2
-	if w >= 110 {
+	c.help.SetVisible(c.category != "hotkeys")
+	c.help.SetDisabled(c.category == "hotkeys")
+	if c.category == "hotkeys" {
+		c.page.SetPosition(px, y0+3, x0+w-3, bottom)
+	} else if w >= 110 {
 		helpWidth := max(28, w/4)
 		c.page.SetPosition(px, y0+3, x0+w-helpWidth-4, bottom)
 		c.help.SetPosition(x0+w-helpWidth-2, y0+1, x0+w-3, bottom)
@@ -676,9 +711,9 @@ func (c *settingsCenter) Show(scr *vtui.ScreenBuf) {
 	c.page.SetFocus(c.GetFocusedItem() == c.page)
 	c.BaseWindow.Show(scr)
 	attr := vtui.Palette[vtui.ColDialogBox]
-	for y := c.Y1 + 1; y <= c.help.Y2; y++ {
+	for y := c.Y1 + 1; y <= c.contentBottom(); y++ {
 		scr.Write(c.sidebar.X2+1, y, vtui.StringToCharInfo("│", attr))
-		if c.help.X1 > c.page.X2 {
+		if c.category != "hotkeys" && c.help.X1 > c.page.X2 {
 			scr.Write(c.help.X1-1, y, vtui.StringToCharInfo("│", attr))
 		}
 	}
@@ -689,7 +724,7 @@ func (c *settingsCenter) Show(scr *vtui.ScreenBuf) {
 		titleAttr = vtui.DimColor(titleAttr)
 	}
 	scr.Write(titleX, c.Y1+1, vtui.StringToCharInfo(title, titleAttr))
-	if c.help.X1 == c.page.X1 {
+	if c.category != "hotkeys" && c.help.X1 == c.page.X1 {
 		for x := c.page.X1; x <= c.help.X2; x++ {
 			scr.Write(x, c.help.Y1-1, vtui.StringToCharInfo("─", attr))
 		}
@@ -729,6 +764,14 @@ func (c *settingsCenter) categorySidebarWidth() int {
 	return min(width+5+1, max(10, available))
 }
 func (c *settingsCenter) ProcessKey(e *vtinput.InputEvent) bool {
+	if c.category == "hotkeys" && c.GetFocusedItem() == c.page && c.hotkeyPage != nil {
+		if e.KeyDown && (e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_TAB) {
+			if c.hotkeyPage.ProcessKey(e) {
+				return true
+			}
+		}
+	}
+
 	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_ESCAPE {
 		c.Close()
 		return true
@@ -969,6 +1012,33 @@ func (c *settingsCenter) selectCategory(id string) {
 	c.page.Group = vtui.NewGroup(c.page.X1, c.page.Y1, c.page.X2-c.page.X1+1, c.page.Y2-c.page.Y1+1)
 	c.page.SetOwner(c.Window)
 	c.page.rows = nil
+	c.page.fullPage = nil
+	if id == "hotkeys" {
+		if h, ok := host.(HotkeyPageHost); ok {
+			if c.hotkeyPage == nil {
+				c.hotkeyPage = h.HotkeyPage(c.Window, func(hm *keymap.HotkeyManager) {
+					for _, session := range c.sessions {
+						if session.catalog.ID != "hotkeys" {
+							continue
+						}
+						var records []f4settings.Record
+						for i, r := range settingsHotkeyRows(hm) {
+							records = append(records, f4settings.Record{ID: fmt.Sprintf("binding:%d", i), Values: map[string]string{"binding.Action": r.Action, "binding.Key": r.RawKey, "binding.Area": r.Area, "binding.Condition": r.Condition}})
+						}
+						session.draft.Records["bindings"] = records
+					}
+					c.status = ""
+					c.updateMatches()
+				})
+			}
+			c.page.fullPage = c.hotkeyPage
+			c.page.AddItem(c.hotkeyPage)
+			c.page.SetFocusedItem(c.hotkeyPage)
+			c.layoutWindow()
+			c.updateMatches()
+			return
+		}
+	}
 	group := ""
 	for _, s := range c.sessions {
 		for _, f := range s.catalog.Fields {
@@ -991,6 +1061,7 @@ func (c *settingsCenter) selectCategory(id string) {
 	}
 	c.addCollections(id)
 	c.addCommands(id)
+	c.layoutWindow()
 	c.page.scroll = c.offsets[id]
 	c.layoutPage()
 	c.updateMatches()

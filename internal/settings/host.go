@@ -2,6 +2,8 @@ package settings
 
 import (
 	"context"
+	"github.com/unxed/f4/internal/keymap"
+	"github.com/unxed/vtui"
 
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/panel"
@@ -23,3 +25,8 @@ var host Host
 
 // Configure is called by the composition root before settings can open.
 func Configure(h Host) { host = h }
+
+// HotkeyPageHost embeds the application's existing shortcut configurator.
+type HotkeyPageHost interface {
+	HotkeyPage(*vtui.Window, func(*keymap.HotkeyManager)) vtui.UIElement
+}

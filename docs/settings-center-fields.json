@@ -1430,7 +1430,7 @@
     "unavailable": "Reserved compatibility slot; no current dispatcher."
   },
   {
-    "category": "history",
+    "category": "drives",
     "description": "Directory path or expandable path expression for this numbered slot.",
     "group": "Folder bookmark slots",
     "id": "bookmark.Path",
@@ -1440,7 +1440,7 @@
     "unavailable": ""
   },
   {
-    "category": "history",
+    "category": "drives",
     "description": "Display name in the drive chooser.",
     "group": "Drive links",
     "id": "link.Name",
@@ -1450,7 +1450,7 @@
     "unavailable": ""
   },
   {
-    "category": "history",
+    "category": "drives",
     "description": "Directory or provider path opened by the link.",
     "group": "Drive links",
     "id": "link.Path",
@@ -1460,7 +1460,7 @@
     "unavailable": ""
   },
   {
-    "category": "history",
+    "category": "drives",
     "description": "Far-style shortcut spelling, such as Q or CtrlF5.",
     "group": "Drive links",
     "id": "link.Hotkey",

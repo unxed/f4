@@ -54,7 +54,7 @@ func handlePanelsAppCommand(pf *panel.PanelsFrame, cmd int, args any) bool {
 		settings.Open("operations")
 		return true
 	case appcmd.CmHotkeyConfig:
-		settings.Open("keyboard")
+		settings.Open("hotkeys")
 		return true
 	case appcmd.CmLanguage:
 		settings.Open("appearance")

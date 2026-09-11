@@ -53,6 +53,9 @@ func TestSettingsRussianRenderedLabelsAndDescriptions(t *testing.T) {
 	if !font.match {
 		t.Fatal("English search alias lost")
 	}
+	if c.categoryLabel("history") != "История" {
+		t.Fatalf("history category = %q", c.categoryLabel("history"))
+	}
 	if c.categoryLabel("appearance") != "Внешний вид и язык" {
 		t.Fatal("category not translated")
 	}

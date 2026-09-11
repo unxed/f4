@@ -627,3 +627,53 @@ func TestSettingsInactiveZeroMatchCategoryText(t *testing.T) {
 		}
 	}
 }
+
+func TestHotkeyCategoryHidesDescriptionRendering(t *testing.T) {
+	palette := append([]uint64(nil), vtui.Palette...)
+	defer copy(vtui.Palette, palette)
+	d := f4settings.NewDraft(nil, nil)
+	defer d.Close()
+	c := newSettingsCenter([]*settingsSession{{catalog: f4settings.Catalog{ID: "test", Categories: Categories}, draft: d}})
+	for _, width := range []int{80, 140} {
+		scr := vtui.NewSilentScreenBuf()
+		scr.AllocBuf(width, 30)
+		c.SetPosition(0, 0, width-1, 29)
+		for iteration := 0; iteration < 2; iteration++ {
+			vtui.Palette[vtui.ColDialogText] = vtui.SetRGBBoth(0, testutil.Uint32(0xc0d0e0+iteration*0x010101), 0x202020)
+			vtui.Palette[vtui.ColDialogBox] = vtui.SetRGBBoth(0, testutil.Uint32(0x8090a0+iteration*0x010101), 0x303030)
+			c.selectCategory("appearance")
+			c.help.text = "DESCRIPTION_SENTINEL"
+			c.Show(scr)
+			if scr.GetCell(c.help.X1, c.help.Y1).Char != 'D' {
+				t.Fatal("ordinary category lost description")
+			}
+			c.selectCategory("hotkeys")
+			for _, focus := range []vtui.UIElement{c.sidebar, c.page} {
+				c.SetFocusedItem(focus)
+				c.Show(scr)
+				if c.help.IsVisible() || c.help.CanFocus() {
+					t.Fatal("hotkey description pane remains visible/focusable")
+				}
+				if c.page.X2 != c.X2-2 || c.page.Y2 != c.contentBottom() {
+					t.Fatal("hotkey page does not occupy the available area")
+				}
+				for y := 0; y < 30; y++ {
+					var line strings.Builder
+					for x := 0; x < width; x++ {
+						line.WriteRune(testutil.Rune(scr.GetCell(x, y).Char))
+					}
+					if strings.Contains(line.String(), "DESCRIPTION_SENTINEL") {
+						t.Fatal("hidden description overpainted hotkey page")
+					}
+				}
+			}
+			c.selectCategory("appearance")
+			c.help.text = "DESCRIPTION_SENTINEL"
+			c.Show(scr)
+			cell := scr.GetCell(c.help.X1, c.help.Y1)
+			if cell.Char != 'D' || cell.Attributes != vtui.Palette[vtui.ColDialogText] {
+				t.Fatal("description did not return with current palette")
+			}
+		}
+	}
+}

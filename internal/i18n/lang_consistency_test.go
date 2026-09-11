@@ -239,7 +239,9 @@ func TestLangConsistency(t *testing.T) {
 			"fi": {whatlanggo.Fin, whatlanggo.Eng},
 			"hy": {whatlanggo.Eng},
 			"lt": {whatlanggo.Lit, whatlanggo.Eng},
-			"lv": {whatlanggo.Lav, whatlanggo.Eng},
+			// Short Latvian UI explanations are sometimes classified as the
+			// closely related Lithuanian, even with exclusively Latvian words.
+			"lv": {whatlanggo.Lav, whatlanggo.Lit, whatlanggo.Eng},
 			"et": {whatlanggo.Est, whatlanggo.Eng},
 			"es": {whatlanggo.Spa, whatlanggo.Eng},
 			"he": {whatlanggo.Heb, whatlanggo.Eng},
@@ -341,7 +343,10 @@ func TestLangConsistency(t *testing.T) {
 			// 2. N-gram language detection
 			cleanVal := placeholderRe.ReplaceAllString(val, "")
 			cleanVal = strings.ReplaceAll(cleanVal, "&", "")
-			if utf8.RuneCountInString(cleanVal) > 50 {
+			// whatlanggo has no Armenian model. For Armenian text containing
+			// Latin product names it confidently classifies only those names.
+			// The alphabet and homoglyph canaries still validate Armenian.
+			if code != "hy" && utf8.RuneCountInString(cleanVal) > 50 {
 				info := whatlanggo.Detect(cleanVal)
 				if info.IsReliable() && info.Confidence > 0.90 {
 					allowed := false

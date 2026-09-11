@@ -97,7 +97,7 @@ func (hotkeySettingsProvider) Catalog() f4settings.Catalog {
 		fields[0].Choices = append(fields[0].Choices, f4settings.Choice{Value: a.Name, Label: f4settings.Text{English: action.PlainLabel(a.DisplayLabel()) + " (" + a.Name + ")", Literal: true}})
 	}
 	fields[2].Choices = f4settings.Choices("Shell:Panels", "Terminal:Terminal", "Editor:Editor", "Viewer:Viewer", "Dialog:Dialog", "Menu:Menu", "Disks:Drive chooser", "Common:Common")
-	col := recordCollection("bindings", "keyboard", "Key bindings", "Bindings are edited inline. Native frame-owned shortcuts remain outside the editable binding table.", "binding.Action", fields)
+	col := recordCollection("bindings", "hotkeys", "Key bindings", "The Hotkey Configurator lists configurable, native and plugin shortcuts. Use Assign or Unbind; native shortcuts are read-only. Changes are saved with Apply or OK.", "binding.Action", fields)
 	col.Ordered = false
 	return f4settings.Catalog{ID: "hotkeys", Categories: Categories, Collections: []f4settings.Collection{col}}
 }
@@ -161,7 +161,10 @@ func (hotkeySettingsProvider) Begin(context.Context) (*f4settings.Draft, error) 
 				continue
 			}
 			area, key, _ := strings.Cut(id, "\x00")
-			current := next.Bindings[area][key]
+			current, configured := next.Bindings[area][key]
+			if !configured {
+				current = next.Defaults[area][key]
+			}
 			if current != old[id] && current != wanted[id] {
 				return nil, settingsError("binding %s changed outside Settings Center", key)
 			}
@@ -169,7 +172,11 @@ func (hotkeySettingsProvider) Begin(context.Context) (*f4settings.Draft, error) 
 				next.Bindings[area] = map[string]string{}
 			}
 			if wanted[id] == "" {
-				delete(next.Bindings[area], key)
+				if next.Defaults[area][key] != "" {
+					next.Bindings[area][key] = "None"
+				} else {
+					delete(next.Bindings[area], key)
+				}
 			} else {
 				next.Bindings[area][key] = wanted[id]
 			}
@@ -214,6 +221,15 @@ func settingsHotkeyRows(hm *keymap.HotkeyManager) []settingsHotkeyRow {
 			assigned[strings.ToLower(name)] = true
 		}
 	}
+	// Keep explicit removals in the draft so default chords remain disabled.
+	for area, bindings := range hm.Bindings {
+		for key, binding := range bindings {
+			if binding == "None" || binding == "" {
+				rows = append(rows, settingsHotkeyRow{"None", key, area, "", true})
+			}
+		}
+	}
+
 	for _, a := range action.AllSorted() {
 		if !assigned[strings.ToLower(a.Name)] {
 			rows = append(rows, settingsHotkeyRow{Action: a.Name, Area: a.Area, Editable: true})

@@ -116,18 +116,12 @@ func editNetFoxConnection(app vfs.App) {
 	if name == "" || name == ".." || name == "<Add connection>" {
 		return
 	}
-	if host, ok := app.(vfs.SettingsNavigationHost); ok && host.OpenSettings("network", "netfox.connections", name, false) {
-		return
-	}
 	showConnectionDialog(app, netFoxVFS, name)
 }
 
 func addNetFoxConnection(app vfs.App) {
 	netFoxVFS, ok := activeNetFoxVFS(app)
 	if !ok {
-		return
-	}
-	if host, ok := app.(vfs.SettingsNavigationHost); ok && host.OpenSettings("network", "netfox.connections", "", true) {
 		return
 	}
 	showConnectionDialog(app, netFoxVFS, "")

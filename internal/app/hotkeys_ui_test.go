@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/unxed/f4/internal/settings"
+	"path/filepath"
 	"testing"
 
 	"github.com/unxed/f4/internal/dialog"
@@ -426,4 +428,180 @@ func TestConfiguredBindingReplacesTheAssignableRow(t *testing.T) {
 	if empty != 0 {
 		t.Errorf("empty rows = %d, want 0 once the action is bound", empty)
 	}
+}
+
+func findEmbeddedHotkeys(t *testing.T, root vtui.Container) *hotkeyPage {
+	t.Helper()
+	for _, child := range root.GetChildren() {
+		if page, ok := child.(*hotkeyPage); ok {
+			return page
+		}
+		if group, ok := child.(vtui.Container); ok {
+			if page := findEmbeddedHotkeys(t, group); page != nil {
+				return page
+			}
+		}
+	}
+	return nil
+}
+
+func TestSettingsEmbeddedHotkeyConfiguratorDraft(t *testing.T) {
+	previous := keymap.GlobalHotkeysMgr
+	manager := keymap.NewHotkeyManager(filepath.Join(t.TempDir(), "hotkeys.ini"))
+	keymap.GlobalHotkeysMgr = manager
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = previous })
+	screen := vtui.NewSilentScreenBuf()
+	screen.AllocBuf(160, 40)
+	vtui.FrameManager.Init(screen)
+	settings.OpenAt("hotkeys", "", "", false)
+	center, ok := vtui.FrameManager.GetTopFrame().(*settings.Center)
+	if !ok {
+		t.Fatalf("top frame = %T", vtui.FrameManager.GetTopFrame())
+	}
+	defer center.Close()
+	page := findEmbeddedHotkeys(t, center)
+	if page == nil {
+		t.Fatal("missing embedded hotkey configurator")
+	}
+	if !page.table.Sortable || !page.table.QuickSearch || len(page.table.Columns) != 5 {
+		t.Fatal("legacy table features missing")
+	}
+	for i, row := range page.table.Rows {
+		r := row.(hotkeyRow)
+		if r.Action == "File.Delete" && r.RawKey == "F8" {
+			page.table.SetSelectPos(i)
+			break
+		}
+	}
+	page.unbind.OnClick()
+	confirmation, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatal("no unbind confirmation")
+	}
+	testutil.ClickDialogButton(t, confirmation, "Ok")
+	if manager.GetAction("Shell", "F8") != "File.Delete" {
+		t.Fatal("draft changed live binding")
+	}
+	settings.OpenAt("appearance", "", "", false)
+	settings.OpenAt("hotkeys", "", "", false)
+	if findEmbeddedHotkeys(t, center) != page {
+		t.Fatal("tab switch replaced the editing session")
+	}
+	testutil.ClickDialogButton(t, center, "Apply")
+	if manager.GetAction("Shell", "F8") != "None" {
+		t.Fatal("Apply did not persist removal of default binding")
+	}
+
+	// Edits after Apply must remain cancellable without reverting the applied removal.
+	originalView := manager.GetAction("Shell", "F3")
+	foundView := false
+	for i, row := range page.table.Rows {
+		r := row.(hotkeyRow)
+		if r.Area == "Shell" && r.RawKey == "F3" && r.Editable {
+			page.table.SetSelectPos(i)
+			foundView = true
+			break
+		}
+	}
+	if !foundView {
+		t.Fatal("F3 row missing")
+	}
+	page.unbind.OnClick()
+	testutil.ClickDialogButton(t, vtui.FrameManager.GetTopFrame().(vtui.Container), "Ok")
+	center.Close()
+	reloaded := keymap.NewHotkeyManager(manager.IniPath)
+	if manager.GetAction("Shell", "F3") != originalView || reloaded.GetAction("Shell", "F3") != originalView {
+		t.Fatal("Cancel saved the post-Apply edit")
+	}
+
+	if reloaded.GetAction("Shell", "F8") != "None" {
+		t.Fatal("removed binding returned after reload")
+	}
+}
+
+func TestEmbeddedHotkeyPageUsesLiveDialogPalette(t *testing.T) {
+	previous := keymap.GlobalHotkeysMgr
+	saved := append([]uint64(nil), vtui.Palette...)
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = previous; vtui.Palette = saved })
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
+	owner := vtui.NewCenteredDialog(80, 25, "Settings")
+	page := (settingsHost{}).HotkeyPage(owner, nil).(*hotkeyPage)
+	var rows []vtui.TableRow
+	for i := 0; i < 40; i++ {
+		rows = append(rows, hotkeyRow{Label: "Command", Key: "F8", Editable: true})
+	}
+	page.table.SetRows(rows)
+	slots := []int{vtui.ColDialogText, vtui.ColDialogSelectedButton, vtui.ColDialogHighlightText, vtui.ColDialogHighlightSelectedButton, vtui.ColDialogBox}
+	for _, width := range []int{40, 100} {
+		page.SetPosition(1, 1, width, 18)
+		for pass := 0; pass < 2; pass++ {
+			for i, slot := range slots {
+				vtui.Palette[slot] = vtui.SetRGBBoth(0, testutil.Uint32(0x101010+i*0x101+pass*0x100000), 0x020202)
+			}
+			for _, focus := range []bool{false, true} {
+				page.SetFocus(focus)
+				screen := vtui.NewSilentScreenBuf()
+				screen.AllocBuf(120, 25)
+				page.Show(screen)
+				foundBox, foundText, foundSelection := false, false, false
+				for y := 1; y <= 18; y++ {
+					for x := 1; x <= width; x++ {
+						attr := screen.GetCell(x, y).Attributes
+						if attr == vtui.Palette[vtui.ColDialogText] {
+							foundText = true
+						}
+						if attr == vtui.Palette[vtui.ColDialogSelectedButton] {
+							foundSelection = true
+						}
+						if attr == vtui.Palette[vtui.ColDialogBox] {
+							foundBox = true
+						}
+					}
+				}
+				if !foundBox || !foundText || (focus && !foundSelection) {
+					t.Fatalf("live dialog palette: box=%v text=%v selected=%v focus=%v", foundBox, foundText, foundSelection, focus)
+				}
+			}
+		}
+	}
+}
+
+func TestSettingsHotkeyFirstRowUp(t *testing.T) {
+	previous := keymap.GlobalHotkeysMgr
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager(filepath.Join(t.TempDir(), "hotkeys.ini"))
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = previous })
+	t.Cleanup(testutil.SwapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(140, 35)
+	vtui.FrameManager.Init(scr)
+	settings.OpenAt("hotkeys", "", "", false)
+	center := vtui.FrameManager.GetTopFrame().(*settings.Center)
+	defer center.Close()
+	page := findEmbeddedHotkeys(t, center)
+	for _, child := range center.GetChildren() {
+		if container, ok := child.(vtui.Container); ok {
+			for _, nested := range container.GetChildren() {
+				if nested == page {
+					center.SetFocusedItem(child)
+				}
+			}
+		}
+	}
+	page.SetFocusedItem(page.table)
+	page.table.SetSelectPos(0)
+	center.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+	center.Show(scr)
+	if page.GetFocusedItem() != page.unbind {
+		t.Fatal("Up at first row did not wrap inside the configurator")
+	}
+	center.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if page.GetFocusedItem() != page.table || page.table.SelectPos != 0 {
+		t.Fatal("Down did not return to the first row")
+	}
+	page.table.SetSelectPos(page.table.ItemCount - 1)
+	center.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if page.GetFocusedItem() != page.assign {
+		t.Fatal("Down at last row did not reach Assign")
+	}
+	center.Show(scr)
 }
