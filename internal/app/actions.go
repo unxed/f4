@@ -3020,7 +3020,10 @@ func actionMkDir(pf *panel.PanelsFrame) {
 
 	editName := vtui.NewEdit(0, 0, 10, "")
 	editName.PathHintsEnabled = true
-	history.AttachHistoryUseLast(editName, history.NewFolderHistoryID)
+	// Keep history available through its explicit menu and navigation keys, but
+	// do not let a matching old name intercept Enter while typing a new one.
+	editName.NoAutoComplete = true
+	history.AttachHistory(editName, history.NewFolderHistoryID)
 	lblPrompt := vtui.NewLabel(0, 0, i18n.Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)

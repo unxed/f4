@@ -1,16 +1,17 @@
 package app
 
 import (
-	"github.com/unxed/f4/internal/panel"
 	"testing"
 
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
+	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/piecetable"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/internal/viewer"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -289,7 +290,7 @@ func TestAssocEditor_SharesMaskHistory(t *testing.T) {
 	}
 }
 
-func TestMkDirDialog_PreFillsFromNewFolderHistory(t *testing.T) {
+func TestMkDirDialog_DoesNotPreFillOrAutoCompleteFromHistory(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	theme.SetDefaultF4Palette()
 	store := useStubHistory(t)
@@ -306,14 +307,37 @@ func TestMkDirDialog_PreFillsFromNewFolderHistory(t *testing.T) {
 	defer vtui.FrameManager.Pop()
 
 	edit := findHistoryEdit(t, dlg, history.NewFolderHistoryID)
-	// far2l's mkdir field carries DIF_USELASTHISTORY, so the empty prompt
-	// opens on the last folder that was created.
-	if got := edit.GetText(); got != "build" {
-		t.Errorf("folder name field is %q, want %q", got, "build")
+	// F7 must not create a folder from a stale history entry when the user
+	// starts typing a new name.
+	if got := edit.GetText(); got != "" {
+		t.Errorf("folder name field is %q, want empty", got)
 	}
-	edit.InsertString("dist")
-	if got := edit.GetText(); got != "dist" {
-		t.Errorf("typing over the pre-filled name gave %q, want %q", got, "dist")
+
+	if !edit.NoAutoComplete {
+		t.Fatal("folder name field must not open history completion while typing")
+	}
+	if !edit.ProcessKey(&vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		Char:           't',
+		VirtualKeyCode: vtinput.VK_T,
+	}) {
+		t.Fatal("typing a folder name was not handled")
+	}
+	if got := edit.GetText(); got != "t" {
+		t.Errorf("typing a new folder name gave %q, want %q", got, "t")
+	}
+	if top, ok := vtui.FrameManager.GetTopFrame().(vtui.Container); !ok || top != dlg {
+		t.Fatalf("typing opened %T above the folder dialog", vtui.FrameManager.GetTopFrame())
+	}
+
+	if len(edit.History) != 1 || edit.History[0] != "build" {
+		t.Errorf("folder history is not available for explicit selection: %v", edit.History)
+	}
+	edit.HistoryPos = -1
+	edit.HistoryUp()
+	if got := edit.GetText(); got != "build" {
+		t.Errorf("explicit history selection gave %q, want %q", got, "build")
 	}
 }
 
