@@ -72,6 +72,31 @@ func TaskPumpGoroutineProfile() (int, string, error) {
 	return strings.Count(profile, ".startTaskPump.func"), profile, nil
 }
 
+// WaitForTaskPumpExit samples the goroutine profile until at most limit task
+// pumps remain or timeout passes, and returns the last count and profile.
+//
+// One sample taken straight after Shutdown is not enough. Shutdown joins the
+// pump through a WaitGroup, and the pump calls Done from its own deferred call:
+// Wait returns while the goroutine is still finishing its return, and a
+// profile taken in that window still lists it. A stopped pump has nothing
+// left to do but return, so waiting only outlasts one that is leaving; a pump
+// whose manager was never shut down stays parked in its select and is still
+// counted when the wait gives up.
+func WaitForTaskPumpExit(limit int, timeout time.Duration) (int, string, error) {
+	return waitForTaskPumpExit(TaskPumpGoroutineProfile, limit, timeout)
+}
+
+func waitForTaskPumpExit(sample func() (int, string, error), limit int, timeout time.Duration) (int, string, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		count, profile, err := sample()
+		if err != nil || count <= limit || !time.Now().Before(deadline) {
+			return count, profile, err
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func PumpUntilToastActive(t *testing.T) {
 	t.Helper()
 	for vtui.FrameManager.GetActiveToast() == "" {
