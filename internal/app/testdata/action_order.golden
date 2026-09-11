@@ -229,6 +229,7 @@ Settings.Category.operations
 Settings.Category.editor
 Settings.Category.syntax
 Settings.Category.keyboard
+Settings.Category.hotkeys
 Settings.Category.terminal
 Settings.Category.history
 Settings.Category.associations

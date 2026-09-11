@@ -83,3 +83,15 @@ Two rules the caption pass of 2026-08-10 had to learn the hard way:
   is the pattern to copy, and its TestPluginCaptionsResolve also catches keys
   that exist in the source but never made it into en.lng.
 
+
+Settings Center translations have an additional completeness check:
+`go test ./internal/i18n -run TestSettingsTranslationsComplete`.
+Every supported language must contain all `SettingsCenter.*` entries, including
+option descriptions and choice explanations, with the same format substitutions
+and intentional line breaks as English. When adding a Settings Center string,
+update every language instead of relying on the English fallback.
+
+The initial non-English/non-Russian Settings Center translations were produced
+with machine translation, reused existing localized terminology where available,
+and received terminology and structural checks. Native-speaker review remains
+valuable for phrasing and technical nuance.

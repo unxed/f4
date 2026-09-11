@@ -56,3 +56,7 @@ func TestEditWordDiv_OpensOnCurrentDelimiters(t *testing.T) {
 		t.Errorf("accepting the prompt unchanged rewrote the delimiters to %q", d.wordDiv)
 	}
 }
+
+func (*inputBoxHostStub) OpenSettings(string, string, string, bool) bool {
+	panic("contextual delimiter prompt must not open Settings")
+}

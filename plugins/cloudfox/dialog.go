@@ -26,15 +26,6 @@ func (e *simpleProfileEditor) EditProfile(app vfs.App, manager *ManagerVFS, exis
 	if app == nil || e == nil || e.plugin == nil {
 		return
 	}
-	if host, ok := app.(vfs.SettingsNavigationHost); ok {
-		if existing != nil {
-			if host.OpenSettings("network", "cloudfox."+string(existing.Provider), existing.ID, false) {
-				return
-			}
-		} else if host.OpenSettings("network", "", "", false) {
-			return
-		}
-	}
 	if existing != nil {
 		showCloudProfileDialog(app, manager, e.plugin, existing.Provider, existing)
 		return

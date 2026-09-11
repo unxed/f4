@@ -161,10 +161,10 @@ Every listed field is independently described in its provider catalog. Ordered s
 | Canonical collection / fields | Original menu → dialog → subdialog | New category | Store and consuming implementation |
 |---|---|---|---|
 | `associations`: mask, description; Enter/AltEnter/F3/AltF3/F4/AltF4 commands and enable flags | Files → File associations → Edit association | associations | `settings/associations.ini`; `file_associations.go`, `file_associations_ui.go`. Alternate slots remain stored and unavailable because current dispatch has no consumer. |
-| `bookmarks`: ten paths; retained plugin/file/data metadata | Drive chooser → bookmarks; numbered folder shortcuts | history | Existing bookmark file; `bookmarks.go`. Reordering changes digit slots. |
-| `drive-links`: name, path, hotkey | Drive chooser → named links → edit | history | Existing links file; `drive_bookmarks.go`. |
+| `bookmarks`: ten paths; retained plugin/file/data metadata | Drive chooser → bookmarks; numbered folder shortcuts | drives | Existing bookmark file; `bookmarks.go`. Reordering changes digit slots. |
+| `drive-links`: name, path, hotkey | Drive chooser → named links → edit | drives | Existing links file; `drive_bookmarks.go`. |
 | `usermenu.*`: label, activation key, submenu flag, parent, multiline commands | User menu → F4 / Insert → item/submenu editor | menus | Global INI, executable-scoped and ancestor-local FarMenu files remain separate sources and separate drafts; `user_menu_ui.go`. |
-| `bindings`: action, chord, area, condition | Options → Hotkey configurator → assign → area/condition → chord | keyboard | `hotkeys.ini`; `hotkeys.go`. Native frame-owned chords are not editable bindings. |
+| `bindings`: action, chord, area, condition | Options → Hotkey configurator → assign → area/condition → chord | hotkeys | `hotkeys.ini`; `hotkeys.go`. Native frame-owned chords are not editable bindings. |
 | `envman.profiles`: kind, name, enabled, ordered variable lines | Environment Manager → profile editor | terminal | Environment Manager JSON; `plugins/envman`. Apply reconciles the environment only after a successful save. Separators are preserved. |
 | `netfox.connections`: name, protocol, host, port, username, password, key path, timeout, codepage, FTP passive mode; proxy mode/host/port/user/password | NetFox → Add/Edit connection → Proxy | network | `NetFox.json`; `plugins/netfox/{dialog,netfox,proxy,settings_center}.go`. Unknown Options entries survive rename and edits. |
 | `cloudfox.{gdrive,yandex,s3,webdav}`: name, credential-storage choice, keep/replace/clear credentials; provider fields below | CloudFox → Add/Edit profile → provider → authentication/storage | network | `CloudFox.json`, vault or keyring; `plugins/cloudfox/{dialog,secrets,credential_scope,settings_center}.go`. Metadata revisions and credential scope are checked before writes. |
@@ -218,7 +218,7 @@ Every listed field is independently described in its provider catalog. Ordered s
 - Schema download/reload, palette export, update checking, plugin installation/removal and legacy external-plugin configuration are explicit commands. They never silently apply other drafts.
 - Current-file encodings, compare/copy/move/delete dialogs, connection opening, user-menu execution, macro recording, history entry details and file navigation are contextual workflows.
 - The Editor/Colorer highlighter and crosshair duplicates map to one backing setting each.
-- Legacy exact-hit searching and the two ineffective drive flags are visible unavailable compatibility values. They do not affect Center search.
+- The two ineffective drive flags remain unavailable compatibility values. Exact-hit searching applies only to the restored Hotkey Configurator table and does not affect Center search.
 - Both legacy tab-expansion modes retain their stored numeric values. Their descriptions explain that current insertion behavior is identical.
 - Configuration-only image-decoder priorities, X11 interception, custom highlight-rule editors and custom panel modes are outside consolidation. Their values are preserved.
 - Saved `qt` and `ext:*` backend values remain intact even if the current frontend cannot enumerate them.
@@ -409,3 +409,44 @@ captured menu scope and update its tree only after a successful Apply. The publi
 plugin contribution and opening capabilities remain optional. Explicit Copy/Move
 uses the upstream profile transfer helpers, selects the target only after success,
 and a conflicting move preserves both the source and current profile selection.
+
+## Restored Hotkey Configurator tab
+
+Hotkey Configurator has its own category beside Keyboard & shortcuts. It embeds
+its original sortable five-column table (command, chord, area, condition,
+description), normalized quick search, native read-only shortcuts, plugin
+commands, Assign/Unbind confirmation and area/condition/chord capture workflow.
+The old Settings.Hotkeys action and CmHotkeyConfig command open this tab. The
+inline binding record editor is replaced in the application UI. The table uses
+the whole content width; its description column replaces the side help pane.
+
+Editing retains a draft across category switches. Apply/OK persist changes and
+Cancel discards edits since the last Apply. Explicit unbinding retains the None
+override so default chords cannot reappear after saving. The existing settings
+provider checks concurrent changes and saves before replacing runtime bindings.
+SearchExactOnHit is available under Keyboard & shortcuts and takes effect when
+the configurator is next opened; it never changes sidebar search behavior.
+
+
+## Contextual editor restoration
+
+The Center consolidates global configuration menu entries, not in-place editing
+commands. The consolidation introduced early Settings redirects in the following
+workflows; those redirects are removed:
+
+| Context | Local interaction | Shared Settings storage/logic |
+| --- | --- | --- |
+| Drive chooser Insert / edit link | Name, path and shortcut dialog; returns to drive chooser | `panel.DriveBookmark`, `LoadDriveBookmarks`, `SaveDriveBookmarks`; Drive chooser drive links |
+| Numbered bookmarks edit | Path input for the selected slot | `panel.BookmarkSet`, `SaveBookmarks`; Drive chooser bookmark slots |
+| User menu create/edit item or submenu | Original entry editor with source/scope retained | User-menu tree and source-specific writers; User menus |
+| NetFox add/edit connection | Original connection dialog | NetFox configuration store; Network connections |
+| CloudFox add/edit profile | Provider chooser and original profile editor | Credential validation, scope checks and repository; Network connections |
+| Visual Renamer word delimiters | Small prompt within the active rename operation | `loadConfig`/`saveConfig`; File operations |
+
+The two UI surfaces continue to use their existing domain models and persistence
+routines. Contextual saves are immediate; Settings edits remain staged until
+Apply. This restores the original forms without introducing another record format
+or replacing the Settings inline editors. Global drive options, plugin
+configuration (including Environment Manager), and application preference actions
+still open the Center. Environment Manager's contextual profile editor was not
+redirected and needs no rollback.

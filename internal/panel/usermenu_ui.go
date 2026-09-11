@@ -687,25 +687,6 @@ func (s *userMenuState) goBack(current *vtui.VMenu) {
 }
 
 func showEditItemDialog(s *userMenuState, current *vtui.VMenu, items []UserMenuItem, idx int, isCreate bool, isSubmenu bool) {
-	if OpenUserMenuSettings != nil && OpenUserMenuSettings(MenuSettingsSource{Mode: s.mode, RootTitle: s.rootTitle, SourcePath: s.SourcePath, Path: s.path, RootItems: s.rootItems, Saved: func(items []UserMenuItem) { s.rootItems = items }, Closed: func(index int) {
-		if s.Pf == nil {
-			return
-		}
-		if current != nil {
-			current.Close()
-		}
-		items := s.rootItems
-		for _, idx := range s.path {
-			if idx < 0 || idx >= len(items) || !items[idx].IsSubmenu() {
-				s.path = nil
-				break
-			}
-			items = items[idx].Submenu
-		}
-		s.openCurrent(max(0, index))
-	}}, current, idx, isCreate, isSubmenu) {
-		return
-	}
 	title := i18n.Msg("UserMenu.EditTitle")
 	if isCreate {
 		if isSubmenu {

@@ -8,7 +8,9 @@ type SettingsContributionHost interface {
 	RegisterSettingsProvider(f4settings.Provider) (Registration, error)
 }
 
-// SettingsNavigationHost is optional for contextual configuration shortcuts.
+// SettingsNavigationHost optionally opens global configuration in the Center.
+// In-place record editors should keep their contextual dialog instead of
+// redirecting an editing command through this navigation capability.
 // Record identifies a stable provider record ID or display name; an empty
 // collection opens its category. No preference is written by navigation.
 type SettingsNavigationHost interface {

@@ -14,6 +14,7 @@ import (
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/theme"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -396,47 +397,7 @@ func actionHotkeyConfig(pf *panel.PanelsFrame) {
 		{Title: i18n.Msg("Hotkeys.ColWhen"), Width: 17},
 		{Title: i18n.Msg("Hotkeys.ColDescription"), Width: 0},
 	}, btnAssign, btnUnbind, btnSave, btnCancel)
-	theme.UseTableColors(table)
-	table.ShowScrollBar = true
-	table.Sortable = true // click a column header to sort, again to reverse
-	//table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
-	configureHotkeyTableSearch(table)
-
-	var rows []vtui.TableRow
-	var hkRows []hotkeyRow
-
-	refresh := func() {
-		rows = nil
-		hkRows = buildHotkeyRows(draft)
-
-		for _, r := range hkRows {
-			rows = append(rows, r)
-		}
-		table.Columns = hotkeyTableColumns(hkRows, w)
-		table.SetRows(rows)
-		vtui.FrameManager.Redraw()
-	}
-
-	btnAssign.OnClick = func() {
-		if row, ok := selectedHotkeyRow(table, hkRows); ok && row.Editable {
-			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, refresh)
-		}
-	}
-
-	btnUnbind.OnClick = func() {
-		if row, ok := selectedHotkeyRow(table, hkRows); ok && row.Editable {
-			if row.RawKey != "" && row.Area != "" {
-				question := fmt.Sprintf("%s %s?", action.PlainLabel(i18n.Msg("Hotkeys.BtnUnbind")), row.Key)
-				vtui.ShowMessageOn(dlg, i18n.Msg("Hotkeys.Title"), question, []string{i18n.Msg("vtui.Ok"), i18n.Msg("vtui.Cancel")}).OnResult = func(choice int) {
-					if choice != 0 {
-						return
-					}
-					draft.Bind(row.Area, row.RawKey, "None")
-					refresh()
-				}
-			}
-		}
-	}
+	refresh := configureHotkeyEditor(dlg, table, btnAssign, btnUnbind, draft, nil, w)
 
 	btnSave.OnClick = func() {
 		original.ReplaceBindingsFrom(draft)
@@ -445,15 +406,6 @@ func actionHotkeyConfig(pf *panel.PanelsFrame) {
 	}
 
 	btnCancel.OnClick = func() { dlg.Close() }
-
-	table.OnAction = func(idx int) {
-		// idx is the table's display position. Use it directly: the table may
-		// be sorted or QuickSearch-filtered, and SelectPos can be observed
-		// after the dispatcher's state has moved on.
-		if row, ok := selectedHotkeyRowAt(table, hkRows, idx); ok && row.Editable {
-			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, refresh)
-		}
-	}
 
 	vtui.FrameManager.Push(dlg)
 	refresh()
@@ -545,4 +497,125 @@ func showAreaSelectDialog(hm *keymap.HotkeyManager, actionName, defaultArea, def
 		})
 	}
 	vtui.FrameManager.Push(dlg)
+}
+
+// configureHotkeyEditor is shared by the legacy dialog and its embedded Settings tab.
+func configureHotkeyEditor(dlg *vtui.Window, table *vtui.Table, btnAssign, btnUnbind *vtui.Button, draft *keymap.HotkeyManager, onChange func(*keymap.HotkeyManager), w int) func() {
+	theme.UseTableColors(table)
+	table.ShowScrollBar = true
+	table.Sortable = true // click a column header to sort, again to reverse
+	//table.QuickSearch = true // type to fuzzy-filter (Myers bit-vector)
+	configureHotkeyTableSearch(table)
+
+	var rows []vtui.TableRow
+	var hkRows []hotkeyRow
+
+	refresh := func() {
+		rows = nil
+		hkRows = buildHotkeyRows(draft)
+
+		for _, r := range hkRows {
+			rows = append(rows, r)
+		}
+		width := w
+		if table.X2 > table.X1 {
+			width = table.X2 - table.X1 + 5
+		}
+		table.Columns = hotkeyTableColumns(hkRows, width)
+		table.SetRows(rows)
+		if vtui.FrameManager != nil {
+			vtui.FrameManager.Redraw()
+		}
+	}
+
+	changed := func() {
+		if onChange != nil {
+			onChange(draft)
+		}
+		refresh()
+	}
+	btnAssign.OnClick = func() {
+		if row, ok := selectedHotkeyRow(table, hkRows); ok && row.Editable {
+			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, changed)
+		}
+	}
+
+	btnUnbind.OnClick = func() {
+		if row, ok := selectedHotkeyRow(table, hkRows); ok && row.Editable {
+			if row.RawKey != "" && row.Area != "" {
+				question := fmt.Sprintf("%s %s?", action.PlainLabel(i18n.Msg("Hotkeys.BtnUnbind")), row.Key)
+				vtui.ShowMessageOn(dlg, i18n.Msg("Hotkeys.Title"), question, []string{i18n.Msg("vtui.Ok"), i18n.Msg("vtui.Cancel")}).OnResult = func(choice int) {
+					if choice != 0 {
+						return
+					}
+					draft.Bind(row.Area, row.RawKey, "None")
+					changed()
+				}
+			}
+		}
+	}
+
+	table.OnAction = func(idx int) {
+		// idx is the table's display position. Use it directly: the table may
+		// be sorted or QuickSearch-filtered, and SelectPos can be observed
+		// after the dispatcher's state has moved on.
+		if row, ok := selectedHotkeyRowAt(table, hkRows, idx); ok && row.Editable {
+			showAreaSelectDialog(draft, row.Action, row.Area, row.Condition, changed)
+		}
+	}
+
+	return refresh
+}
+
+type hotkeyPage struct {
+	*vtui.Group
+	table          *vtui.Table
+	assign, unbind *vtui.Button
+}
+
+// Keep vertical navigation inside the configurator, while Tab can still leave it.
+func (p *hotkeyPage) ProcessKey(e *vtinput.InputEvent) bool {
+	previous := p.WrapFocus
+	p.WrapFocus = e.KeyDown && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN)
+	defer func() { p.WrapFocus = previous }()
+	return p.Group.ProcessKey(e)
+}
+
+func (p *hotkeyPage) SetPosition(x1, y1, x2, y2 int) {
+	p.Group.SetPosition(x1, y1, x2, y2)
+	p.table.SetPosition(x1, y1, x2, y2-2)
+	rows := make([]hotkeyRow, 0, len(p.table.Rows))
+	for _, row := range p.table.Rows {
+		if r, ok := row.(hotkeyRow); ok {
+			rows = append(rows, r)
+		}
+	}
+	p.table.Columns = hotkeyTableColumns(rows, x2-x1+5)
+	x := x1
+	for _, button := range []*vtui.Button{p.assign, p.unbind} {
+		width := vtui.StringWidth(button.GetCaption()) + 4
+		button.SetPosition(x, y2, min(x2, x+width-1), y2)
+		x += width + 1
+	}
+}
+func (settingsHost) HotkeyPage(owner *vtui.Window, onChange func(*keymap.HotkeyManager)) vtui.UIElement {
+	p := &hotkeyPage{Group: vtui.NewGroup(0, 0, 40, 10)}
+	p.SetId("hotkey-configurator")
+	p.table = vtui.NewTable(0, 0, 40, 7, hotkeyTableColumns(nil, 44))
+	p.table.SetId("hotkey-table")
+	p.assign = vtui.NewButton(0, 0, i18n.Msg("Hotkeys.BtnAssign"))
+	p.assign.SetId("hotkey-assign")
+	p.unbind = vtui.NewButton(0, 0, i18n.Msg("Hotkeys.BtnUnbind"))
+	p.unbind.SetId("hotkey-unbind")
+	p.AddItem(p.table)
+	p.AddItem(p.assign)
+	p.AddItem(p.unbind)
+	if keymap.GlobalHotkeysMgr == nil {
+		p.SetDisabled(true)
+		return p
+	}
+	refresh := configureHotkeyEditor(owner, p.table, p.assign, p.unbind, keymap.GlobalHotkeysMgr.CloneForEdit(), onChange, 44)
+	refresh()
+	p.SetFocusedItem(p.table)
+	return p
 }

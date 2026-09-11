@@ -38,11 +38,21 @@ func (f *DriveMenuFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	return handled
 }
 
+// driveLinkHotkeyEdit keeps the caret on the captured character, rather than
+// scrolling it out of a one-cell field to display the insertion point after it.
+// Existing multi-character bindings remain intact until explicitly replaced.
+type driveLinkHotkeyEdit struct{ *vtui.Edit }
+
+func (e *driveLinkHotkeyEdit) Show(scr *vtui.ScreenBuf) {
+	e.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_HOME})
+	e.Edit.Show(scr)
+}
+
 type driveBookmarkEditDialog struct {
 	*vtui.Window
 	nameEdit   *vtui.Edit
 	pathEdit   *vtui.Edit
-	HotkeyEdit *vtui.Edit
+	HotkeyEdit *driveLinkHotkeyEdit
 	finished   bool
 	onFinish   func(bool, DriveBookmark)
 }
@@ -60,7 +70,7 @@ func NewDriveBookmarkEditDialog(initial DriveBookmark, defaultPath string, onFin
 		Window:     vtui.NewCenteredDialog(width, height, i18n.Msg(titleKey)),
 		nameEdit:   vtui.NewEdit(0, 0, width-6, initial.Name),
 		pathEdit:   vtui.NewEdit(0, 0, width-6, initial.Path),
-		HotkeyEdit: vtui.NewEdit(0, 0, 1, initial.Hotkey),
+		HotkeyEdit: &driveLinkHotkeyEdit{vtui.NewEdit(0, 0, max(1, vtui.StringWidth(initial.Hotkey)), initial.Hotkey)},
 		onFinish:   onFinish,
 	}
 	if dialog.pathEdit.GetText() == "" {
@@ -153,18 +163,18 @@ func (d *driveBookmarkEditDialog) submit() {
 
 func (d *driveBookmarkEditDialog) ProcessKey(e *vtinput.InputEvent) bool {
 	if e != nil && e.KeyDown && d.GetFocusedItem() == d.HotkeyEdit {
-		if e.VirtualKeyCode == vtinput.VK_TAB || e.VirtualKeyCode == vtinput.VK_ESCAPE {
+		if e.VirtualKeyCode == vtinput.VK_TAB || e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_RETURN {
 			return d.Window.ProcessKey(e)
 		}
-		if e.VirtualKeyCode == vtinput.VK_BACK || e.VirtualKeyCode == vtinput.VK_DELETE {
+		if e.VirtualKeyCode == vtinput.VK_DELETE {
 			d.HotkeyEdit.SetText("")
 			return true
 		}
 		key := keymap.EventToHotkeyString(e)
-		if key != "" && key != "VK_0" {
+		if len([]rune(key)) == 1 {
 			d.HotkeyEdit.SetText(key)
-			return true
 		}
+		return true
 	}
 	return d.Window.ProcessKey(e)
 }
@@ -181,17 +191,6 @@ func (pf *PanelsFrame) driveBookmarkDefaultPath(panelIdx int) string {
 }
 
 func (pf *PanelsFrame) openDriveBookmarkEditor(panelIdx int, menu *vtui.VMenu, bookmarks []DriveBookmark, index int, reopen func()) {
-	name := ""
-	if index >= 0 && index < len(bookmarks) {
-		name = bookmarks[index].Name
-	}
-	if pf.OpenSettings("history", "drive-links", name, index < 0) {
-		if index < 0 && SetSettingsRecordDefault != nil {
-			SetSettingsRecordDefault("drive-links", "link.Path", pf.driveBookmarkDefaultPath(panelIdx))
-		}
-
-		return
-	}
 	var initial DriveBookmark
 	if index >= 0 && index < len(bookmarks) {
 		initial = bookmarks[index]

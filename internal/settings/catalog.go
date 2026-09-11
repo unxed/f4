@@ -18,8 +18,9 @@ var Categories = []f4settings.Category{
 	{ID: "editor", Label: f4settings.Text{English: "Editor & viewer"}},
 	{ID: "syntax", Label: f4settings.Text{English: "Syntax highlighting"}},
 	{ID: "keyboard", Label: f4settings.Text{English: "Keyboard & shortcuts"}},
+	{ID: "hotkeys", Label: f4settings.Text{Key: "Hotkeys.Title", English: "Hotkey Configurator"}},
 	{ID: "terminal", Label: f4settings.Text{English: "Terminal & environment"}},
-	{ID: "history", Label: f4settings.Text{English: "History & bookmarks"}},
+	{ID: "history", Label: f4settings.Text{English: "History"}},
 	{ID: "associations", Label: f4settings.Text{English: "File associations"}},
 	{ID: "menus", Label: f4settings.Text{English: "User menus & macros"}},
 	{ID: "network", Label: f4settings.Text{English: "Network & connections"}},
@@ -120,7 +121,7 @@ EditorColorerSyntax|syntax|Colorer|Colorer syntax colors|Enable Colorer syntax c
 EditorColorerBackground|syntax|Colorer|Use Colorer base colors|Use foreground and background fields supplied by the Colorer scheme instead of only the general editor palette.||Colorer reload
 EditorColorerCatalog|syntax|Colorer|Colorer configuration directory|Directory containing Colorer configuration data. Empty uses the profile's colorer/configs directory; this is not a catalog XML filename.||Colorer reload
 MacKeyboard|keyboard|Editing chords|Mac keyboard mode|Use Mac-style editing chords in editors and dialog fields. Auto enables them on macOS; panels retain Far navigation. Command translation requires backend support.|auto:Automatic;on:On;off:Off|live
-SearchExactOnHit|keyboard|Compatibility|Legacy exact-hit preference|The old hotkey table used this to narrow exact search hits. Settings Center uses dim-only search and does not consume this preference. Its saved value is retained.||unavailable
+SearchExactOnHit|keyboard|Editing chords|Prefer exact shortcut search matches|In the Hotkey Configurator table, narrow the search to exact matches when available. This does not affect the Settings Center sidebar search.||next open
 EscTogglePanels|terminal|Terminal input|Escape toggles panels|Allow Escape to show or hide the file panels to access the terminal.||live
 TerminalCtrlNWorkspace|terminal|Terminal input|Ctrl+N creates workspace|Reserve Ctrl+N while terminal input has focus to create a workspace. Off sends the chord to the terminal program.||live
 KeepTerminalCursor|terminal|Terminal input|Preserve terminal cursor style|Leave cursor-style management to the terminal instead of letting f4 change it.||live

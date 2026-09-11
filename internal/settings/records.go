@@ -78,7 +78,7 @@ func newCoreRecordSettingsProvider() coreRecordSettingsProvider {
 		return panel.SaveAssociations(path, items)
 	}})
 	bookmarkPath := panel.BookmarksFilePath()
-	bookmarks := recordCollection("bookmarks", "history", "Folder bookmark slots", "Ten numbered directory slots. Reordering changes the digit shortcut. Existing Far plugin metadata is retained.", "bookmark.Name", []f4settings.Field{recordField("bookmark.Path", "Folder path", "Directory path or expandable path expression for this numbered slot.", f4settings.Path)})
+	bookmarks := recordCollection("bookmarks", "drives", "Folder bookmark slots", "Ten numbered directory slots. Reordering changes the digit shortcut. Existing Far plugin metadata is retained.", "bookmark.Name", []f4settings.Field{recordField("bookmark.Path", "Folder path", "Directory path or expandable path expression for this numbered slot.", f4settings.Path)})
 	bookmarks.Fixed = true
 	p.stores = append(p.stores, settingsRecordStore{collection: bookmarks, path: bookmarkPath, load: func() ([]f4settings.Record, error) {
 		items, err := panel.LoadBookmarks(bookmarkPath)
@@ -98,7 +98,7 @@ func newCoreRecordSettingsProvider() coreRecordSettingsProvider {
 		return panel.SaveBookmarks(bookmarkPath, items)
 	}})
 	linkPath := panel.DriveBookmarksFilePath()
-	links := recordCollection("drive-links", "history", "Drive links", "Named links shown in the drive chooser.", "link.Name", []f4settings.Field{recordField("link.Name", "Link name", "Display name in the drive chooser.", f4settings.String), recordField("link.Path", "Link path", "Directory or provider path opened by the link.", f4settings.Path), recordField("link.Hotkey", "Shortcut", "Far-style shortcut spelling, such as Q or CtrlF5.", f4settings.String)})
+	links := recordCollection("drive-links", "drives", "Drive links", "Named links shown in the drive chooser.", "link.Name", []f4settings.Field{recordField("link.Name", "Link name", "Display name in the drive chooser.", f4settings.String), recordField("link.Path", "Link path", "Directory or provider path opened by the link.", f4settings.Path), recordField("link.Hotkey", "Shortcut", "Far-style shortcut spelling, such as Q or CtrlF5.", f4settings.String)})
 	p.stores = append(p.stores, settingsRecordStore{collection: links, path: linkPath, load: func() ([]f4settings.Record, error) {
 		items, err := panel.LoadDriveBookmarks(linkPath)
 		var rows []f4settings.Record
