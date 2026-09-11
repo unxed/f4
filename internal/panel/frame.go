@@ -1363,16 +1363,39 @@ func (pf *PanelsFrame) SetPanelViewMode(idx int, mode ViewMode) {
 	pf.UpdateMenuCheckmarks()
 }
 
+// syncMenuBarGeometry keeps the bar on the row it occupies on screen even while
+// it is not painted. vtui's MenuBar.ActivateSubMenu positions the dropdown from
+// the bar's own Y1 at the moment of activation and never moves it afterwards,
+// so a bar parked off-screen produced a dropdown one row above the visible area
+// (issues #1129 and #1149) whichever path opened it -- f4's F9 handler, the
+// action table, vtui's own F9 fallback or an Alt hotkey.
+//
+// A bar that must not be painted is collapsed to an empty column span instead.
+// vtui's MenuBar.HitTest is geometry-only, and an empty span matches no column,
+// so the hidden bar still cannot swallow a click on the terminal's first row
+// (issue #1093).
+func (pf *PanelsFrame) syncMenuBarGeometry() {
+	if pf.MenuBar == nil {
+		return
+	}
+	menuY := vtui.FrameManager.WorkspaceTopInset()
+	// The AlwaysShowMenuBar setting pins the bar above the panels; F9 and the
+	// menu hotkeys raise it temporarily over whatever the workspace shows,
+	// panels or the terminal.
+	painted := pf.MenuBar.Active || (config.App.AlwaysShowMenuBar && pf.ShowPanels)
+	x2 := pf.LastW - 1
+	if !painted {
+		x2 = -1
+	}
+	pf.MenuBar.SetPosition(0, menuY, x2, menuY)
+	pf.MenuBar.SetVisible(painted)
+}
+
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
 	pf.LastW, pf.LastH = w, h
 	pf.SetPosition(0, 0, w-1, h-1) // Update hit-box for FrameManager hit-testing
 	topInset := vtui.FrameManager.WorkspaceTopInset()
-	menuY := -2 // Keep a hidden menu outside FrameManager's mouse hit-test area.
-	if config.App.AlwaysShowMenuBar && pf.ShowPanels {
-		menuY = topInset
-	}
-	pf.MenuBar.SetPosition(0, menuY, w-1, menuY)
-	pf.MenuBar.SetVisible(menuY >= 0)
+	pf.syncMenuBarGeometry()
 
 	contentY1 := topInset
 	if config.App.AlwaysShowMenuBar && pf.ShowPanels {
@@ -1757,22 +1780,9 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 		pf.TermView.Show(scr)
 	}
 
-	showMenuBar := pf.ShowPanels && (config.App.AlwaysShowMenuBar || pf.MenuBar.Active)
-	if showMenuBar {
-		// A contextual menu bar is kept off-screen while inactive so it does not
-		// intercept terminal/panel mouse events. F9 can activate it without a
-		// resize, though (notably after a second workspace made the top inset
-		// appear), so restore its live geometry at render time before the global
-		// FrameManager draws the active bar and its submenu.
-		menuY := vtui.FrameManager.WorkspaceTopInset()
-		pf.MenuBar.SetPosition(0, menuY, pf.LastW-1, menuY)
-		pf.MenuBar.SetVisible(true)
+	pf.syncMenuBarGeometry()
+	if pf.MenuBar != nil && pf.MenuBar.IsVisible() {
 		pf.MenuBar.Show(scr)
-	} else {
-		// MenuBar.HitTest is geometry-only in vtui, so visibility alone is not
-		// enough to keep the hidden bar from intercepting terminal row 0.
-		pf.MenuBar.SetPosition(0, -2, pf.LastW-1, -2)
-		pf.MenuBar.SetVisible(false)
 	}
 
 	// Command line logic depends on terminal state and editor visibility
@@ -2308,6 +2318,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pos = 4 // Right
 		}
 		pf.GetMenuBar()
+		if len(pf.MenuBar.Items) == 0 {
+			// vtui indexes Items unconditionally in ActivateSubMenu.
+			return true
+		}
 		if pos >= len(pf.MenuBar.Items) {
 			pos = 0
 		}

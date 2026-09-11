@@ -974,10 +974,7 @@ func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
 	if fspL.Y1 != 0 {
 		t.Errorf("Expected panels to start at row 0 by default, got %d", fspL.Y1)
 	}
-	_, menuY, _, _ := pf.MenuBar.GetPosition()
-	if menuY >= 0 || pf.MenuBar.IsVisible() {
-		t.Errorf("hidden menu bar occupies row %d (visible=%v), want off-screen and hidden", menuY, pf.MenuBar.IsVisible())
-	}
+	assertMenuBarHidden(t, pf, "panels without AlwaysShowMenuBar")
 
 	// 2. Test when AlwaysShowMenuBar is true (panels shifted down)
 	config.App.AlwaysShowMenuBar = true
@@ -986,10 +983,7 @@ func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
 	if fspL.Y1 != 1 {
 		t.Errorf("Expected panels to start at row 1 when AlwaysShowMenuBar is true, got %d", fspL.Y1)
 	}
-	_, menuY, _, _ = pf.MenuBar.GetPosition()
-	if menuY != 0 || !pf.MenuBar.IsVisible() {
-		t.Errorf("visible menu bar position/visibility = (%d, %v), want (0, true)", menuY, pf.MenuBar.IsVisible())
-	}
+	assertMenuBarPainted(t, pf, 0, "panels with AlwaysShowMenuBar")
 
 	// 3. Test that hiding panels collapses the menu bar space for terminal
 	pf.ShowPanels = false
@@ -998,10 +992,7 @@ func TestPanelsFrame_AlwaysShowMenuBar(t *testing.T) {
 	if pf.TermView.Y1 != 0 {
 		t.Errorf("Expected terminal to start at row 0 when panels are hidden, got %d", pf.TermView.Y1)
 	}
-	_, menuY, _, _ = pf.MenuBar.GetPosition()
-	if menuY >= 0 || pf.MenuBar.IsVisible() {
-		t.Errorf("hidden terminal menu bar occupies row %d (visible=%v), want off-screen and hidden", menuY, pf.MenuBar.IsVisible())
-	}
+	assertMenuBarHidden(t, pf, "terminal without an active menu")
 }
 
 func TestPanelsFrame_ActiveMenuBarAppearsAfterWorkspaceInset(t *testing.T) {
@@ -1023,17 +1014,42 @@ func TestPanelsFrame_ActiveMenuBarAppearsAfterWorkspaceInset(t *testing.T) {
 	}
 	pf.MenuBar.Active = true
 	pf.Show(vtui.FrameManager.Screen())
-
-	_, menuY, _, _ := pf.MenuBar.GetPosition()
-	if menuY != 1 || !pf.MenuBar.IsVisible() {
-		t.Fatalf("active menu bar position/visibility = (%d, %v), want (1, true)", menuY, pf.MenuBar.IsVisible())
-	}
+	assertMenuBarPainted(t, pf, 1, "active menu bar below the workspace tabs")
 
 	pf.MenuBar.Active = false
 	pf.Show(vtui.FrameManager.Screen())
-	_, menuY, _, _ = pf.MenuBar.GetPosition()
-	if menuY >= 0 || pf.MenuBar.IsVisible() {
-		t.Fatalf("inactive menu bar position/visibility = (%d, %v), want off-screen and hidden", menuY, pf.MenuBar.IsVisible())
+	assertMenuBarHidden(t, pf, "menu bar after the menu was closed")
+}
+
+// assertMenuBarPainted checks that the bar spans the screen on the given row
+// and is drawn there.
+func assertMenuBarPainted(t *testing.T, pf *PanelsFrame, wantRow int, context string) {
+	t.Helper()
+	x1, y1, x2, _ := pf.MenuBar.GetPosition()
+	if y1 != wantRow || x1 != 0 || x2 != pf.LastW-1 || !pf.MenuBar.IsVisible() {
+		t.Errorf("%s: menu bar = (row %d, cols %d..%d, visible %v), want (row %d, cols 0..%d, visible true)",
+			context, y1, x1, x2, pf.MenuBar.IsVisible(), wantRow, pf.LastW-1)
+	}
+}
+
+// assertMenuBarHidden checks that the bar is neither drawn nor able to consume
+// a click. It deliberately does not require the bar to sit off-screen: its row
+// is where vtui anchors a dropdown opened by F9, so the row has to stay live
+// (issues #1129 and #1149) while the empty column span keeps the bar out of
+// FrameManager's hit-testing (issue #1093).
+func assertMenuBarHidden(t *testing.T, pf *PanelsFrame, context string) {
+	t.Helper()
+	x1, y1, x2, _ := pf.MenuBar.GetPosition()
+	if pf.MenuBar.IsVisible() {
+		t.Errorf("%s: menu bar reports itself visible", context)
+	}
+	if x2 >= x1 {
+		t.Errorf("%s: hidden menu bar spans cols %d..%d, want an empty span", context, x1, x2)
+	}
+	for _, x := range []int{0, 1, 5, pf.LastW - 1} {
+		if pf.MenuBar.HitTest(x, y1) {
+			t.Errorf("%s: hidden menu bar still hit-tests at column %d of row %d", context, x, y1)
+		}
 	}
 }
 
