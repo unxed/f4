@@ -157,7 +157,7 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/unxed/keytrans v0.1.33
 	github.com/unxed/par2 v0.1.2 // indirect
-	github.com/unxed/winkeys v0.1.1 // indirect
+	github.com/unxed/winkeys v0.1.1
 	github.com/unxed/xkb-go v0.1.8 // indirect
 	github.com/unxed/xz v0.1.41 // indirect
 	github.com/unxed/zipcharset v0.1.5 // indirect
