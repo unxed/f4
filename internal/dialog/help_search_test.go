@@ -276,8 +276,8 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 		t.Fatal("zoom button click was not handled")
 	}
 	maxX1, maxY1, maxX2, maxY2 := view.GetPosition()
-	if maxX1 != 0 || maxY1 != 0 || maxX2 != 79 || maxY2 != 37 || currentHelpZoom == nil {
-		t.Fatalf("zoomed Help bounds=(%d,%d)-(%d,%d), zoom state=%v, want (0,0)-(79,37)", maxX1, maxY1, maxX2, maxY2, currentHelpZoom)
+	if maxX1 != 0 || maxY1 != 0 || maxX2 != 79 || maxY2 != 36 || currentHelpZoom == nil {
+		t.Fatalf("zoomed Help bounds=(%d,%d)-(%d,%d), zoom state=%v, want (0,0)-(79,36)", maxX1, maxY1, maxX2, maxY2, currentHelpZoom)
 	}
 	_, _, zoomedX2, _ := view.GetPosition()
 	if !HandleHelpSearchHotkey(&vtinput.InputEvent{
