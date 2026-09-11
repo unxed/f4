@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -73,16 +74,18 @@ func Main(m *testing.M, before func(), after func() error) int {
 	globalFrameManager := vtui.FrameManager
 	if globalFrameManager != nil {
 		CloseFrameManagerFrames(globalFrameManager)
+		globalFrameManager.Stop()
 		globalFrameManager.Shutdown()
 	}
 	if baseFrameManager != globalFrameManager {
 		_, _ = fmt.Fprintln(os.Stderr, "vtui.FrameManager was not restored to the TestMain manager")
 		CloseFrameManagerFrames(baseFrameManager)
+		baseFrameManager.Stop()
 		baseFrameManager.Shutdown()
 		result = 1
 	}
 
-	taskPumps, goroutineProfile, profileErr := TaskPumpGoroutineProfile()
+	taskPumps, goroutineProfile, profileErr := WaitForTaskPumpsAtMost(0, time.Second)
 	if profileErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "capture goroutine profile after vtui shutdown: %v\n", profileErr)
 		result = 1

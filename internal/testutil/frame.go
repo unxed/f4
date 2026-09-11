@@ -72,6 +72,21 @@ func TaskPumpGoroutineProfile() (int, string, error) {
 	return strings.Count(profile, ".startTaskPump.func"), profile, nil
 }
 
+// WaitForTaskPumpsAtMost waits for asynchronous FrameManager teardown to be
+// visible in the goroutine profile. Shutdown normally joins its pump, but an
+// active Run loop completes that join from its deferred shutdown path after
+// Shutdown has returned.
+func WaitForTaskPumpsAtMost(max int, timeout time.Duration) (int, string, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		count, profile, err := TaskPumpGoroutineProfile()
+		if err != nil || count <= max || time.Now().After(deadline) {
+			return count, profile, err
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func PumpUntilToastActive(t *testing.T) {
 	t.Helper()
 	for vtui.FrameManager.GetActiveToast() == "" {
@@ -159,6 +174,10 @@ func SwapFrameManager(t *testing.T, drains ...func(*testing.T)) func() {
 	for _, drain := range drains {
 		drain(t)
 	}
+	pumpsBefore, _, profileErr := TaskPumpGoroutineProfile()
+	if profileErr != nil {
+		t.Fatalf("capture task-pump profile before frame-manager swap: %v", profileErr)
+	}
 	old := vtui.FrameManager
 	oldUpdateQueue := vreactive.GlobalUpdateQueue
 	oldAnimationManager := vreactive.GlobalAnimationManager
@@ -170,7 +189,13 @@ func SwapFrameManager(t *testing.T, drains ...func(*testing.T)) func() {
 			drain(t)
 		}
 		CloseFrameManagerFrames(fresh)
+		fresh.Stop()
 		fresh.Shutdown()
+		if pumps, profile, err := WaitForTaskPumpsAtMost(pumpsBefore, time.Second); err != nil {
+			t.Errorf("capture task-pump profile after frame-manager swap: %v", err)
+		} else if pumps > pumpsBefore {
+			t.Errorf("frame-manager swap left task-pump goroutines: before=%d after=%d\n%s", pumpsBefore, pumps, profile)
+		}
 		vtui.FrameManager = old
 		vreactive.GlobalUpdateQueue = oldUpdateQueue
 		vreactive.GlobalAnimationManager = oldAnimationManager
