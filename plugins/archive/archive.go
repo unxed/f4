@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/unxed/archives"
@@ -254,13 +255,29 @@ func testArchiveWithPasswordPrompt(ctx context.Context, srcPath string, reporter
 
 type archiveTestingReader struct {
 	io.Reader
-	read int64
+	read atomic.Int64
 }
 
 func (r *archiveTestingReader) Read(p []byte) (int, error) {
 	n, err := r.Reader.Read(p)
-	r.read += int64(n)
+	r.read.Add(int64(n))
 	return n, err
+}
+
+type archiveTestingRandomAccessReader struct {
+	*archiveTestingReader
+	readerAt io.ReaderAt
+	seeker   io.Seeker
+}
+
+func (r *archiveTestingRandomAccessReader) ReadAt(p []byte, off int64) (int, error) {
+	n, err := r.readerAt.ReadAt(p, off)
+	r.read.Add(int64(n))
+	return n, err
+}
+
+func (r *archiveTestingRandomAccessReader) Seek(offset int64, whence int) (int64, error) {
+	return r.seeker.Seek(offset, whence)
 }
 
 func archiveTestingPercent(current, total int64) int {
@@ -305,9 +322,19 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 	}
 
 	countedStream := &archiveTestingReader{Reader: stream}
+	var extractionStream io.Reader = countedStream
+	if readerAt, ok := stream.(io.ReaderAt); ok {
+		if seeker, ok := stream.(io.Seeker); ok {
+			extractionStream = &archiveTestingRandomAccessReader{
+				archiveTestingReader: countedStream,
+				readerAt:             readerAt,
+				seeker:               seeker,
+			}
+		}
+	}
 	startTime := time.Now()
 	reportProgress := func(name string, current, size int64) {
-		archiveBytes := countedStream.read
+		archiveBytes := countedStream.read.Load()
 		elapsed := time.Since(startTime)
 		speed := int64(0)
 		if elapsed > 0 {
@@ -319,7 +346,7 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 	reportProgress(filepath.Base(srcPath), 0, 1)
 
 	var failures []error
-	err = extractor.Extract(ctx, countedStream, func(ctx context.Context, info archives.FileInfo) error {
+	err = extractor.Extract(ctx, extractionStream, func(ctx context.Context, info archives.FileInfo) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
