@@ -290,8 +290,135 @@ func archiveTestingPercent(current, total int64) int {
 	return pct
 }
 
-func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs.TaskReporter) error {
+// archiveTestingTotalPercent keeps the overall bar on screen for an archive
+// that holds no data at all -- one of only empty files, say. Its testing pass
+// is finished rather than of unknown length, which is what a hidden bar would
+// otherwise say.
+func archiveTestingTotalPercent(done, total int64, known bool) int {
+	if known && total <= 0 {
+		return 100
+	}
+	return archiveTestingPercent(done, total)
+}
+
+// archiveTestTotals is what the overall progress bar counts against: the
+// uncompressed volume the archive says it holds, taken from the archive's own
+// directory before anything is decoded. known is false when no such figure
+// could be obtained, and the testing pass then falls back to a coarser
+// measure.
+type archiveTestTotals struct {
+	bytes int64
+	files int64
+	known bool
+}
+
+// archiveFormatListsWithoutDecoding reports whether a format can enumerate its
+// members from a directory or a header instead of by decoding payloads: zip
+// keeps a central directory, 7z a header, and rar a chain of file block
+// headers that is walked by skipping over packed data. Tar has none of that,
+// and neither do the compressed-tar combinations built on it, so listing one
+// costs a full decode -- the testing pass must not pay for that twice just to
+// label its progress bar.
+func archiveFormatListsWithoutDecoding(format archives.Format) bool {
+	switch format.(type) {
+	case archives.Zip, *archives.Zip,
+		archives.SevenZip, *archives.SevenZip,
+		archives.Rar, *archives.Rar:
+		return true
+	}
+	return false
+}
+
+// openArchiveTestStream opens srcPath and identifies it with the same password
+// and RAR volume configuration the rest of the plugin applies, so that the
+// listing pass and the testing pass see the same archive. The caller owns the
+// returned file.
+func openArchiveTestStream(ctx context.Context, srcPath, password string) (*os.File, archives.Format, io.Reader, error) {
 	f, err := os.Open(srcPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	format, stream, err := archives.Identify(ctx, srcPath, f)
+	if err != nil {
+		_ = f.Close() // Identification failed; nothing was read out of the archive.
+		return nil, nil, nil, err
+	}
+	if configured, ok := configureRARArchiveFormat(format, srcPath, password); ok {
+		format = configured
+	} else {
+		format, _ = archivePasswordFormat(format, password)
+	}
+	return f, format, stream, nil
+}
+
+// collectArchiveTestTotals adds up the size of every regular member the
+// archive lists. Only a format that can be listed without decoding is walked,
+// so this costs a header read rather than a second decompression pass.
+//
+// A password error is passed back so the caller can ask for one and retry.
+// Every other failure only leaves the totals unknown: testing a damaged
+// archive is precisely what the operation is for, and it has to run even when
+// the directory cannot be read.
+func collectArchiveTestTotals(ctx context.Context, srcPath, password string) (archiveTestTotals, error) {
+	f, format, stream, err := openArchiveTestStream(ctx, srcPath, password)
+	if err != nil {
+		if isArchivePasswordRetryError(err) {
+			return archiveTestTotals{}, err
+		}
+		return archiveTestTotals{}, nil
+	}
+	defer func() { _ = f.Close() }()
+
+	extractor, ok := format.(archives.Extractor)
+	if !ok || !archiveFormatListsWithoutDecoding(format) {
+		return archiveTestTotals{}, nil
+	}
+
+	var (
+		mu      sync.Mutex
+		totals  archiveTestTotals
+		unsized bool
+	)
+	// 7z reports its members from several goroutines at once, one per
+	// compression stream, so the accumulator below is locked.
+	err = extractor.Extract(ctx, stream, func(ctx context.Context, info archives.FileInfo) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+		size := info.Size()
+		mu.Lock()
+		if size < 0 {
+			unsized = true
+		} else {
+			totals.bytes += size
+			totals.files++
+		}
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		if isArchivePasswordRetryError(err) {
+			return archiveTestTotals{}, err
+		}
+		return archiveTestTotals{}, nil
+	}
+	if unsized {
+		return archiveTestTotals{}, nil
+	}
+	totals.known = true
+	return totals, nil
+}
+
+func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs.TaskReporter) error {
+	totals, err := collectArchiveTestTotals(ctx, srcPath, password)
+	if err != nil {
+		return err
+	}
+
+	f, format, stream, err := openArchiveTestStream(ctx, srcPath, password)
 	if err != nil {
 		return err
 	}
@@ -303,15 +430,6 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 	}
 	archiveSize := archiveStat.Size()
 
-	format, stream, err := archives.Identify(ctx, srcPath, f)
-	if err != nil {
-		return err
-	}
-	if configured, ok := configureRARArchiveFormat(format, srcPath, password); ok {
-		format = configured
-	} else {
-		format, _ = archivePasswordFormat(format, password)
-	}
 	extractor, ok := format.(archives.Extractor)
 	if !ok {
 		return fmt.Errorf("format %T does not support testing", format)
@@ -328,20 +446,43 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 			}
 		}
 	}
+	// testedBytes counts the data read out of the members themselves. That is
+	// what the overall bar shows whenever the archive told us how much it
+	// holds; counting consumed archive bytes instead pins the bar at 100% on
+	// formats whose decoder re-reads and seeks around its input, 7z among
+	// them. 7z also hands members to several goroutines at once, so the
+	// counter is atomic.
+	var testedBytes int64
+	overallProgress := func() (done, total int64) {
+		if totals.known {
+			return atomic.LoadInt64(&testedBytes), totals.bytes
+		}
+		// Nothing to count against: fall back to how much of the archive file
+		// has been consumed. The formats that land here are read front to
+		// back, so that figure still climbs steadily.
+		return atomic.LoadInt64(&countedReader.read), archiveSize
+	}
 	startTime := time.Now()
 	reportProgress := func(name string, current, size int64) {
-		archiveBytes := atomic.LoadInt64(&countedReader.read)
+		done, total := overallProgress()
 		elapsed := time.Since(startTime)
 		speed := int64(0)
 		if elapsed > 0 {
-			speed = int64(float64(archiveBytes) / elapsed.Seconds())
+			speed = int64(float64(done) / elapsed.Seconds())
 		}
-		totalText := fmt.Sprintf("Total: %s / %s", formatSize(archiveBytes), formatSize(archiveSize))
-		reporter.UpdateTransfer("Testing", name, archiveTestingPercent(current, size), totalText, archiveTestingPercent(archiveBytes, archiveSize), formatSize(speed)+"/s")
+		totalText := fmt.Sprintf("Total: %s / %s", formatSize(done), formatSize(total))
+		reporter.UpdateTransfer("Testing", name, archiveTestingPercent(current, size), totalText,
+			archiveTestingTotalPercent(done, total, totals.known), formatSize(speed)+"/s")
 	}
 	reportProgress(filepath.Base(srcPath), 0, 1)
 
+	var failuresMu sync.Mutex
 	var failures []error
+	addFailure := func(failure error) {
+		failuresMu.Lock()
+		failures = append(failures, failure)
+		failuresMu.Unlock()
+	}
 	err = extractor.Extract(ctx, countedStream, func(ctx context.Context, info archives.FileInfo) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -354,7 +495,7 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 		member, openErr := info.Open()
 		if openErr != nil {
 			reportProgress(info.NameInArchive, 0, info.Size())
-			failures = append(failures, fmt.Errorf("%s: %w", info.NameInArchive, openErr))
+			addFailure(fmt.Errorf("%s: %w", info.NameInArchive, openErr))
 			return nil
 		}
 
@@ -370,6 +511,7 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 			n, err := member.Read(buf)
 			if n > 0 {
 				memberBytes += int64(n)
+				atomic.AddInt64(&testedBytes, int64(n))
 				reportProgress(info.NameInArchive, memberBytes, memberSize)
 			}
 			if err != nil {
@@ -381,16 +523,27 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 		}
 		closeErr := member.Close()
 		if failure := errors.Join(readErr, closeErr); failure != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", info.NameInArchive, failure))
+			addFailure(fmt.Errorf("%s: %w", info.NameInArchive, failure))
 		}
 		return nil
 	})
 	if err != nil {
-		failures = append(failures, err)
+		addFailure(err)
 	}
+	failuresMu.Lock()
+	defer failuresMu.Unlock()
 	if len(failures) == 0 {
+		done, total := overallProgress()
+		if !totals.known {
+			done = archiveSize
+		}
+		if total < done {
+			// A member that held more data than its header promised: report
+			// what was actually read rather than a bar past its own end.
+			total = done
+		}
 		reporter.UpdateTransfer("Testing", filepath.Base(srcPath), 100,
-			fmt.Sprintf("Total: %s / %s", formatSize(archiveSize), formatSize(archiveSize)), 100, "")
+			fmt.Sprintf("Total: %s / %s", formatSize(done), formatSize(total)), 100, "")
 	}
 	return errors.Join(failures...)
 }
