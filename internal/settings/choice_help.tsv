@@ -32,6 +32,9 @@ DefaultFileOpMode|2|Start with the operation progress in the foreground. Keeps p
 FileOpPathDisplay|0|Show only the current item's name. Compact, but identical names in different folders are harder to distinguish.
 FileOpPathDisplay|1|Show the current item's full path. Identifies its folder, but long paths need more display space.
 FileOpPathDisplay|2|Show source and destination paths. Useful for checking where files go, at the cost of more progress text.
+CopyAccessRights|0|A newly created copy takes the permissions of its source, and an overwritten file keeps its own.
+CopyAccessRights|1|The copy always receives the permissions of its source, even when it overwrote an existing file.
+CopyAccessRights|2|The copy receives the permissions of the folder it lands in; a file also drops that folder's execute bits.
 Compare.IgnoreMode|0|When content normalization is enabled, ignore differences in line endings while retaining other whitespace differences.
 Compare.IgnoreMode|1|When content normalization is enabled, ignore all whitespace differences. May treat files with meaningfully different spacing as equal.
 EditorExpandTabs|0|Pressing Tab inserts a tab character. Its displayed width follows tab stops; the file keeps a literal tab.

@@ -79,6 +79,7 @@ PathHintPerCategory|terminal|Path suggestions|Separate suggestion limits|Apply t
 UseTrash|operations|Deletion|Use trash or recycle bin|Send ordinary Delete operations to trash where supported. Explicit permanent-delete commands still delete permanently.||new operations
 DefaultFileOpMode|operations|Execution|Default operation mode|Start operations in Queue, Background or Foreground mode. Individual operation dialogs can override it.|0:Queue;1:Background;2:Foreground|new operations
 FileOpPathDisplay|operations|Execution|Progress path display|Show the current name, full path, or source and destination paths in operation progress.|0:Name;1:Full path;2:Source and destination|live
+CopyAccessRights|operations|Execution|Access rights of copies|Permissions a copied file or folder receives. The copy dialog starts from this value and stores the choice made there.|0:Default;1:Copy from source;2:Inherit from destination|new operations
 ApplyCommandParallelism|operations|Execution|Concurrent Apply commands|Maximum concurrent commands in Apply command. Zero means unlimited. The initial default is the logical CPU count.||new operations
 ConfirmCopy|operations|Confirmations|Confirm copy|Show the copy destination and options dialog before an ordinary copy.||new operations
 ConfirmMove|operations|Confirmations|Confirm move|Show the move destination and options dialog before an ordinary move.||new operations

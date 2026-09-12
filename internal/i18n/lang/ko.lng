@@ -2011,3 +2011,11 @@ SettingsCenter.Text.8802174070f1412801a7f0343b685b2031869bce18833d79e48e7a712ab5
 SettingsCenter.Text.c0010901537ebb36a8ae08ecdecf613679d66a4f8dcad5856094bc3752fcbf1d=핫키 구성원 테이블에서 검색을 좁혀서 사용할 때 정확한 일치로 설정합니다. 이것은 설정 센터 사이드바 검색에 영향을 미치지 않습니다.
 SettingsCenter.Text.ac559d59a8e0f357fa1fc6da653bff0feb6a2f4aaf219e4ac9adf0b68e1c2128=다음 개장
 SettingsCenter.Text.a3a43e00b84aa7aca574eafb93a4feaf77b4287a615be9a7434ae99552df13e3=Hotkey Configurator는 구성 가능한, 네이티브 및 플러그인 단축키를 나열합니다. Assign 또는 Unbind을 사용하세요. 네이티브 단축키는 읽기 전용입니다. 변경사항은 Apply 또는 OK.
+SettingsCenter.CopyAccessRights.Label=복사본의 접근 권한
+SettingsCenter.CopyAccessRights.Description=복사된 파일이나 폴더가 받는 접근 권한입니다. 복사 대화 상자는 이 값으로 열리며 거기서 고른 값을 저장합니다.
+SettingsCenter.Text.21b111cbfe6e8fca2d181c43f53ad548b22e38aca955b9824706a504b0a07a2d=기본값
+SettingsCenter.Text.c19712324d7defdacb7eb63aa598f50e177ec569b5db2148377dab040e2041c2=원본에서 복사
+SettingsCenter.Text.0b6773444443873506aec5bd73f0b9f8a3c014200a33ccbf7be6c552d51f5ffa=대상 폴더에서 상속
+SettingsCenter.Text.623f973311966b52caba6ec9bbbc9b468cfebd10bb1b9a26413a88daea545c82=새로 만들어진 복사본은 원본의 권한을 받고, 덮어써진 파일은 자신의 권한을 유지합니다.
+SettingsCenter.Text.494a188c16632748b646f96991c866a64a0c20fd62ba0cc4dd280e55059aa897=기존 파일을 덮어썼더라도 복사본은 항상 원본의 권한을 받습니다.
+SettingsCenter.Text.51aafa6b808c6073718374cbebb2dd08e3e7451e18cb25f1f7e994612729f12d=복사본은 들어가는 폴더의 권한을 받으며, 파일은 그 폴더의 실행 비트를 뺀 권한이 됩니다.

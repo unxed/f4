@@ -2016,3 +2016,11 @@ SettingsCenter.Text.8802174070f1412801a7f0343b685b2031869bce18833d79e48e7a712ab5
 SettingsCenter.Text.c0010901537ebb36a8ae08ecdecf613679d66a4f8dcad5856094bc3752fcbf1d=Hotkey Configurator tabelis piira otsing täpne vastavusse, kui see on kättesaadav. See ei mõjuta seadistuste keskuse küljekäri otsimist.
 SettingsCenter.Text.ac559d59a8e0f357fa1fc6da653bff0feb6a2f4aaf219e4ac9adf0b68e1c2128=Järgmine avatud
 SettingsCenter.Text.a3a43e00b84aa7aca574eafb93a4feaf77b4287a615be9a7434ae99552df13e3=Hotkey Configurator loetleb konfigureeritavaid, esialgseid ja pluginide lühendid. Kasutage Assign või Unbind; põhilised lühiajalud on ainult loetavad. Muudatused salvestatakse rakendamisel või OK'is.
+SettingsCenter.CopyAccessRights.Label=Koopiate pääsuõigused
+SettingsCenter.CopyAccessRights.Description=Pääsuõigused, mille kopeeritud fail või kaust saab. Kopeerimisdialoog algab sellest väärtusest ja salvestab seal tehtud valiku.
+SettingsCenter.Text.21b111cbfe6e8fca2d181c43f53ad548b22e38aca955b9824706a504b0a07a2d=Vaikimisi
+SettingsCenter.Text.c19712324d7defdacb7eb63aa598f50e177ec569b5db2148377dab040e2041c2=Kopeeri lähtefailist
+SettingsCenter.Text.0b6773444443873506aec5bd73f0b9f8a3c014200a33ccbf7be6c552d51f5ffa=Päri sihtkaustast
+SettingsCenter.Text.623f973311966b52caba6ec9bbbc9b468cfebd10bb1b9a26413a88daea545c82=Äsja loodud koopia saab oma lähtefaili õigused ja ülekirjutatud fail säilitab enda omad.
+SettingsCenter.Text.494a188c16632748b646f96991c866a64a0c20fd62ba0cc4dd280e55059aa897=Koopia saab alati oma lähtefaili õigused, ka siis kui see kirjutas üle olemasoleva faili.
+SettingsCenter.Text.51aafa6b808c6073718374cbebb2dd08e3e7451e18cb25f1f7e994612729f12d=Koopia saab selle kausta õigused, kuhu ta satub; fail kaotab lisaks kausta käivitusbitid.

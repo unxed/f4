@@ -1937,3 +1937,11 @@ SettingsCenter.Text.8802174070f1412801a7f0343b685b2031869bce18833d79e48e7a712ab5
 SettingsCenter.Text.c0010901537ebb36a8ae08ecdecf613679d66a4f8dcad5856094bc3752fcbf1d=A Hotkey Configurator táblázatban szűkítsd a keresést a pontos egyeztetésekre, ha rendelkezésre áll. Ez nem befolyásolja a beállításokközpont oldalpultkeresését.
 SettingsCenter.Text.ac559d59a8e0f357fa1fc6da653bff0feb6a2f4aaf219e4ac9adf0b68e1c2128=A következő nyitott
 SettingsCenter.Text.a3a43e00b84aa7aca574eafb93a4feaf77b4287a615be9a7434ae99552df13e3=A Hotkey Configurator listázza a konfigurálható, a native és a plugin rövidebb útvonalakat. Használja az Assign vagy Unbind használatát; a native shortcuts csak olvashatóak. A módosításokat az Apply vagy OK segítségével mentjük meg.
+SettingsCenter.CopyAccessRights.Label=Másolatok hozzáférési jogai
+SettingsCenter.CopyAccessRights.Description=A másolt fájl vagy mappa által kapott hozzáférési jogok. A másolási párbeszéd ezzel az értékkel indul, és elmenti az ott hozott választást.
+SettingsCenter.Text.21b111cbfe6e8fca2d181c43f53ad548b22e38aca955b9824706a504b0a07a2d=Alapértelmezett
+SettingsCenter.Text.c19712324d7defdacb7eb63aa598f50e177ec569b5db2148377dab040e2041c2=Másolás a forrásból
+SettingsCenter.Text.0b6773444443873506aec5bd73f0b9f8a3c014200a33ccbf7be6c552d51f5ffa=Öröklés a célmappából
+SettingsCenter.Text.623f973311966b52caba6ec9bbbc9b468cfebd10bb1b9a26413a88daea545c82=Az újonnan létrehozott másolat a forrás jogait kapja, a felülírt fájl pedig megtartja a sajátjait.
+SettingsCenter.Text.494a188c16632748b646f96991c866a64a0c20fd62ba0cc4dd280e55059aa897=A másolat mindig a forrás jogait kapja, akkor is, ha meglévő fájlt írt felül.
+SettingsCenter.Text.51aafa6b808c6073718374cbebb2dd08e3e7451e18cb25f1f7e994612729f12d=A másolat annak a mappának a jogait kapja, ahová kerül; a fájl ezenfelül elveszíti a mappa végrehajtási bitjeit.

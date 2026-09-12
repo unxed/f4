@@ -2109,6 +2109,10 @@ func actionEditFile(pf *panel.PanelsFrame) {
 	}
 }
 
+// rightsComboWidth is the natural width of the access-rights field of the
+// copy/move dialog, the same as the operation-mode field below it.
+const rightsComboWidth = 32
+
 func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	fspSrc := pf.GetActivePanel()
 	fspDst := pf.GetInactivePanel()
@@ -2235,6 +2239,21 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	comboMode.Menu.SetSelectPos(defMode)
 	comboMode.Edit.SetText(choiceText(modes, defMode))
 
+	rightsChoices := []string{
+		i18n.Msg("Copy.Rights.Default"),
+		i18n.Msg("Copy.Rights.Copy"),
+		i18n.Msg("Copy.Rights.Inherit"),
+	}
+	comboRights := vtui.NewComboBox(0, 0, rightsComboWidth, rightsChoices)
+	comboRights.DropdownOnly = true
+	defRights := config.App.CopyAccessRights
+	if defRights < 0 || defRights >= len(rightsChoices) {
+		defRights = 0
+	}
+	comboRights.Menu.SetSelectPos(defRights)
+	comboRights.Edit.SetText(choiceText(rightsChoices, defRights))
+	lblRights := vtui.NewLabel(0, 0, i18n.Msg("Copy.Rights"), comboRights)
+
 	btnOk := vtui.NewButton(0, 0, i18n.Msg("Copy.Btn"))
 	if isMove {
 		btnOk = vtui.NewButton(0, 0, i18n.Msg("Move.Btn"))
@@ -2244,10 +2263,20 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	btnOk.OnClick = func() {
 		dest := editDest.GetText()
 		mode := comboMode.Menu.SelectPos
+		rights := comboRights.Menu.SelectPos
 		dlg.Close()
 		if dest != "" {
+			// The choice becomes the default of the next operation, the way
+			// far2l remembers the options of its copy dialog.
+			if rights != config.App.CopyAccessRights {
+				config.App.CopyAccessRights = rights
+				if config.App.AutoSaveDialogSettings {
+					config.SaveConfig()
+				}
+			}
 			history.CommitHistory(editDest, dest)
-			go fileops.ExecuteFileOpAt(srcVfs, dstVfs, srcBasePath, names, dest, isMove, mode, onCompleteWithClear)
+			opts := fileops.FileOpOptions{AccessRights: fileops.AccessRightsModeFromConfig(rights)}
+			go fileops.ExecuteFileOpAtWithOptions(srcVfs, dstVfs, srcBasePath, names, dest, isMove, mode, opts, onCompleteWithClear)
 		}
 	}
 	dlg.AddItem(btnOk)
@@ -2255,6 +2284,8 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	btnCancel := vtui.NewButton(0, 0, i18n.Msg("vtui.Cancel"))
 	btnCancel.OnClick = func() { dlg.Close() }
 	dlg.AddItem(btnCancel)
+	dlg.AddItem(lblRights)
+	dlg.AddItem(comboRights)
 	dlg.AddItem(comboMode)
 
 	// Layout Engine
@@ -2268,17 +2299,36 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
-	// Keep the action row above the mode selector. ComboBox.Open() places its
-	// popup below the field, so the popup cannot cover these buttons.
+	rowRights := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	rowRights.Add(lblRights, vtui.Margins{Right: 1}, vtui.AlignLeft)
+	rowRights.Add(comboRights, vtui.Margins{}, vtui.AlignFill)
+
+	// Keep the action row above the two selectors. ComboBox.Open() places its
+	// popup below the field, so no popup can cover these buttons.
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(rowRights, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(comboMode, vtui.Margins{Top: 1}, vtui.AlignCenter)
 
 	// The same VBox re-applied to the new dialog rectangle is what stretches
 	// the destination field when the f4 window is resized; the button row
 	// re-centers itself from HBoxLayout.SetPosition.
 	dlg.SetLayout(func() {
+		// An HBox keeps each element's own width, and the dialog is half of
+		// the f4 window, so in a narrow window the access-rights field has
+		// to give way to its caption. Its natural width is restored first,
+		// because a window that grew again has room for it.
+		cx1, cy1, _, cy2 := comboRights.GetPosition()
+		comboRights.SetPosition(cx1, cy1, cx1+rightsComboWidth-1, cy2)
+
 		vbox.SetPosition(dlg.X1+2, dlg.Y1+2, dlg.X2-2, dlg.Y2-2)
 		vbox.Apply()
+
+		// Laying out the row is what says where the field starts, so the
+		// width that fits is known only afterwards. The field is last in
+		// its row, so nothing else moves when it shrinks.
+		if x1, y1, x2, y2 := comboRights.GetPosition(); x2 > dlg.X2-2 {
+			comboRights.SetPosition(x1, y1, dlg.X2-2, y2)
+		}
 	})
 	dlg.SetFocusedItem(editDest)
 

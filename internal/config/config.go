@@ -501,6 +501,7 @@ type F4Config struct {
 	AutoSaveGUIWindow      bool
 	DefaultFileOpMode      int
 	FileOpPathDisplay      int
+	CopyAccessRights       int
 	MacroRecordFormat      int
 	GuiFont                string
 	GuiUseSystemMonospace  bool
@@ -652,6 +653,7 @@ var App = F4Config{
 	AutoSaveGUIWindow:        true,
 	DefaultFileOpMode:        0,
 	FileOpPathDisplay:        0,
+	CopyAccessRights:         0,
 	GuiFont:                  "",
 	GuiUseSystemMonospace:    true,
 	GuiFontSize:              DefaultGuiFontSize(runtime.GOOS),
@@ -821,6 +823,10 @@ func LoadConfig() {
 	App.SystemOEMCodePage = parseForcedCodePage(merged.GetString("System", "OEMCodePage", ""))
 	applyForcedCodePages()
 	_, _ = fmt.Sscanf(merged.GetString("Panel", "FileOpPathDisplay", "0"), "%d", &App.FileOpPathDisplay)
+	_, _ = fmt.Sscanf(merged.GetString("Panel", "CopyAccessRights", "0"), "%d", &App.CopyAccessRights)
+	if App.CopyAccessRights < 0 || App.CopyAccessRights > 2 {
+		App.CopyAccessRights = 0
+	}
 	App.GuiFont = merged.GetString("Appearance", "GuiFont", "")
 	App.GuiUseSystemMonospace = merged.GetString("Appearance", "GuiUseSystemMonospace", "1") == "1"
 	defaultFontSize := DefaultGuiFontSize(runtime.GOOS)
@@ -1086,6 +1092,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "ApplyCommandParallelism = %d\n", cfg.ApplyCommandParallelism)
 	fmt.Fprintf(&sb, "DefaultFileOpMode = %d\n", cfg.DefaultFileOpMode)
 	fmt.Fprintf(&sb, "FileOpPathDisplay = %d\n", cfg.FileOpPathDisplay)
+	fmt.Fprintf(&sb, "CopyAccessRights = %d\n", cfg.CopyAccessRights)
 
 	sb.WriteString("\n[System]\n")
 	fmt.Fprintf(&sb, "ConfirmCopy = %d\n", map[bool]int{true: 1, false: 0}[cfg.ConfirmCopy])

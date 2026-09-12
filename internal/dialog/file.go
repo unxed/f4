@@ -16,7 +16,11 @@ const (
 
 	// Heights are deliberately fixed: only the width follows the window.
 	fileInputBoxHeight = 9
-	CopyBoxHeight      = 11
+
+	// CopyBoxHeight holds the prompt, the destination field, the button row
+	// and the two selectors of the copy/move dialog: access rights (#722)
+	// and the operation mode.
+	CopyBoxHeight = 13
 )
 
 // FileDialogWidth returns the dialog width for the given screen width.

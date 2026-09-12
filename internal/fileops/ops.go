@@ -244,6 +244,11 @@ type FileOpState struct {
 	Buffer       []byte
 	IsMove       bool
 	S2SDir       int // 0: unknown, 1: push, 2: pull, 3: disabled
+	// AccessRights is the F5/F6 "Access rights" choice for this operation.
+	AccessRights AccessRightsMode
+	// parentRights caches destination folder permissions for the inherit
+	// mode. See parentRights() for why it needs no lock.
+	parentRights map[string]uint32
 }
 
 // FormatIntWithSpaces converts an int64 to string with spaces as thousands separators.
@@ -400,6 +405,13 @@ func ExecuteFileOp(srcVfs, dstVfs vfs.VFS, names []string, destInput string, isM
 // goroutine or queued task starts can otherwise target same-named files in a
 // different directory.
 func ExecuteFileOpAt(srcVfs, dstVfs vfs.VFS, srcBasePath string, names []string, destInput string, isMove bool, mode int, onComplete func()) {
+	ExecuteFileOpAtWithOptions(srcVfs, dstVfs, srcBasePath, names, destInput, isMove, mode, DefaultFileOpOptions(), onComplete)
+}
+
+// ExecuteFileOpAtWithOptions is ExecuteFileOpAt for a caller that has asked
+// the user what the operation should do, instead of taking the configured
+// defaults.
+func ExecuteFileOpAtWithOptions(srcVfs, dstVfs vfs.VFS, srcBasePath string, names []string, destInput string, isMove bool, mode int, opts FileOpOptions, onComplete func()) {
 	// A wildcard in the last component is a rename mask, as in far2l: the
 	// files land in the directory before it, under names the mask generates.
 	// Taken literally it would instead create a file called "*.1".
@@ -622,14 +634,15 @@ func ExecuteFileOpAt(srcVfs, dstVfs vfs.VFS, srcBasePath string, names []string,
 		}
 
 		state := &FileOpState{
-			Tracker:     tracker,
-			UpdateUI:    updateUI,
-			StartFile:   wrapRep.StartFileKnown,
-			SetFileSize: wrapRep.SetCurrentSize,
-			OnBytes:     wrapRep.UpdateBytes,
-			Anchor:      anchor,
-			Buffer:      make([]byte, 128*1024),
-			IsMove:      isMove,
+			Tracker:      tracker,
+			UpdateUI:     updateUI,
+			StartFile:    wrapRep.StartFileKnown,
+			SetFileSize:  wrapRep.SetCurrentSize,
+			OnBytes:      wrapRep.UpdateBytes,
+			Anchor:       anchor,
+			Buffer:       make([]byte, 128*1024),
+			IsMove:       isMove,
+			AccessRights: opts.AccessRights,
 		}
 
 		updateUI(true)
@@ -1228,6 +1241,16 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			return fmt.Errorf("cannot overwrite file with folder: %s", dstVfs.Base(destPath))
 		}
 
+		dirRights := destinationRights(ctx, state, dstVfs, destPath, stat.UnixMode, true, exists)
+		if state != nil && state.AccessRights == AccessRightsInherit && dirRights != 0 {
+			// What the children inherit is this folder, so it has to carry
+			// its own inherited permissions before they are copied into it.
+			// The other two modes keep applying the source's permissions
+			// after the walk, where a read-only source folder cannot stop
+			// the walk from writing into the copy.
+			_ = dstVfs.SetAttributes(ctx, destPath, vfs.VFSItem{UnixMode: dirRights, Uid: -1, Gid: -1})
+		}
+
 		var items []vfs.VFSItem
 		err := srcVfs.ReadDir(ctx, srcPath, func(chunk []vfs.VFSItem) {
 			items = append(items, chunk...)
@@ -1248,9 +1271,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		itemToSet := stat
 		itemToSet.Uid = -1
 		itemToSet.Gid = -1
-		if itemToSet.UnixMode == 0 {
-			itemToSet.UnixMode = 0755
-		}
+		itemToSet.UnixMode = dirRights
 		_ = dstVfs.SetAttributes(ctx, destPath, itemToSet)
 
 		if state.Tracker != nil {
@@ -1606,9 +1627,7 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 		itemToSet := stat
 		itemToSet.Uid = -1
 		itemToSet.Gid = -1
-		if itemToSet.UnixMode == 0 {
-			itemToSet.UnixMode = 0644
-		}
+		itemToSet.UnixMode = destinationRights(ctx, state, dstVfs, destPathForFile, stat.UnixMode, false, destinationExisted)
 		_ = dstVfs.SetAttributes(ctx, destPathForFile, itemToSet)
 	}
 
