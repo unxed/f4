@@ -152,3 +152,24 @@ func TestEditorSortLinesPreservesCRLF(t *testing.T) {
 		t.Fatalf("CRLF sort = %q, want %q", got, want)
 	}
 }
+
+func TestEditorSortLinesKeepsUnterminatedFinalLineSeparated(t *testing.T) {
+	ev := newDuplicateLineEditor(t, "zebra\napple")
+
+	if err := ev.SortLines(true, true); err != nil {
+		t.Fatalf("sort with unterminated final line: %v", err)
+	}
+	if got, want := ev.Pt.String(), "apple\nzebra"; got != want {
+		t.Fatalf("sort with unterminated final line = %q, want %q", got, want)
+	}
+}
+
+func TestEditorSortLinesMovesUnterminatedFinalLine(t *testing.T) {
+	ev := newDuplicateLineEditor(t, "z\nalpha\nlast")
+	if err := ev.SortLines(true, true); err != nil {
+		t.Fatalf("sort unterminated final line: %v", err)
+	}
+	if got, want := ev.Pt.String(), "alpha\nlast\nz"; got != want {
+		t.Fatalf("sort moved unterminated final line = %q, want %q", got, want)
+	}
+}
