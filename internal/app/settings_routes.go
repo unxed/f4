@@ -45,6 +45,7 @@ func init() {
 	panel.OpenSettingsAt = settings.OpenAt
 	panel.SetSettingsRecordDefault = settings.SetRecordDefault
 	panel.OpenUserMenuSettings = settings.OpenUserMenu
+	panel.OpenSettingsCategoryOnly = settings.OpenCategoryOnly
 	plughost.SettingsCommand = func(id string) bool {
 		category, ok := map[string]string{"visren.configure": "operations", "f4.envman.configure": "terminal", "f4.mediainfo.configure": "metadata"}[strings.ToLower(id)]
 		return ok && settings.Open(category)

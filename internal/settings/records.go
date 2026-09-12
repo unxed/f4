@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/sdk/f4settings"
 )
@@ -98,8 +99,15 @@ func newCoreRecordSettingsProvider() coreRecordSettingsProvider {
 		return panel.SaveBookmarks(bookmarkPath, items)
 	}})
 	linkPath := panel.DriveBookmarksFilePath()
-	links := recordCollection("drive-links", "drives", "Drive links", "Named links shown in the drive chooser.", "link.Name", []f4settings.Field{recordField("link.Name", "Link name", "Display name in the drive chooser.", f4settings.String), recordField("link.Path", "Link path", "Directory or provider path opened by the link.", f4settings.Path), recordField("link.Hotkey", "Shortcut", "Far-style shortcut spelling, such as Q or CtrlF5.", f4settings.String)})
-	p.stores = append(p.stores, settingsRecordStore{collection: links, path: linkPath, load: func() ([]f4settings.Record, error) {
+	links := recordCollection("drive-links", "drives", "Drive links", "Named links shown in the drive chooser.", "link.Name", []f4settings.Field{recordField("link.Name", "Link name", "Display name in the drive chooser.", f4settings.String), recordField("link.Path", "Link path", "Directory or provider path opened by the link.", f4settings.Path), recordField("link.Hotkey", "Shortcut", "Far-style shortcut spelling, such as Q or CtrlF5. Capture fills it in from a key press.", f4settings.Chord)})
+	p.stores = append(p.stores, settingsRecordStore{collection: links, path: linkPath, validate: func(rows []f4settings.Record) error {
+		for _, r := range rows {
+			if err := settingsValidateShortcut(r.Values["link.Hotkey"]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, load: func() ([]f4settings.Record, error) {
 		items, err := panel.LoadDriveBookmarks(linkPath)
 		var rows []f4settings.Record
 		for i, item := range items {
@@ -115,6 +123,23 @@ func newCoreRecordSettingsProvider() coreRecordSettingsProvider {
 	}})
 	p.addUserMenuStores()
 	return p
+}
+
+// settingsValidateShortcut rejects a drive-link shortcut the drive menu
+// could never match. The menu compares the stored spelling against
+// keymap.EventToHotkeyString of the key that was pressed, so a spelling is
+// usable exactly when it survives that round trip; free text such as a
+// sentence collapses to its first character and is refused (#1148).
+func settingsValidateShortcut(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	event := keymap.ParseFarKey(value)
+	if event == nil || !strings.EqualFold(keymap.EventToHotkeyString(event), value) {
+		return settingsError("%s is not a key: use a single key such as Q, or a chord such as CtrlF5", value)
+	}
+	return nil
 }
 
 func (p *coreRecordSettingsProvider) addUserMenuStores() {

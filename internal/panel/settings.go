@@ -12,6 +12,12 @@ func (*PanelsFrame) OpenSettings(category, collection, record string, create boo
 	return OpenSettingsAt(category, collection, record, create)
 }
 
+// OpenSettingsCategoryOnly opens the Settings Center narrowed to a single
+// category. Contextual keys use it so the window they open stays about the
+// thing the key belongs to: the drive menu's F9 offers drive-chooser
+// settings, not languages, the editor or updates (#1148).
+var OpenSettingsCategoryOnly func(category string) bool
+
 // SetSettingsRecordDefault seeds a newly opened record without persisting it.
 var SetSettingsRecordDefault func(collection, field, value string)
 

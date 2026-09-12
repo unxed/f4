@@ -64,7 +64,7 @@ func (b *settingsButtonRow) SetPosition(x1, y1, x2, y2 int) {
 }
 
 func (c *settingsCenter) rebuildCategory() {
-	c.SetTitle(settingsText("Title", "Settings"))
+	c.SetTitle(c.windowTitle())
 	c.apply.SetText(settingsText("Apply", "&Apply"))
 	c.ok.SetText(i18n.Msg("vtui.Ok"))
 	c.cancel.SetText(i18n.Msg("vtui.Cancel"))
@@ -159,9 +159,28 @@ func (c *settingsCenter) addCollections(category string) {
 				})
 				button("Delete", func() {
 					records := s.draft.Records[col.ID]
-					if selected < len(records) {
-						s.draft.Records[col.ID] = append(records[:selected], records[selected+1:]...)
-						c.rebuildCategory()
+					if selected >= len(records) {
+						return
+					}
+					// Removing a record is the one destructive button on
+					// this page, and the row it acts on is a single click
+					// away from the one next to it, so it asks first
+					// (#1148). The shared Delete.* resources keep the
+					// wording in every bundled language.
+					name := strings.TrimSpace(records[selected].Values[col.NameField])
+					if name == "" {
+						name = Phrase("(unnamed)")
+					}
+					confirm := vtui.ShowMessageOn(c, i18n.Msg("Delete.Title"), fmt.Sprintf(i18n.Msg("Delete.Confirm"), name), []string{i18n.Msg("Delete.Btn"), i18n.Msg("vtui.Cancel")})
+					confirm.OnResult = func(choice int) {
+						if choice != 0 {
+							return
+						}
+						records := s.draft.Records[col.ID]
+						if selected < len(records) {
+							s.draft.Records[col.ID] = append(records[:selected], records[selected+1:]...)
+							c.rebuildCategory()
+						}
 					}
 				})
 			}

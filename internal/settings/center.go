@@ -529,6 +529,7 @@ type settingsCenter struct {
 	choiceHelpRow           *settingsRow
 	offsets                 map[string]int
 	closed                  bool
+	scoped                  bool
 	running                 *vtui.TaskContext
 	closePending            bool
 	screenW, screenH        int
@@ -644,6 +645,50 @@ func newSettingsCenter(sessions []*settingsSession) *settingsCenter {
 	c.MinW, c.MinH = 72, 22
 	c.SetFocusedItem(c.search)
 	return c
+}
+
+// windowTitle names the window after the single category it was narrowed
+// to, so a contextual entry point does not present itself as the whole of
+// Settings.
+func (c *settingsCenter) windowTitle() string {
+	if c.scoped && len(c.categories) == 1 {
+		return c.categoryLabel(c.categories[0].ID)
+	}
+	return settingsText("Title", "Settings")
+}
+
+// restrictTo narrows the window to the given categories and keeps every
+// other pane -- search, matches, navigation -- working inside that scope.
+// Unknown ids are ignored; a scope that matches nothing leaves the window
+// untouched rather than presenting an empty one.
+func (c *settingsCenter) restrictTo(ids ...string) {
+	keep := map[string]bool{}
+	for _, id := range ids {
+		keep[id] = true
+	}
+	var categories []f4settings.Category
+	for _, cat := range c.categories {
+		if keep[cat.ID] {
+			categories = append(categories, cat)
+		}
+	}
+	if len(categories) == 0 {
+		return
+	}
+	c.categories = categories
+	c.scoped = true
+	var rows []vtui.TableRow
+	for _, cat := range c.categories {
+		rows = append(rows, settingsCategoryRow{c, cat})
+	}
+	c.sidebar.SetRows(rows)
+	c.sidebar.SetSelectPos(0)
+	c.categoryMatchCache = nil
+	c.recordMatchCache = nil
+	c.category = ""
+	c.selectCategory(categories[0].ID)
+	c.SetTitle(c.windowTitle())
+	c.layoutWindow()
 }
 
 func (c *settingsCenter) ResizeConsole(w, h int) {
@@ -1411,6 +1456,30 @@ func (c *settingsCenter) nextMatch(direction int) {
 }
 
 func Open(category string) bool { return OpenAt(category, "", "", false) }
+
+// OpenCategoryOnly opens the Settings Center showing one category and
+// nothing else. It is the entry point for keys that belong to a specific
+// screen -- the drive menu's F9 -- where the full category list is noise
+// (#1148). An already open window is only navigated: the user asked for
+// settings from inside settings, and narrowing what is in front of them
+// would lose the rest of their session.
+func OpenCategoryOnly(category string) bool {
+	if vtui.FrameManager == nil || category == "" {
+		return false
+	}
+	if current, ok := vtui.FrameManager.GetTopFrame().(*settingsCenter); ok {
+		if current.running == nil {
+			current.navigate(category, "", "", false)
+		}
+		return true
+	}
+	sessions, err := beginSettingsSessions(context.Background())
+	if err != nil {
+		vtui.ShowMessage(Phrase("Settings"), err.Error(), []string{i18n.Msg("vtui.Ok")})
+		return true
+	}
+	return showSettingsCenterScoped(sessions, category)
+}
 func OpenAt(category, collection, record string, create bool) bool {
 	if vtui.FrameManager == nil {
 		return false
@@ -1427,6 +1496,15 @@ func OpenAt(category, collection, record string, create bool) bool {
 		return true
 	}
 	return showSettingsCenter(sessions, category, collection, record, create)
+}
+func showSettingsCenterScoped(sessions []*settingsSession, category string) bool {
+	c := newSettingsCenter(sessions)
+	c.restrictTo(category)
+	c.navigate(category, "", "", false)
+	c.ResizeConsole(vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight())
+	vtui.FrameManager.Push(c)
+	c.refreshSchemeChoices()
+	return true
 }
 func showSettingsCenter(sessions []*settingsSession, category, collection, record string, create bool) bool {
 	c := newSettingsCenter(sessions)

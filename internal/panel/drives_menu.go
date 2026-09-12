@@ -296,7 +296,10 @@ func driveMenuPlatformItemVisible(drv sysinfo.DriveEntry, options uint32) bool {
 }
 
 func (pf *PanelsFrame) openDriveMenuOptions(panelIdx int, menu *vtui.VMenu) {
-	if RunAction("Settings.Category.drives") {
+	// F9 belongs to the drive menu, so it opens the drive-chooser page on
+	// its own rather than the whole Settings Center (#1148). The compact
+	// dialog below stays as the fallback when settings are not wired.
+	if OpenSettingsCategoryOnly != nil && OpenSettingsCategoryOnly("drives") {
 		return
 	}
 	width, height := DriveMenuOptionsDialogSize()
