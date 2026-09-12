@@ -463,7 +463,17 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 		return atomic.LoadInt64(&countedReader.read), archiveSize
 	}
 	startTime := time.Now()
+	// Reading the counter and delivering the update are two separate steps,
+	// and 7z runs this callback on one goroutine per compression stream. The
+	// counter itself only grows, but without a lock around both steps a
+	// goroutine that read the smaller figure can still reach the reporter
+	// last, and the overall bar then jumps backwards even though nothing was
+	// un-tested. Holding one lock across the read and the call makes the
+	// order the reporter sees the order the counter actually went through.
+	var reportMu sync.Mutex
 	reportProgress := func(name string, current, size int64) {
+		reportMu.Lock()
+		defer reportMu.Unlock()
 		done, total := overallProgress()
 		elapsed := time.Since(startTime)
 		speed := int64(0)
@@ -542,8 +552,10 @@ func testArchiveOnce(ctx context.Context, srcPath, password string, reporter vfs
 			// what was actually read rather than a bar past its own end.
 			total = done
 		}
+		reportMu.Lock()
 		reporter.UpdateTransfer("Testing", filepath.Base(srcPath), 100,
 			fmt.Sprintf("Total: %s / %s", formatSize(done), formatSize(total)), 100, "")
+		reportMu.Unlock()
 	}
 	return errors.Join(failures...)
 }
