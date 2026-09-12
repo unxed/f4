@@ -19,7 +19,7 @@ func actionSelectLastMenuItem() bool {
 	}
 
 	menuBar := vtui.FrameManager.GetActiveMenuBar()
-	if !activateMainMenuAt(history.LastMainMenuPosition(menuBar)) {
+	if !activateMainMenuAt(history.LastMainMenuPosition(menuBar), true) {
 		return false
 	}
 	if menu, ok := vtui.FrameManager.GetTopFrame().(*vtui.VMenu); ok {

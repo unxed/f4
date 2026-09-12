@@ -9,12 +9,13 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// TestPanelsFrame_F9OpensMenuBelowItsBar covers issues #1129 and #1149. The
-// menu bar used to be parked two rows above the screen while inactive, and
+// TestPanelsFrame_F9OpensMenuBelowItsBar covers issues #1129, #1144 and #1149.
+// The menu bar used to be parked two rows above the screen while inactive, and
 // vtui anchors a dropdown to the bar's row at the moment ActivateSubMenu runs:
 // F9 therefore opened the menu above the visible area, with its first entries
 // hidden behind the workspace tabs, and in terminal mode the bar itself was
-// never painted at all.
+// never painted at all. F9 itself now only raises the bar, so the dropdown is
+// opened here the way a user opens it.
 func TestPanelsFrame_F9OpensMenuBelowItsBar(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -69,9 +70,25 @@ func TestPanelsFrame_F9OpensMenuBelowItsBar(t *testing.T) {
 			if !pf.MenuBar.Active {
 				t.Fatal("F9 did not activate the menu bar")
 			}
+			// F9 raises the bar alone, as far2l's ShellOptions(0) does
+			// (issue #1144).
+			if top := vtui.FrameManager.GetTopFrame(); top != nil && top.GetType() == vtui.TypeMenu {
+				t.Fatalf("F9 opened a dropdown (%T); it should raise the bar only", top)
+			}
+
+			pf.Show(vtui.FrameManager.Screen())
+			assertMenuBarPainted(t, pf, wantInset, "menu bar raised by F9")
+
+			// Down is the first of the paths that open a dropdown, and the
+			// geometry #1129 and #1149 were about is anchored to the bar's
+			// row at that moment.
+			pf.MenuBar.ProcessKey(&vtinput.InputEvent{
+				Type: vtinput.KeyEventType, KeyDown: true,
+				VirtualKeyCode: vtinput.VK_DOWN,
+			})
 			dropdown := vtui.FrameManager.GetTopFrame()
 			if dropdown == nil || dropdown.GetType() != vtui.TypeMenu {
-				t.Fatalf("F9 left %T on top, want an open vtui menu", dropdown)
+				t.Fatalf("Down left %T on top, want an open vtui menu", dropdown)
 			}
 			if _, y1, _, _ := dropdown.GetPosition(); y1 != wantInset+1 {
 				t.Errorf("dropdown top row = %d, want %d (immediately below the menu bar)", y1, wantInset+1)

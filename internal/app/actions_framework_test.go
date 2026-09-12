@@ -218,8 +218,10 @@ func TestFrameworkHelpAndMainMenuActionsPreserveFrameBehavior(t *testing.T) {
 	if !actionActivateMainMenu() || !menu.Active {
 		t.Fatal("main menu action did not activate the frame menu")
 	}
-	if top := vtui.FrameManager.GetTopFrame(); top == frame || top.GetType() != vtui.TypeMenu {
-		t.Fatalf("top frame = %T, want the activated submenu", top)
+	// The bar comes up alone; Down, Enter or a hotkey drops the menu itself
+	// (issue #1144).
+	if top := vtui.FrameManager.GetTopFrame(); top != frame {
+		t.Fatalf("top frame = %T, want the owning frame with no dropdown", top)
 	}
 }
 
@@ -242,10 +244,9 @@ func TestPaletteMainMenuMatchesPanelsF9ActiveSide(t *testing.T) {
 	if got := panels.MenuBar.SelectPos; got != 4 {
 		t.Fatalf("right-panel menu position = %d, want physical F9 position 4", got)
 	}
-	if top := vtui.FrameManager.GetTopFrame(); top == panels || top.GetType() != vtui.TypeMenu {
-		t.Fatalf("right-panel F9 top frame = %T, want menu", top)
+	if top := vtui.FrameManager.GetTopFrame(); top != panels {
+		t.Fatalf("right-panel F9 top frame = %T, want the panels frame with no dropdown", top)
 	}
-	vtui.FrameManager.Pop()
 	vtui.FrameManager.SyncCurrentScreen()
 	panels.MenuBar.Active = false
 

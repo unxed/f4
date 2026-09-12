@@ -67,13 +67,15 @@ func mainMenuActionAvailable() bool {
 // F9 fallback. The palette executes it only after its own dialog has gone away,
 // so GetTopFrame refers to the screen the user was working in.
 func actionActivateMainMenu() bool {
-	return activateMainMenuAt(-1)
+	return activateMainMenuAt(-1, false)
 }
 
-// activateMainMenuAt opens the active menu bar. A non-negative position is an
+// activateMainMenuAt raises the active menu bar. A non-negative position is an
 // explicit top-level menu selected by a caller such as Shift+F10; -1 keeps the
-// ordinary F9/palette behavior.
-func activateMainMenuAt(requestedPos int) bool {
+// ordinary F9/palette behavior. openSubMenu drops the selected menu down right
+// away, which is what far2l's ShellOptions(1) does for Shift+F10 and what
+// ShellOptions(0) deliberately does not do for F9.
+func activateMainMenuAt(requestedPos int, openSubMenu bool) bool {
 	if !mainMenuActionAvailable() {
 		return false
 	}
@@ -107,7 +109,9 @@ func activateMainMenuAt(requestedPos int) bool {
 			selectPos = 0
 		}
 		menu.SelectPos = selectPos
-		menu.ActivateSubMenu(selectPos)
+		if openSubMenu {
+			menu.ActivateSubMenu(selectPos)
+		}
 	}
 	vtui.FrameManager.Redraw()
 	return true

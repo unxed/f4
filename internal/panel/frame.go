@@ -2310,8 +2310,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	// F9 opens the main menu (other F-keys are action bindings now).
+	// F9 raises the main menu bar (other F-keys are action bindings now).
 	// Alt+F9 is term.App.ToggleWindowSize and must not fall through to this.
+	//
+	// Only the bar comes up, with the active panel's fixed side selected and
+	// no dropdown: far2l's FilePanels::ProcessKey calls ShellOptions(0), and
+	// only the LastCommand path -- Shift+F10, ShellOptions(1) -- follows the
+	// Show() with ProcessKey(KEY_DOWN) (far2l/src/options.cpp). Down, Enter,
+	// a letter hotkey or a click opens the dropdown from there, all of which
+	// vtui's MenuBar already handles while Active (f4 issue #1144).
 	if e.VirtualKeyCode == vtinput.VK_F9 && !alt {
 		pos := 0 // Left
 		if pf.ActiveIdx == 1 {
@@ -2319,14 +2326,15 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		pf.GetMenuBar()
 		if len(pf.MenuBar.Items) == 0 {
-			// vtui indexes Items unconditionally in ActivateSubMenu.
+			// An empty bar has nothing to raise, and vtui indexes Items
+			// unconditionally once one is activated.
 			return true
 		}
 		if pos >= len(pf.MenuBar.Items) {
 			pos = 0
 		}
 		pf.MenuBar.Active = true
-		pf.MenuBar.ActivateSubMenu(pos)
+		pf.MenuBar.SelectPos = pos
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !pf.CmdLine.IsEmpty() && (!pf.SearchFirstMode() || pf.CommandLineFocused) {

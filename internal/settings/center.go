@@ -653,7 +653,12 @@ func (c *settingsCenter) ResizeConsole(w, h int) {
 		c.SetPosition((w-dw)/2, (h-dh)/2, (w+dw)/2-1, (h+dh)/2-1)
 		c.positioned = true
 	} else if c.SavedBounds != nil {
-		c.SetPosition(0, 0, w-1, h-1)
+		// Match vtui's BaseWindow.ToggleZoom: the workspace tab strip owns the
+		// rows above and the key bar owns the row below, and both are drawn
+		// after the frames, so a maximized window placed over them simply
+		// loses its border to them (issue #1144).
+		top := vtui.FrameManager.WorkspaceTopInset()
+		c.SetPosition(0, top, w-1, max(top, h-2))
 	} else {
 		c.fitBounds()
 	}
