@@ -50,7 +50,7 @@ func TestDecodeQOIRejectsInvalidHeaderGeometryAndOpcodes(t *testing.T) {
 		{"no pixels", qoiHeader(1, 1, 4), "ends too early"},
 		{"short RGB", append(qoiHeader(1, 1, 4), qoiOpRGB, 1, 2), "ends too early"},
 		{"short RGBA", append(qoiHeader(1, 1, 4), qoiOpRGBA, 1, 2, 3), "ends too early"},
-		{"short luma", append(qoiHeader(1, 1, 4), qoiOpLuma, 1), "ends too early"},
+		{"short luma", append(qoiHeader(1, 1, 4), qoiOpLuma), "ends too early"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := decodeQOI(tc.data)
