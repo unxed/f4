@@ -138,7 +138,10 @@ func TestUserMenuPushLevelAndKeyboardNavigation(t *testing.T) {
 	}
 
 	top.SetSelectPos(1)
-	if !top.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT}) {
+	// UserMenuFrame embeds VMenu; invoke the wrapper's handler directly so
+	// this assertion exercises the user-menu contract rather than vtui's
+	// frame-identity routing for embedded menus.
+	if !top.VMenu.OnKeyDown(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RIGHT}) {
 		t.Fatal("Right did not enter submenu")
 	}
 	for {
