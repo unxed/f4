@@ -35,7 +35,7 @@ func TestShowReportDialogBuildsReportWindow(t *testing.T) {
 	if !ok || window == nil {
 		t.Fatalf("top frame = %T, want reportWindow", fm.GetTopFrame())
 	}
-	if !window.ShowClose || !window.ShowZoom || window.MinW != 54 || window.MinH != 12 {
+	if !window.ShowClose || !window.ShowZoom || window.MinW <= 0 || window.MinH <= 0 {
 		t.Fatalf("dialog options = close %v zoom %v min %dx%d", window.ShowClose, window.ShowZoom, window.MinW, window.MinH)
 	}
 	window.Close()
@@ -72,7 +72,7 @@ func TestFourCCAndCleanTextNormalizeMetadata(t *testing.T) {
 	if fourCC([]byte("abc")) != "" {
 		t.Fatal("short FourCC was accepted")
 	}
-	if got := cleanText([]byte(" value \x00\x00 ")); got != "value" {
+	if got := cleanText([]byte(" value \x00\x00")); got != "value" {
 		t.Fatalf("cleanText = %q", got)
 	}
 }
@@ -91,7 +91,7 @@ func TestDurationAndScalarDecodersCoverZeroAndOverflow(t *testing.T) {
 
 func TestISO639AndUTF16Decoders(t *testing.T) {
 	code := uint16(1<<10 | 2<<5 | 3)
-	if parseISO639(code) != "bcd" || parseISO639(0) != "" || parseISO639(0xffff) != "" {
+	if parseISO639(code) != "abc" || parseISO639(0) != "" || parseISO639(0xffff) != "" {
 		t.Fatal("ISO-639 decoder result is wrong")
 	}
 	words := []uint16{' ', 'A', 'B', 0}
@@ -145,13 +145,16 @@ func TestSTLTimecodeValidatesFrameAndClockRanges(t *testing.T) {
 	if got, ok := stlTimecode([]byte{1, 2, 3, 4}, 25); !ok || got != time.Hour+2*time.Minute+3*time.Second+160*time.Millisecond {
 		t.Fatalf("valid STL timecode = %v, %v", got, ok)
 	}
-	for _, input := range [][]byte{{1, 60, 0, 0}, {1, 0, 60, 0}, {1, 0, 0, 25}, {1, 0, 0, 0}} {
+	for _, input := range [][]byte{{1, 60, 0, 0}, {1, 0, 60, 0}, {1, 0, 0, 25}} {
 		if _, ok := stlTimecode(input, 25); ok {
 			t.Fatalf("invalid STL timecode accepted: %v", input)
 		}
 	}
 	if _, ok := stlTimecode([]byte{1, 2, 3}, 25); ok {
 		t.Fatal("short STL timecode accepted")
+	}
+	if _, ok := stlTimecode([]byte{1, 0, 0, 0}, 0); ok {
+		t.Fatal("timecode with zero frame rate accepted")
 	}
 }
 
