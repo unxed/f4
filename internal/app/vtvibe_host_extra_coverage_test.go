@@ -11,7 +11,7 @@ import (
 func TestVtvibeCommandsCoverHelpAndEmptyDraftPaths(t *testing.T) {
 	t.Cleanup(testutil.SwapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
-	pf := &panel.PanelsFrame{}
+	pf := panel.NewPanelsFrame()
 	vtui.FrameManager.Push(pf)
 
 	aiSession().ClearDraft()
