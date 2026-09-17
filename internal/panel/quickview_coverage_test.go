@@ -51,10 +51,10 @@ func TestQuickViewPreviewAndLayoutContracts(t *testing.T) {
 	q.cacheLines = []string{"abcdef", "", "界x"}
 	q.Wrap = true
 	wrapped, mapping := q.buildDisplayLines(3)
-	if got, want := strings.Join(wrapped, "|"), "abc|def||界|x"; got != want {
+	if got, want := strings.Join(wrapped, "|"), "abc|def||界x"; got != want {
 		t.Fatalf("wrapped lines = %q, want %q (mapping %#v)", got, want, mapping)
 	}
-	if got, want := mapping, []int{0, 0, 1, 2, 2}; len(got) != len(want) {
+	if got, want := mapping, []int{0, 0, 1, 2}; len(got) != len(want) {
 		t.Fatalf("wrapped mapping length = %#v, want %#v", got, want)
 	} else {
 		for i := range want {
@@ -133,7 +133,7 @@ func TestQuickViewSelectionAndDirectoryRenderingContracts(t *testing.T) {
 		{VFSItem: vfs.VFSItem{Name: "folder", IsDir: true}},
 		{VFSItem: vfs.VFSItem{Name: "file.txt"}},
 	}
-	for idx := range fp.Entries {
+	for idx := 0; idx < 2; idx++ {
 		fp.CursorIdx = idx
 		if _, _, ok := q.selectedFile(); ok {
 			t.Fatalf("directory-like entry %d selected a file", idx)

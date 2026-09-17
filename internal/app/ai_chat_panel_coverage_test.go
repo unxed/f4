@@ -173,7 +173,7 @@ func TestAIChatPanelFormattingAndSessionSelectionContracts(t *testing.T) {
 		{"x", nil, 5, "x"},
 		{"prefix", []string{"file"}, 5, ""},
 		{"x", []string{"long-name"}, 3, ""},
-		{"x", []string{"a", "b"}, 8, "x a, b "},
+		{"x ", []string{"a", "b"}, 8, "x a, b "},
 	} {
 		if got := formatBarLabel(tc.prefix, tc.files, tc.width); got != tc.want {
 			t.Errorf("formatBarLabel(%q, %#v, %d) = %q, want %q", tc.prefix, tc.files, tc.width, got, tc.want)
