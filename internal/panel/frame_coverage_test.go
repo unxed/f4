@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"github.com/unxed/f4/internal/cmdline"
+	"github.com/unxed/f4/internal/config"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +14,83 @@ import (
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
+
+func TestPanelsFrameMenusAndNavigationContracts(t *testing.T) {
+	oldConfig := config.App
+	defer func() { config.App = oldConfig }()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pf := &PanelsFrame{ActiveIdx: 0, ShowPanels: true}
+	if left, right := pf.LeftMenu(), pf.RightMenu(); len(left.SubItems) < 10 || len(right.SubItems) < 10 {
+		t.Fatalf("ordinary side menus are too short: left=%d right=%d", len(left.SubItems), len(right.SubItems))
+	}
+	pf.Panels[0] = &FileSystemPanel{Vfs: &mockTitleVFS{OSVFS: *vfs.NewOSVFS(t.TempDir()), title: "ai"}}
+	pf.Panels[1] = &FileSystemPanel{Vfs: &mockTitleVFS{OSVFS: *vfs.NewOSVFS(t.TempDir()), title: "ai"}}
+	if left, right := pf.LeftMenu(), pf.RightMenu(); len(left.SubItems) != 12 || len(right.SubItems) != 6 {
+		t.Fatalf("AI side menus changed shape: left=%d right=%d", len(left.SubItems), len(right.SubItems))
+	}
+	pf.ShowPanels = false
+	_ = pf.BuildMenuItems()
+	pf.MenuBar = vtui.NewMenuBar(nil)
+	if pf.GetMenuBar() == nil {
+		t.Fatal("GetMenuBar returned nil for an initialized bar")
+	}
+	pf.MenuBar = nil
+	if pf.GetMenuBar() != nil {
+		t.Fatal("GetMenuBar returned a bar for a frame without one")
+	}
+
+	regular := &PanelsFrame{ActiveIdx: 0, ShowPanels: true}
+	regular.Panels[0] = &FileSystemPanel{ViewMode: ViewModeDetailed, SortMode: SortSize, UseSortGroups: true}
+	regular.Panels[1] = &FileSystemPanel{ViewMode: ViewModeBrief, SortMode: SortExt}
+	regular.MenuBar = vtui.NewMenuBar(nil)
+	regular.MenuBar.Items = make([]vtui.MenuBarItem, 5)
+	for i := range regular.MenuBar.Items {
+		regular.MenuBar.Items[i].SubItems = make([]vtui.MenuItem, 11)
+	}
+	regular.Wide = true
+	regular.WidePanel = 0
+	regular.UpdateMenuCheckmarks()
+	if !strings.HasPrefix(regular.MenuBar.Items[0].SubItems[3].Text, "√") || !strings.HasPrefix(regular.MenuBar.Items[4].SubItems[0].Text, "√") {
+		t.Fatalf("wide mode checkmarks not updated: left=%q right=%q", regular.MenuBar.Items[0].SubItems[3].Text, regular.MenuBar.Items[4].SubItems[0].Text)
+	}
+	regular.MenuBar.Items = make([]vtui.MenuBarItem, 4)
+	regular.UpdateMenuCheckmarks()
+
+	pf = &PanelsFrame{
+		ActiveIdx: 1,
+		CmdLine:   cmdline.NewCommandLine(">"),
+		Panels:    [2]Panel{&mouseCaptureTestPanel{}, &mouseCaptureTestPanel{}},
+	}
+	config.App.NavigationMode = config.NavigationSearchFirst
+	pf.SetCommandLineFocus(true)
+	if !pf.CommandLineFocused || pf.Panels[1].IsFocused() {
+		t.Fatal("search-first command focus was not applied")
+	}
+	pf.SetCommandLineFocus(false)
+	if pf.CommandLineFocused || !pf.Panels[1].IsFocused() {
+		t.Fatal("search-first panel focus was not restored")
+	}
+	config.App.NavigationMode = config.NavigationClassic
+	pf.ApplyNavigationMode()
+	if pf.CommandLineFocused || !pf.Panels[1].IsFocused() {
+		t.Fatal("classic navigation focus was not applied")
+	}
+
+	filePanel := &FileSystemPanel{
+		Vfs:       vfs.NewOSVFS(t.TempDir()),
+		Entries:   []*FileEntry{{VFSItem: vfs.VFSItem{Name: "two words.txt"}}},
+		CursorIdx: 0,
+	}
+	pf = &PanelsFrame{ActiveIdx: 0, CmdLine: cmdline.NewCommandLine(">"), Panels: [2]Panel{filePanel}}
+	if !pf.InsertSelectedFileName() || pf.CmdLine.Edit.GetText() == "" {
+		t.Fatal("selected file name was not inserted")
+	}
+	filePanel.Entries[0].Name = ""
+	if pf.InsertSelectedFileName() {
+		t.Fatal("empty selected file name was inserted")
+	}
+}
 
 func TestPanelsFrameDeterministicHelpers(t *testing.T) {
 	if got := getMenuText(ViewModeBrief, ViewModeBrief, "Brief"); got != "√Brief" {
