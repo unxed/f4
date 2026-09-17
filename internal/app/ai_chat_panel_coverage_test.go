@@ -170,7 +170,7 @@ func TestAIChatPanelFormattingAndSessionSelectionContracts(t *testing.T) {
 		width  int
 		want   string
 	}{
-		{"x", nil, 5, "x"},
+		{"x", nil, 6, "x"},
 		{"prefix", []string{"file"}, 5, ""},
 		{"x", []string{"long-name"}, 3, ""},
 		{"x ", []string{"a", "b"}, 8, "x a, b "},
