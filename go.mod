@@ -38,11 +38,11 @@ require (
 	github.com/unxed/libwinescape v0.1.5
 	github.com/unxed/localecp v0.1.6
 	github.com/unxed/sevenzip v0.0.0-20260826171606-a536eac9d163
-	github.com/unxed/tar v0.1.131
+	github.com/unxed/tar v0.1.132
 	github.com/unxed/vtinput v0.1.8
-	github.com/unxed/vtui v0.1.355
+	github.com/unxed/vtui v0.1.356
 	github.com/unxed/zip v0.1.139
-	github.com/unxed/zipper v0.1.163
+	github.com/unxed/zipper v0.1.164
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/woozymasta/png v1.2.0
 	github.com/yuin/gopher-lua v1.1.1

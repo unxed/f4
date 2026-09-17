@@ -72,7 +72,11 @@ func (c *SudoClient) Connect() error {
 
 	cmd := exec.Command("sudo", "-A", c.appPath, "--sudo-dispatcher", c.sockPath)
 
-	env := os.Environ()
+	// Not os.Environ(): both children started here -- the dispatcher sudo
+	// runs and the askpass helper sudo runs SUDO_ASKPASS for -- are this same
+	// binary, and a universal build must not hand them its own "already came
+	// through the loader" guard. See childEnv.
+	env := childEnv()
 	absApp, _ := filepath.Abs(c.appPath)
 	env = append(env, "SUDO_ASKPASS="+absApp)
 	env = append(env, fmt.Sprintf("F4_ASKPASS_PARENT=%d", os.Getpid()))
