@@ -1,7 +1,6 @@
 package editor
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/unxed/f4/internal/piecetable"
@@ -58,7 +57,7 @@ func TestEditorSemanticModelAndActions(t *testing.T) {
 	if !ev.HandleSemanticAction(map[string]any{"target": target, "action": "editor.setText", "text": "changed"}) || ev.GetText() != "changed" {
 		t.Fatalf("setText action failed: %q", ev.GetText())
 	}
-	if !ev.HandleSemanticAction(map[string]any{"target": target, "action": "editor.insertText", "text": "!"}) || !strings.HasSuffix(ev.GetText(), "!") {
+	if !ev.HandleSemanticAction(map[string]any{"target": target, "action": "editor.insertText", "text": "!"}) || ev.GetText() != "!changed" {
 		t.Fatalf("insertText action failed: %q", ev.GetText())
 	}
 	if ev.HandleSemanticAction(map[string]any{"target": target, "action": "unknown"}) {
