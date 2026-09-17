@@ -64,7 +64,7 @@ func TestSearchMatchUsesWholeWordAndReverseLiteral(t *testing.T) {
 	if got, length, err := SearchMatch(context.Background(), b, "alpha", 0, SearchOptions{WholeWord: true}, nil); err != nil || got != 9 || length != 5 {
 		t.Fatalf("whole-word search = %d, %d, %v", got, length, err)
 	}
-	if got, length, err := SearchMatch(context.Background(), b, "alpha", int64(len("alphabet alpha ALPHA")), SearchOptions{Reverse: true, CaseSensitive: true}, nil); err != nil || got != 15 || length != 5 {
+	if got, length, err := SearchMatch(context.Background(), b, "alpha", int64(len("alphabet alpha ALPHA")), SearchOptions{Reverse: true, CaseSensitive: true}, nil); err != nil || got != 9 || length != 5 {
 		t.Fatalf("reverse literal search = %d, %d, %v", got, length, err)
 	}
 }

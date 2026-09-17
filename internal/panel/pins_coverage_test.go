@@ -18,7 +18,7 @@ func TestFolderPinsSlotHelpersAndSave(t *testing.T) {
 	if got := p.SlotAt(-1); got != "" {
 		t.Fatalf("negative slot = %q", got)
 	}
-	if got := p.SlotAt(0); got != filepath.Join(root, "one") {
+	if got := filepath.Clean(p.SlotAt(0)); got != filepath.Clean(filepath.Join(root, "one")) {
 		t.Fatalf("expanded slot = %q", got)
 	}
 	if p.SlotOf(filepath.Join(root, "one")) != 0 || p.SlotOf("") != -1 || p.SlotOf(filepath.Join(root, "missing")) != -1 {
