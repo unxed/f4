@@ -12,7 +12,7 @@ func TestVtvibeCommandsCoverHelpAndEmptyDraftPaths(t *testing.T) {
 	t.Cleanup(testutil.SwapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	pf := &panel.PanelsFrame{}
-	t.Cleanup(testutil.SetFrameManagerScreens(t, []*vtui.AppScreen{{Number: 1, Frames: []vtui.Frame{pf}}}, 0))
+	vtui.FrameManager.Push(pf)
 
 	aiSession().ClearDraft()
 	for _, command := range []string{"help", "?", ""} {
