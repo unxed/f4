@@ -40,7 +40,9 @@ Panel.UserMenu
 Panel.FileAssociations
 File.Find
 File.FindDuplicates
-Panel.CompareFolders`nPanel.SyncDirs`nFile.RunRemoteCommand
+Panel.CompareFolders
+Panel.SyncDirs
+File.RunRemoteCommand
 Panel.BackgroundJobs
 Panel.Bookmarks
 Panel.PluginMenu
