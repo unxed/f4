@@ -24,6 +24,7 @@ func TestViewerFrameMetadataModesAndNavigation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	backend := &ViewerBackend{
 		File:       &vfs.MemoryReadAtCloser{Data: data},
+		cacheData:  data,
 		size:       int64(len(data)),
 		ctx:        ctx,
 		cancelCtx:  cancel,

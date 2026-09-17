@@ -42,7 +42,7 @@ func TestImageSiblingPathsFollowTheActivePanel(t *testing.T) {
 			{VFSItem: vfs.VFSItem{Name: "second.jpg"}},
 		},
 	}
-	fsp.SetCursorIndex(3)
+	fsp.CursorIdx = 3
 	pf := &panel.PanelsFrame{Panels: [2]panel.Panel{fsp, nil}, ActiveIdx: 0}
 
 	got, index := imageSiblingPaths(pf, fs, filepath.Join(dir, "second.jpg"))
