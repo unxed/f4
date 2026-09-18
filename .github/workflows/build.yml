@@ -1064,7 +1064,10 @@ jobs:
         # Pull requests test only the packages their diff reaches through
         # the import graph (see the affected-packages action); pushes, tags
         # and manual runs always test everything.
-        if [ "$AFFECTED" = "all" ]; then
+        # Coverage uploads must exercise the complete module. A profile made
+        # from affected packages only records zeroes for every carried-forward
+        # package and makes the project percentage look like a regression.
+        if [ "$AFFECTED" = "all" ] || [ -n "$COVER" ]; then
           targets=(./...)
         elif [ -z "$AFFECTED" ]; then
           echo "No packages affected by this diff; skipping tests."
