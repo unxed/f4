@@ -67,8 +67,12 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	inConsoleView := !pf.ShowPanels && pf.ShellMode == terminal.ShellModeSimpleInline &&
 		pf.consoleStyle() == terminal.ConsoleViewFar
 
+	terminal.LogConsoleState("before-suspend")
 	vtui.Suspend()
-	_ = cmd.Run()
+	terminal.LogConsoleState("after-suspend")
+	runErr := cmd.Run()
+	vtui.DebugLog("EXECDIAG[run] shell=%q command=%q err=%v", shell, command, runErr)
+	terminal.LogConsoleState("after-child")
 
 	// The child may have printed past the bottom row of the console window.
 	// Windows scrolls the window to follow the cursor as that happens;
