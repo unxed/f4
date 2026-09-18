@@ -1663,6 +1663,8 @@ func TestActionPanelSettings_Flow(t *testing.T) {
 }
 
 func TestActionPanelSettings_FitsSmallTerminal(t *testing.T) {
+	// Layout assertions must not inherit frames or screen state from shuffled tests.
+	t.Cleanup(paneltest.SwapFrameManager(t))
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	theme.SetDefaultF4Palette()
 
