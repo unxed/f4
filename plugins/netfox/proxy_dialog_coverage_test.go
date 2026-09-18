@@ -86,7 +86,7 @@ func TestShowProxyDialogCommitsTrimmedFields(t *testing.T) {
 	if !ok {
 		t.Fatalf("showProxyDialog top frame = %T, want *vtui.Window", vtui.FrameManager.GetTopFrame())
 	}
-	testutil.ClickDialogButton(t, dlg, vtui.Msg("vtui.Ok"))
+	testutil.ClickDialogButton(t, dlg, "Ok")
 
 	if cfg.ProxyHost != "proxy.example" || cfg.ProxyPort != "8080" {
 		t.Fatalf("proxy fields = (%q, %q), want trimmed values", cfg.ProxyHost, cfg.ProxyPort)
