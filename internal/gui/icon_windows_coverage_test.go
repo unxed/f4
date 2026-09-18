@@ -28,7 +28,7 @@ func TestIconScaleIconSize(t *testing.T) {
 	}
 }
 
-func TestIconSizesForDPI(t *testing.T) {
+func TestIconSizesForDPIExtended(t *testing.T) {
 	for _, tc := range []struct {
 		dpi       uint32
 		wantSmall int
@@ -46,7 +46,7 @@ func TestIconSizesForDPI(t *testing.T) {
 	}
 }
 
-func TestWindowsThemeFromRegistry(t *testing.T) {
+func TestWindowsThemeFromRegistryExtended(t *testing.T) {
 	for _, tc := range []struct {
 		value uint64
 		want  windowsTheme
