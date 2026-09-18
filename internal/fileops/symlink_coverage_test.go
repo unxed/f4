@@ -3,6 +3,7 @@ package fileops
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/unxed/f4/vfs"
@@ -37,7 +38,7 @@ func (v *symlinkCoverageVFS) Symlink(_ context.Context, target, linkPath string)
 
 func newSymlinkCoverageVFS(t *testing.T) *symlinkCoverageVFS {
 	t.Helper()
-	return &symlinkCoverageVFS{VFS: vfs.NewOSVFS(t.TempDir()), readlink: "target.txt"}
+	return &symlinkCoverageVFS{VFS: vfs.NewOSVFS(t.TempDir()), lstatErr: os.ErrNotExist, readlink: "target.txt"}
 }
 
 func TestCopySymlinkAsLinkRequiresSourceLinks(t *testing.T) {
@@ -97,6 +98,7 @@ func TestCopySymlinkAsLinkRejectsDirectoryDestination(t *testing.T) {
 	src := newSymlinkCoverageVFS(t)
 	dst := newSymlinkCoverageVFS(t)
 	dst.lstatItem = vfs.VFSItem{IsDir: true}
+	dst.lstatErr = nil
 
 	handled, err := copySymlinkAsLink(context.Background(), src, "source", dst, "dest", &FileOpState{}, vfs.VFSItem{})
 	if !handled || err == nil {
@@ -108,6 +110,7 @@ func TestCopySymlinkAsLinkSkipsWithSkipAll(t *testing.T) {
 	src := newSymlinkCoverageVFS(t)
 	dst := newSymlinkCoverageVFS(t)
 	dst.lstatItem = vfs.VFSItem{Name: "existing"}
+	dst.lstatErr = nil
 	state := &FileOpState{SkipAll: true}
 
 	handled, err := copySymlinkAsLink(context.Background(), src, "source", dst, "dest", state, vfs.VFSItem{})
@@ -120,6 +123,7 @@ func TestCopySymlinkAsLinkIgnoresRemoveFailure(t *testing.T) {
 	src := newSymlinkCoverageVFS(t)
 	dst := newSymlinkCoverageVFS(t)
 	dst.lstatItem = vfs.VFSItem{Name: "existing"}
+	dst.lstatErr = nil
 	dst.removeErr = errors.New("remove failed")
 
 	handled, err := copySymlinkAsLink(context.Background(), src, "source", dst, "dest", &FileOpState{OverwriteAll: true, IgnoreWriteErrors: true}, vfs.VFSItem{})
