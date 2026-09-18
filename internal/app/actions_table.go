@@ -1433,6 +1433,18 @@ func init() {
 		Handler:             withPF(func(pf *panel.PanelsFrame) { vtui.FrameManager.EmitCommand(appcmd.CmUpdateSettings, nil) }),
 	})
 	registerAction(action.Action{
+		Name:        "Settings.CheckUpdates",
+		Area:        "Shell",
+		Label:       "Check for Updates",
+		LabelKey:    "Menu.CheckUpdates",
+		Description: "Check for a new f4 release now and offer to install it",
+		DescKey:     "Action.Settings.CheckUpdates.Desc",
+		MenuPath:    "Options",
+		// The check waits for GitHub, so it must not hold the UI loop; it
+		// posts its result back through FrameManager when it completes.
+		Handler: withPF(func(pf *panel.PanelsFrame) { go CheckForUpdates(pf, true) }),
+	})
+	registerAction(action.Action{
 		Name:        "Settings.Proxy",
 		Area:        "Shell",
 		Label:       "Proxy Settings",

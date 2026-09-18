@@ -122,6 +122,7 @@ var actionMenuOrder = []string{
 	"Settings.PathHints",
 	"Settings.Hotkeys",
 	"Settings.AutoUpdate",
+	"Settings.CheckUpdates",
 	"Settings.Proxy",
 	"Settings.PluginConfiguration",
 	"Settings.Plugins",

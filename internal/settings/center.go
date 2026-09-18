@@ -1339,6 +1339,12 @@ func (c *settingsCenter) runBackground(worker func(context.Context) error, done 
 		})
 	})
 }
+
+// AllowsProgressOverlay lets an operation started from the settings (an update
+// download, a plugin install) show its progress screen over this window
+// instead of waiting for it to close.
+func (c *settingsCenter) AllowsProgressOverlay() bool { return true }
+
 func (c *settingsCenter) Close() {
 	if c.running != nil {
 		c.closePending = true

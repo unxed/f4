@@ -3964,8 +3964,21 @@ func (pf *PanelsFrame) RunProgressTask(title, startMsg string, forked bool, work
 // active screen, so a progress screen must not be placed over it.
 func progressBlockedByModal(frames interface{ GetTopFrame() vtui.Frame }) bool {
 	top := frames.GetTopFrame()
-	return top != nil && top.IsModal()
+	if top == nil || !top.IsModal() {
+		return false
+	}
+	// A modal that never waits on the worker (the Settings Center starting
+	// an update from its "Check now") lets the progress screen appear over
+	// it; otherwise the download would run unseen until that modal closed.
+	if host, ok := top.(progressOverlayHost); ok && host.AllowsProgressOverlay() {
+		return false
+	}
+	return true
 }
+
+// progressOverlayHost is implemented by a modal frame that can safely sit
+// behind a progress screen.
+type progressOverlayHost interface{ AllowsProgressOverlay() bool }
 
 func (pf *PanelsFrame) RunProgressTaskAfter(delay time.Duration, title, startMsg string, forked bool, worker func(ctx context.Context, update func(msg string, percent int)) error, onComplete func(err error)) {
 	dlg := vtui.NewCenteredDialog(50, 12, title)
