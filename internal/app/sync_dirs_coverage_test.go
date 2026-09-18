@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,11 +22,10 @@ func TestSyncPathAndNames(t *testing.T) {
 	if syncPathLine("Right", "folder", 20) != "Right folder" {
 		t.Fatal("wide path line changed the path")
 	}
-	if syncBaseName("one/two.txt") != "two.txt" || syncBaseName("single") != "single" {
-		t.Fatal("syncBaseName() is wrong")
-	}
-	if syncRelDir("one/two.txt") != "one" || syncRelDir("single") != "" {
-		t.Fatal("syncRelDir() is wrong")
+	fs := vfs.NewOSVFS(t.TempDir())
+	root := fs.GetPath()
+	if got := syncSidePath(fs, root, "one//two.txt"); got != filepath.Join(root, "one", "two.txt") {
+		t.Fatalf("syncSidePath() = %q", got)
 	}
 }
 
@@ -101,20 +99,13 @@ func TestSyncRowsFormatBothSides(t *testing.T) {
 	}
 }
 
-func TestSyncJoinAndEnsureDirCreateNestedFolders(t *testing.T) {
+func TestSyncSidePathSkipsEmptyComponents(t *testing.T) {
 	fs := vfs.NewOSVFS(t.TempDir())
 	root := fs.GetPath()
-	if got := syncJoin(fs, root, "a//b/file.txt"); got != filepath.Join(root, "a", "b", "file.txt") {
-		t.Fatalf("syncJoin() = %q", got)
-	}
-	if err := syncEnsureDir(context.Background(), fs, root, "a//b"); err != nil {
-		t.Fatal(err)
-	}
-	if item, err := fs.Stat(context.Background(), filepath.Join(root, "a", "b")); err != nil || !item.IsDir {
-		t.Fatalf("nested directory stat = %#v, %v", item, err)
-	}
-	if err := syncEnsureDir(context.Background(), fs, root, ""); err != nil {
-		t.Fatal(err)
+	for _, rel := range []string{"/a/b", "a//b/", "a///b"} {
+		if got := syncSidePath(fs, root, rel); got != filepath.Join(root, "a", "b") {
+			t.Errorf("syncSidePath(%q) = %q", rel, got)
+		}
 	}
 }
 
