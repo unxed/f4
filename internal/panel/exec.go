@@ -70,6 +70,16 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	vtui.Suspend()
 	_ = cmd.Run()
 
+	// The child may have printed past the bottom row of the console window.
+	// Windows scrolls the window to follow the cursor as that happens;
+	// ReactOS 0.4.16 does not, so the output ends up in buffer rows below
+	// the visible window and the screen keeps showing what was there before
+	// -- measured on the live system, see WINE.md and issue #513. Do it for
+	// the console before anything reads it: captureHostConsoleBuffer below
+	// snapshots the rectangle at srWindow.Top, so a stale window means a
+	// stale snapshot on the next Ctrl+O round-trip too.
+	terminal.ScrollHostConsoleToCursor()
+
 	if inConsoleView {
 		// The child just wrote its own output starting wherever the cursor
 		// happened to be: clearConsoleOverlay() above parks it at
