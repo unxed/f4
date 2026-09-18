@@ -68,14 +68,15 @@ func TestSyncGroupsAndTokens(t *testing.T) {
 		}
 	}
 	for _, tt := range []struct {
-		a    fileops.SyncAction
-		want string
+		a     fileops.SyncAction
+		state fileops.SyncState
+		want  string
 	}{
-		{fileops.SyncCopyToRight, syncTokenToRight}, {fileops.SyncCopyToLeft, syncTokenToLeft},
-		{fileops.SyncDeleteRight, syncTokenDeleteRight}, {fileops.SyncDeleteLeft, syncTokenDeleteLeft},
-		{fileops.SyncSkip, syncTokenSkip},
+		{fileops.SyncCopyToRight, fileops.SyncState(99), syncTokenToRight}, {fileops.SyncCopyToLeft, fileops.SyncState(99), syncTokenToLeft},
+		{fileops.SyncDeleteRight, fileops.SyncState(99), syncTokenDeleteRight}, {fileops.SyncDeleteLeft, fileops.SyncState(99), syncTokenDeleteLeft},
+		{fileops.SyncSkip, fileops.SyncState(99), syncTokenSkip},
 	} {
-		if got := syncActionToken(fileops.SyncPair{Action: tt.a}); got != tt.want {
+		if got := syncActionToken(fileops.SyncPair{Action: tt.a, State: tt.state}); got != tt.want {
 			t.Errorf("syncActionToken(%d) = %q, want %q", tt.a, got, tt.want)
 		}
 	}
