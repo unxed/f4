@@ -30,9 +30,9 @@ func TestIconScaleIconSize(t *testing.T) {
 
 func TestIconSizesForDPI(t *testing.T) {
 	for _, tc := range []struct {
-		dpi        uint32
-		wantSmall  int
-		wantBig    int
+		dpi       uint32
+		wantSmall int
+		wantBig   int
 	}{
 		{dpi: 0, wantSmall: 16, wantBig: 24},
 		{dpi: 96, wantSmall: 16, wantBig: 24},
@@ -123,4 +123,3 @@ func TestIconConsoleAppearanceManagerStops(t *testing.T) {
 	stop()
 	stop()
 }
-
