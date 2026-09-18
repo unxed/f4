@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,16 @@ import (
 	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtui"
 )
+
+// shellCommandFlag is the flag that makes the platform's shell run a single
+// command string: the same one exec.Command is given a few lines above, kept
+// in one place so the two spawn paths cannot drift apart.
+func shellCommandFlag() string {
+	if runtime.GOOS == "windows" {
+		return "/c"
+	}
+	return "-c"
+}
 
 // waitForAnyKey reads a single keystroke immediately using _getch on Windows/Wine or stdin read on Unix.
 var WaitForAnyKey = func() {
@@ -70,7 +81,18 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	terminal.LogConsoleState("before-suspend")
 	vtui.Suspend()
 	terminal.LogConsoleState("after-suspend")
-	runErr := cmd.Run()
+
+	// Start the child the way cmd.exe starts a program -- inheriting the
+	// console itself, with no explicit standard handles -- rather than the
+	// way os/exec does. On ReactOS the explicit handles arrive in the child
+	// invalid and every byte it writes is refused, which is issue #513's
+	// invisible output (and its unresponsive "pause"); see
+	// terminal/console_spawn_windows.go and WINE.md §17.3e. Everywhere else
+	// this path declines and the os/exec call below runs exactly as before.
+	runErr := terminal.RunOnHostConsole(dir, shell, shellCommandFlag(), command)
+	if errors.Is(runErr, terminal.ErrConsoleSpawnUnavailable) {
+		runErr = cmd.Run()
+	}
 	vtui.DebugLog("EXECDIAG[run] shell=%q command=%q err=%v", shell, command, runErr)
 	terminal.LogConsoleState("after-child")
 
