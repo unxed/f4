@@ -17,7 +17,7 @@ type symlinkCoverageVFS struct {
 	removeErr   error
 	symlinkErr  error
 	linkedTo    string
-	linkedPath string
+	linkedPath  string
 }
 
 func (v *symlinkCoverageVFS) Lstat(context.Context, string) (vfs.VFSItem, error) {
