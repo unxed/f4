@@ -806,8 +806,8 @@ jobs:
         set -euo pipefail
         while IFS= read -r cell; do
           TARGET=$(jq -r '.target' <<<"$cell")
-          GCFLAGS=$(jq -r '.gcflags // ""' <<<"$cell")
-          TAGS=$(jq -r '.tags // ""' <<<"$cell")
+          GCFLAGS=$(jq -r 'if .gcflags then .gcflags else "" end' <<<"$cell")
+          TAGS=$(jq -r 'if .tags then .tags else "" end' <<<"$cell")
 
           # An array, so the empty GCFLAGS of most cells contributes no argument
           # rather than an empty one.
