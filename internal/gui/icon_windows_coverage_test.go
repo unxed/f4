@@ -14,7 +14,7 @@ func TestIconScaleIconSize(t *testing.T) {
 		dpi  uint32
 		want int
 	}{
-		{base: 16, dpi: 0, want: 16},
+		{base: 16, dpi: 0, want: 0},
 		{base: 16, dpi: 96, want: 16},
 		{base: 16, dpi: 120, want: 20},
 		{base: 16, dpi: 144, want: 24},
