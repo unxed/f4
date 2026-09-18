@@ -64,6 +64,7 @@ func TestAllDialogs_LayoutValidation(t *testing.T) {
 		"app.quit":                         true,
 		"panel.systemexplorer":             true,
 		"app.togglewindowsize":             true,
+		"settings.checkupdates":            true, // network check, no dialog of its own
 		"panel.rescan":                     true, // no dialog
 		"panel.swap":                       true, // no dialog
 		"panel.toggle":                     true, // no dialog
