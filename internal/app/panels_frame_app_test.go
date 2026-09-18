@@ -528,9 +528,15 @@ func TestPanelsFrame_CtrlViewModes(t *testing.T) {
 }
 
 func TestPanelsFrame_KeyHandling(t *testing.T) {
+	// Keep global hotkey conditions from observing a frame left by another shuffled test.
+	// The action's NoTerminalApp condition must inspect this test's panel.
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
 	pf := panel.NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
 
 	// 1. Test Tab to switch active panel
 	if pf.ActiveIdx != 1 {
