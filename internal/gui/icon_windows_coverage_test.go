@@ -95,7 +95,7 @@ func TestIconLoadingInvalidWindow(t *testing.T) {
 }
 
 func TestIconFindGogpuWindowWithoutGogpu(t *testing.T) {
-	if got := findGogpuWindow(os.Getpid()); got != 0 {
+	if got := findGogpuWindow(uint32(os.Getpid())); got != 0 {
 		t.Fatalf("findGogpuWindow(current process) = %#x, want no GoGPU window", got)
 	}
 }
