@@ -137,22 +137,44 @@ func TestIssue816_WrongPasswordRepromptsUntilCorrect(t *testing.T) {
 		for _, withProgress := range []bool{false, true} {
 			name := fmt.Sprintf("%s/progress=%v", kind, withProgress)
 			t.Run(name, func(t *testing.T) {
-				p := issue816EncryptedFixture(t, kind)
+				// ZipCrypto checks a password with one byte, so a wrong one
+				// gets through in 1 of 256 archives: the data then decrypts to
+				// noise and fails its checksum at the end of the read, with
+				// the same "zip: incorrect password" that a wrong password
+				// gives, but too late to ask again. That is the format, not
+				// the application (it failed once on main, in
+				// zip/progress=false). The header that decides it is random
+				// per archive, so try a fresh one; a real fault fails every
+				// attempt.
+				const attempts = 4
+				for attempt := 1; ; attempt++ {
+					p := issue816EncryptedFixture(t, kind)
+					collision := func(res string) bool {
+						return kind == "zip" && res == "read: zip: incorrect password" && attempt < attempts
+					}
 
-				res, prompts := runIssue816Scenario(t, p, []any{"Wrong", "", "Wrong2", "Correct"}, withProgress)
-				if res != `data="secret data"` {
-					t.Fatalf("wrong then correct: got %s", res)
-				}
-				if prompts != 4 {
-					t.Fatalf("wrong then correct: prompts = %d, want 4", prompts)
-				}
+					res, prompts := runIssue816Scenario(t, p, []any{"Wrong", "", "Wrong2", "Correct"}, withProgress)
+					if collision(res) {
+						continue
+					}
+					if res != `data="secret data"` {
+						t.Fatalf("wrong then correct: got %s", res)
+					}
+					if prompts != 4 {
+						t.Fatalf("wrong then correct: prompts = %d, want 4", prompts)
+					}
 
-				res, prompts = runIssue816Scenario(t, p, []any{"Wrong", context.Canceled}, withProgress)
-				if !strings.Contains(res, context.Canceled.Error()) {
-					t.Fatalf("wrong then cancel: got %s", res)
-				}
-				if prompts != 2 {
-					t.Fatalf("wrong then cancel: prompts = %d, want 2", prompts)
+					res, prompts = runIssue816Scenario(t, p, []any{"Wrong", context.Canceled}, withProgress)
+					if collision(res) {
+						continue
+					}
+					if !strings.Contains(res, context.Canceled.Error()) {
+						t.Fatalf("wrong then cancel: got %s", res)
+					}
+					if prompts != 2 {
+						t.Fatalf("wrong then cancel: prompts = %d, want 2", prompts)
+					}
+					return
 				}
 			})
 		}
