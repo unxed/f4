@@ -96,8 +96,14 @@ func Start(dir string, limit time.Duration) string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return ""
 	}
+	// dumpDir and logPath belong to mu: a watcher started by an earlier call is
+	// still reading them when this one rewrites them, and did so unlocked
+	// (a data race seen on main in TestArmDiagnostics_*).
+	path := filepath.Join(dir, "stall-watchdog.log")
+	mu.Lock()
 	dumpDir = dir
-	logPath = filepath.Join(dir, "stall-watchdog.log")
+	logPath = path
+	mu.Unlock()
 	threshold.Store(int64(limit))
 
 	// Written before anything else can go wrong, so that the file's existence
@@ -115,15 +121,17 @@ func Start(dir string, limit time.Duration) string {
 	reported.Store(false)
 	gapReported.Store(false)
 	logf("armed at %s, limit %v, pid %d", time.Now().Format(time.RFC3339), limit, os.Getpid())
-	if _, err := os.Stat(logPath); err != nil {
+	if _, err := os.Stat(path); err != nil {
+		mu.Lock()
 		dumpDir, logPath = "", ""
+		mu.Unlock()
 		threshold.Store(0)
 		return ""
 	}
 
 	enabled.Store(true)
 	go watch()
-	return logPath
+	return path
 }
 
 // Enabled reports whether the watchdog is armed.

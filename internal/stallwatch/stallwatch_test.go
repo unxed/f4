@@ -196,3 +196,19 @@ func TestDump_StopsAtMaxDumps(t *testing.T) {
 		t.Errorf("wrote %d dumps, want the cap of %d", got, MaxDumps)
 	}
 }
+
+// Start rewrites the directory and the log path while a watcher from an
+// earlier Start may be dumping to them. Under -race this failed on main as a
+// read in dump against a write in Start.
+func TestStart_RestartingWhileAWatcherDumpsDoesNotRace(t *testing.T) {
+	t.Cleanup(func() { enabled.Store(false) })
+	for i := 0; i < 6; i++ {
+		if Start(t.TempDir(), 16*time.Millisecond) == "" {
+			t.Fatal("Start did not arm")
+		}
+		func() {
+			defer Frame("test.restart")()
+			time.Sleep(50 * time.Millisecond)
+		}()
+	}
+}
