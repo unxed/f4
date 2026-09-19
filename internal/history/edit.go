@@ -27,10 +27,47 @@ func AttachHistory(edit *vtui.Edit, historyID string) *vtui.Edit {
 	edit.HistoryID = historyID
 	edit.ShowHistoryButton = true
 	edit.DeduplicateHistory = true
+	// These fields hold names, masks and search text. The completion menu's
+	// forgiveness of typos suits a shell command, not "*.d" offering "*.xls"
+	// (#1155); only the command line keeps it.
+	edit.StrictAutoComplete = true
 	if vtui.GlobalHistoryProvider != nil {
 		edit.History = vtui.GlobalHistoryProvider.LoadHistory(historyID)
 	}
 	return edit
+}
+
+// ClearKeepingPinned returns the Edit.ClearHistory hook of a field whose
+// history is rich (the command line): Del in its completion menu asks once
+// and clears every entry except the ones pinned with Insert in the Alt+F8
+// list, exactly as that list does (#1155).
+func ClearKeepingPinned(edit *vtui.Edit, historyID string) func(done func()) {
+	return func(done func()) {
+		buttons := []string{vtui.Msg("vtui.Ok"), vtui.Msg("vtui.Cancel")}
+		dlg := vtui.ShowMessage(vtui.Msg("vtui.History"), vtui.Msg("vtui.HistoryClearConfirm"), buttons)
+		dlg.OnResult = func(code int) {
+			if code != 0 {
+				return
+			}
+			hp, rich := vtui.GlobalHistoryProvider.(*F4HistoryProvider)
+			var kept []HistoryRecord
+			if rich {
+				for _, record := range hp.LoadRichHistory(historyID) {
+					if record.Lock {
+						kept = append(kept, record)
+					}
+				}
+			}
+			edit.History = ExtractHistoryNames(kept)
+			edit.HistoryPos = -1
+			if rich {
+				hp.SaveRichHistory(historyID, kept)
+			} else if vtui.GlobalHistoryProvider != nil {
+				vtui.GlobalHistoryProvider.SaveHistory(historyID, edit.History)
+			}
+			done()
+		}
+	}
 }
 
 // AttachHistoryUseLast is AttachHistory plus Far's DIF_USELASTHISTORY: when

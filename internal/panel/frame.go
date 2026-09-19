@@ -406,6 +406,7 @@ func NewPanelsFrame() *PanelsFrame {
 		pf.CmdLine.SetFocus(false)
 	}
 	pf.CmdLine.Edit.HistoryID = "cmdline"
+	pf.CmdLine.Edit.ClearHistory = history.ClearKeepingPinned(pf.CmdLine.Edit, "cmdline")
 	if vtui.GlobalHistoryProvider != nil {
 		pf.CmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
 	}
