@@ -78,9 +78,7 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	inConsoleView := !pf.ShowPanels && pf.ShellMode == terminal.ShellModeSimpleInline &&
 		pf.consoleStyle() == terminal.ConsoleViewFar
 
-	terminal.LogConsoleState("before-suspend")
 	vtui.Suspend()
-	terminal.LogConsoleState("after-suspend")
 
 	// Start the child the way cmd.exe starts a program -- inheriting the
 	// console itself, with no explicit standard handles -- rather than the
@@ -93,8 +91,7 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	if errors.Is(runErr, terminal.ErrConsoleSpawnUnavailable) {
 		runErr = cmd.Run()
 	}
-	vtui.DebugLog("EXECDIAG[run] shell=%q command=%q err=%v", shell, command, runErr)
-	terminal.LogConsoleState("after-child")
+	vtui.DebugLog("EXEC: shell=%q command=%q err=%v", shell, command, runErr)
 
 	// The child may have printed past the bottom row of the console window.
 	// Windows scrolls the window to follow the cursor as that happens;
