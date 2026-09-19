@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
+	"os"
 	"testing"
 	"time"
 
@@ -44,6 +45,61 @@ func TestSimpleInline_CommandExecution(t *testing.T) {
 		default:
 			time.Sleep(5 * time.Millisecond)
 		}
+	}
+}
+
+// On ReactOS the console window does not follow the cursor, so f4 moves it
+// itself (terminal.ScrollHostConsoleToCursor). It used to do that once, right
+// after the child -- and then print "Press any key to return to f4...", which
+// moved the cursor two more rows, below the window again. The user sat at the
+// prompt looking at a window stuck in the middle of the output, with neither
+// its end nor the prompt on screen (WINE.md §17.6). The window has to be
+// fitted after the prompt is printed, so at least one fit must see the
+// prompt already written.
+func TestSimpleInline_FitsConsoleWindowAfterThePrompt(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	theme.SetDefaultF4Palette()
+
+	pf := paneltest.SetupMockPanelsFrame(t)
+	defer pf.Close()
+	pf.ShellMode = terminal.ShellModeSimpleInline
+	pf.ResizeConsole(80, 25)
+
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+	oldStdout := os.Stdout
+	os.Stdout = out
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	oldWait := panel.WaitForAnyKey
+	panel.WaitForAnyKey = func() {}
+	t.Cleanup(func() { panel.WaitForAnyKey = oldWait })
+
+	fits, fitsAfterPrompt := 0, 0
+	oldFit := panel.FitConsoleWindow
+	panel.FitConsoleWindow = func() {
+		fits++
+		written, _ := os.ReadFile(out.Name())
+		if strings.Contains(string(written), "Press any key") {
+			fitsAfterPrompt++
+		}
+	}
+	t.Cleanup(func() { panel.FitConsoleWindow = oldFit })
+
+	pf.RunSimpleInlineCommand(t.TempDir(), "echo fit_after_prompt")
+
+	if fits == 0 {
+		t.Fatal("the console window was never fitted to the cursor")
+	}
+	if fitsAfterPrompt == 0 {
+		t.Fatalf("the console window was fitted %d time(s), all before the prompt was printed; "+
+			"the prompt then leaves the cursor below the window on ReactOS", fits)
 	}
 }
 

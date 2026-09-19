@@ -36,6 +36,12 @@ var WaitForAnyKey = func() {
 	_, _ = os.Stdin.Read(buf[:])
 }
 
+// FitConsoleWindow brings the host console's window down to the cursor after
+// output has been written to it (terminal.ScrollHostConsoleToCursor). It is a
+// variable, like WaitForAnyKey, so a test can see when it is called relative
+// to what has been printed.
+var FitConsoleWindow = terminal.ScrollHostConsoleToCursor
+
 func modMsvcrtProc() interface {
 	Call(...uintptr) (uintptr, uintptr, error)
 } {
@@ -101,7 +107,7 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	// the console before anything reads it: captureHostConsoleBuffer below
 	// snapshots the rectangle at srWindow.Top, so a stale window means a
 	// stale snapshot on the next Ctrl+O round-trip too.
-	terminal.ScrollHostConsoleToCursor()
+	FitConsoleWindow()
 
 	if inConsoleView {
 		// The child just wrote its own output starting wherever the cursor
@@ -149,6 +155,12 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	}
 
 	fmt.Print("\r\nPress any key to return to f4...")
+	// The prompt itself moved the cursor two rows further, past a window
+	// that the FitConsoleWindow call above fitted to the child's last line
+	// -- and ReactOS does not follow it there. Fit the window again, so the
+	// user waiting on this prompt sees the prompt and the end of the output
+	// above it, not a window stuck somewhere in the middle (WINE.md §17.6).
+	FitConsoleWindow()
 	WaitForAnyKey()
 
 	captureHostConsoleBuffer(pf.LastW, pf.LastH)

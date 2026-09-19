@@ -5,9 +5,15 @@ package terminal
 import (
 	"syscall"
 	"unsafe"
+
+	"github.com/unxed/vtui"
 )
 
-var procSetConsoleWindowInfoScroll = kernel32SimpleExec.NewProc("SetConsoleWindowInfo")
+var (
+	procSetConsoleWindowInfoScroll = kernel32SimpleExec.NewProc("SetConsoleWindowInfo")
+	procGetConsoleWindowScroll     = kernel32SimpleExec.NewProc("GetConsoleWindow")
+	procInvalidateRectScroll       = syscall.NewLazyDLL("user32.dll").NewProc("InvalidateRect")
+)
 
 // ScrollHostConsoleToCursor brings the host console's visible window down to
 // wherever the cursor ended up, when the console did not do it itself.
@@ -55,5 +61,36 @@ func ScrollHostConsoleToCursor() {
 		Bottom: want.Bottom,
 	}
 	// absolute = TRUE: rect is buffer coordinates, not a delta.
-	procSetConsoleWindowInfoScroll.Call(uintptr(hOut), 1, uintptr(unsafe.Pointer(&rect)))
+	r1, _, callErr := procSetConsoleWindowInfoScroll.Call(uintptr(hOut), 1, uintptr(unsafe.Pointer(&rect)))
+	// Only reached where the console left the cursor outside its window, which
+	// real Windows never does, so this line is quiet there and says exactly
+	// what happened where it matters.
+	vtui.DebugLog("CONSOLE: window T%d..B%d -> T%d..B%d for cursor row %d: ok=%v err=%v",
+		win.Top, win.Bottom, want.Top, want.Bottom, info.CursorPosition.Y, r1 != 0, callErr)
+	if r1 != 0 {
+		repaintConsoleWindow()
+	}
+}
+
+// repaintConsoleWindow asks the console window to paint itself again.
+//
+// Moving the window is not enough on ReactOS 0.4.16: SetConsoleWindowInfo
+// moves it -- GetConsoleScreenBufferInfo reads the new rectangle back, and
+// the next call starts from it -- but the console does not repaint, so the
+// screen keeps the pixels of wherever the window was before. Measured: the
+// log recorded T36..B60 -> T78..B102 and then T78..B102 -> T79..B103, both
+// accepted, while the screen still showed rows 36 to 60 (WINE.md §17.6).
+//
+// InvalidateRect only marks the window for painting; the WM_PAINT arrives
+// through the console host's own message loop in its own time. Nothing here
+// sends a message to the console window or waits for it -- the rule
+// internal/wincon keeps for the same window, for the reason written there.
+// A zero window handle is skipped on purpose: InvalidateRect(NULL, ...)
+// would repaint every window on the desktop.
+func repaintConsoleWindow() {
+	hwnd, _, _ := procGetConsoleWindowScroll.Call()
+	if hwnd == 0 {
+		return
+	}
+	procInvalidateRectScroll.Call(hwnd, 0, 1) // whole client area, erase background
 }
