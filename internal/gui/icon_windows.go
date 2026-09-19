@@ -70,28 +70,50 @@ func startWindowsWindowIconManager() func() {
 	pid := uint32(os.Getpid())
 	return startWindowsWindowAppearanceManager(func() uintptr {
 		return findGogpuWindow(pid)
-	})
+	}, false)
 }
 
+// StartWindowsConsoleWindowAppearanceManager does the same for the console
+// window f4 runs in. That window outlives f4 and belongs to the shell, so the
+// returned stop function also puts back the icons it found there (#1196).
 func StartWindowsConsoleWindowAppearanceManager() func() {
 	return startWindowsWindowAppearanceManager(func() uintptr {
 		hwnd, _, _ := procIconGetConsoleWindow.Call()
 		return hwnd
-	})
+	}, true)
 }
 
-func startWindowsWindowAppearanceManager(findWindow func() uintptr) func() {
+// iconRestoreTimeout bounds how long stopping the manager waits for the icons
+// to go back. The console window belongs to another process; if that process
+// is hung a stale icon is a lesser evil than an exit that never finishes.
+const iconRestoreTimeout = time.Second
+
+// startWindowsWindowAppearanceManager returns a stop function that ends the
+// manager. With restoreOnStop it also waits, for up to iconRestoreTimeout, for
+// the window's original icons to be put back.
+func startWindowsWindowAppearanceManager(findWindow func() uintptr, restoreOnStop bool) func() {
 	stop := make(chan struct{})
+	done := make(chan struct{})
 	var once sync.Once
 
-	go manageWindowsWindowAppearance(stop, findWindow)
+	go func() {
+		defer close(done)
+		manageWindowsWindowAppearance(stop, findWindow, restoreOnStop)
+	}()
 
 	return func() {
 		once.Do(func() { close(stop) })
+		if !restoreOnStop {
+			return
+		}
+		select {
+		case <-done:
+		case <-time.After(iconRestoreTimeout):
+		}
 	}
 }
 
-func manageWindowsWindowAppearance(stop <-chan struct{}, findWindow func() uintptr) {
+func manageWindowsWindowAppearance(stop <-chan struct{}, findWindow func() uintptr, restoreOnStop bool) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -99,6 +121,19 @@ func manageWindowsWindowAppearance(stop <-chan struct{}, findWindow func() uintp
 	var appliedDPI uint32
 	var appliedTheme windowsTheme
 	var nextThemeCheck time.Time
+	// The icons the window had before ours went on, taken from the first
+	// successful WM_SETICON only: later ones (a DPI change) would report our
+	// own icons as the originals.
+	var original previousIcons
+	var haveOriginal bool
+
+	if restoreOnStop {
+		defer func() {
+			if hwnd != 0 && haveOriginal && isWindow(hwnd) {
+				restoreWindowIcons(hwnd, original)
+			}
+		}()
+	}
 
 	for {
 		if hwnd == 0 || !isWindow(hwnd) {
@@ -106,12 +141,18 @@ func manageWindowsWindowAppearance(stop <-chan struct{}, findWindow func() uintp
 			appliedDPI = 0
 			appliedTheme = windowsThemeUnknown
 			nextThemeCheck = time.Time{}
+			haveOriginal = false
 			ticker.Reset(100 * time.Millisecond)
 		}
 		if hwnd != 0 {
 			dpi := windowDPI(hwnd)
-			if dpi != appliedDPI && applyWindowIcons(hwnd, dpi) {
-				appliedDPI = dpi
+			if dpi != appliedDPI {
+				if prev, ok := applyWindowIcons(hwnd, dpi); ok {
+					appliedDPI = dpi
+					if !haveOriginal {
+						original, haveOriginal = prev, true
+					}
+				}
 			}
 
 			now := time.Now()
@@ -236,17 +277,34 @@ func scaleIconSize(base int, dpi uint32) int {
 	return (base*int(dpi) + defaultDPI/2) / defaultDPI
 }
 
-func applyWindowIcons(hwnd uintptr, dpi uint32) bool {
+// previousIcons are the icon handles WM_SETICON reported as replaced. Zero
+// means the window had none of its own and showed its class icon.
+type previousIcons struct {
+	small, big uintptr
+}
+
+// applyWindowIcons gives the window the embedded icons and returns the ones it
+// had before.
+func applyWindowIcons(hwnd uintptr, dpi uint32) (previousIcons, bool) {
 	smallSize, taskbarSize := iconSizesForDPI(dpi)
 	small := loadIconResource(smallSize)
 	big := loadIconResource(taskbarSize)
 	if small == 0 || big == 0 {
-		return false
+		return previousIcons{}, false
 	}
 
-	procIconSendMessageW.Call(hwnd, wmSetIcon, iconSmall, small)
-	procIconSendMessageW.Call(hwnd, wmSetIcon, iconBig, big)
-	return true
+	var prev previousIcons
+	prev.small, _, _ = procIconSendMessageW.Call(hwnd, wmSetIcon, iconSmall, small)
+	prev.big, _, _ = procIconSendMessageW.Call(hwnd, wmSetIcon, iconBig, big)
+	return prev, true
+}
+
+// restoreWindowIcons hands the window its own icons back. A zero handle is sent
+// as it is: WM_SETICON with no icon makes the window fall back to its class
+// icon, which is what a window that never had one of its own shows.
+func restoreWindowIcons(hwnd uintptr, prev previousIcons) {
+	procIconSendMessageW.Call(hwnd, wmSetIcon, iconSmall, prev.small)
+	procIconSendMessageW.Call(hwnd, wmSetIcon, iconBig, prev.big)
 }
 
 func loadIconResource(size int) uintptr {

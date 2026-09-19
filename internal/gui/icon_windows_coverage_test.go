@@ -86,7 +86,7 @@ func TestIconThemeInvalidWindow(t *testing.T) {
 }
 
 func TestIconLoadingInvalidWindow(t *testing.T) {
-	if applyWindowIcons(0, 96) {
+	if _, ok := applyWindowIcons(0, 96); ok {
 		t.Fatal("applyWindowIcons accepted an invalid window")
 	}
 	if icon := loadIconResource(0); icon != 0 {
@@ -108,7 +108,7 @@ func TestIconAppearanceManagerStops(t *testing.T) {
 		default:
 		}
 		return 0
-	})
+	}, false)
 	select {
 	case <-called:
 	case <-time.After(time.Second):

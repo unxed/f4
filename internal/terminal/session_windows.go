@@ -34,6 +34,12 @@ func ManageSessions() {
 	stopWindowAppearanceManager := gui.StartWindowsConsoleWindowAppearanceManager()
 	defer stopWindowAppearanceManager()
 
+	// Before InitCore: vtui's Init already sends OSC 104, and the table to
+	// hand back is the one the console had before anything of ours ran. The
+	// deferred restore runs after vtui's own (PrepareTerminal's below).
+	restoreColorTable := keepConsoleColorTable()
+	defer restoreColorTable()
+
 	scr := App.InitCore()
 	PreferCompatibleGraphicsProtocol(scr)
 
