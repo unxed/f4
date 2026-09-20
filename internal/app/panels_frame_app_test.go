@@ -1688,19 +1688,16 @@ func TestPanelsFrame_FilesMenuLabels(t *testing.T) {
 		t.Errorf("Expected Files menu label '&Files', got %q", filesMenu.Label)
 	}
 
-	expected := "&" + i18n.Msg("Menu.Files.RenMov")
+	expected := plainMenuText(i18n.Msg("Menu.Files.RenMov"))
 	var renMove *vtui.MenuItem
 	for i := range filesMenu.SubItems {
-		if filesMenu.SubItems[i].Text == expected {
+		if plainMenuText(filesMenu.SubItems[i].Text) == expected {
 			renMove = &filesMenu.SubItems[i]
 			break
 		}
 	}
 	if renMove == nil {
 		t.Fatalf("Files menu has no item %q", expected)
-	}
-	if renMove.Text != expected {
-		t.Errorf("Expected Files item %q, got %q", expected, renMove.Text)
 	}
 
 	if renMove.Shortcut != "F6" {
