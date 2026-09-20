@@ -175,3 +175,42 @@ func TestAutoMarkerNeverSurvives(t *testing.T) {
 		t.Fatalf("got %q", items[0].Text)
 	}
 }
+
+// A menu of short words runs out of letters for the last item if every repeat
+// just takes the best free one. Here the third item can only have A or B, and
+// the second has taken B: it must be moved on to C, and the first keeps its A.
+func TestUniqueMovesOthersToGiveEveryItemALetter(t *testing.T) {
+	items := menu(Auto("Abc"), Auto("Abc"), Auto("Ab"))
+	Unique(items)
+	want := []string{"&Abc", "Ab&c", "A&b"}
+	if got := texts(items); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// A letter a translator chose is never moved to make room.
+func TestUniqueNeverMovesAChosenLetter(t *testing.T) {
+	items := menu("E&xit", Auto("Exp"), Auto("Xe"))
+	Unique(items)
+	if items[0].Text != "E&xit" {
+		t.Fatalf("the chosen letter moved: %q", texts(items))
+	}
+	seen := map[rune]bool{}
+	for _, item := range items {
+		hk := vtui.ExtractHotkey(item.Text)
+		if hk == 0 || seen[hk] {
+			t.Fatalf("hotkeys are not distinct or one is missing: %q", texts(items))
+		}
+		seen[hk] = true
+	}
+}
+
+// A letter counts as the best thing it is anywhere in the text: the s of "Use
+// sort" is the first letter of a word, and is taken before the consonants.
+func TestUniqueRanksALetterByItsBestRole(t *testing.T) {
+	items := menu("&Use", Auto("Use sort"))
+	Unique(items)
+	if items[1].Text != "Use &sort" {
+		t.Fatalf("got %q", texts(items))
+	}
+}

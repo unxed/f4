@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
@@ -42,6 +43,27 @@ func requireDistinctHotkeys(t *testing.T, where string, items []vtui.MenuItem) {
 	}
 }
 
+// requireHotkeys fails for every item that has letters to carry a hotkey and
+// has none. Menus of these sizes always allow one for each.
+func requireHotkeys(t *testing.T, where string, items []vtui.MenuItem) {
+	t.Helper()
+	for _, item := range items {
+		if len(item.SubItems) > 0 {
+			requireHotkeys(t, where+" > "+item.Text, item.SubItems)
+		}
+		if item.Separator || vtui.ExtractHotkey(item.Text) != 0 {
+			continue
+		}
+		plain := plainMenuText(item.Text)
+		for _, r := range plain {
+			if unicode.IsLetter(r) {
+				t.Errorf("%s: %q has no hotkey", where, plain)
+				break
+			}
+		}
+	}
+}
+
 func requireDistinctBarHotkeys(t *testing.T, where string, bar []vtui.MenuBarItem) {
 	t.Helper()
 	labels := make([]vtui.MenuItem, len(bar))
@@ -76,6 +98,18 @@ func TestMenuHotkeysAreDistinctInEveryLanguage(t *testing.T) {
 			requireDistinctBarHotkeys(t, "panels", pf.GetMenuBar().Items)
 			for _, area := range []string{"Shell", "Editor", "Viewer", "Terminal"} {
 				requireDistinctBarHotkeys(t, area, BuildMenuBarItems(area))
+			}
+			// The two languages whose menus the reports were made in must have
+			// a hotkey on every item (#1258).
+			if code == "en" || code == "ru" {
+				for _, entry := range pf.GetMenuBar().Items {
+					requireHotkeys(t, "panels > "+entry.Label, entry.SubItems)
+				}
+				for _, area := range []string{"Shell", "Editor", "Viewer", "Terminal"} {
+					for _, entry := range BuildMenuBarItems(area) {
+						requireHotkeys(t, area+" > "+entry.Label, entry.SubItems)
+					}
+				}
 			}
 		})
 	}

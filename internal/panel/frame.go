@@ -572,6 +572,16 @@ func IsAIPanel(panel Panel) bool {
 	return false
 }
 
+// sideMenuText is the label of a side-menu row, with the first letter as its
+// hotkey when the translation marks none; menuhotkeys settles clashes later.
+func sideMenuText(key string) string {
+	text := i18n.Msg(key)
+	if strings.Contains(text, "&") {
+		return text
+	}
+	return menuhotkeys.Auto(text)
+}
+
 // leftMenu builds the custom side menu for the left panel. View and
 // sort modes act on a fixed side through Cm commands, so they stay
 // command-routed rather than generated from the action registry.
@@ -583,7 +593,7 @@ func (pf *PanelsFrame) LeftMenu() vtui.MenuBarItem {
 			{Text: "&3. " + i18n.Msg("Action.AI.ViewOut"), Command: appcmd.CmLeftAIOut, Shortcut: "Ctrl+3"},
 			{Text: "&4. " + i18n.Msg("Action.AI.ViewMem"), Command: appcmd.CmLeftAIMem, Shortcut: "Ctrl+4"},
 			{Separator: true},
-			{Text: i18n.Msg("Menu.Left.DriveMenu"), Command: appcmd.CmLeftDriveMenu, Shortcut: "Alt+F1"},
+			{Text: sideMenuText("Menu.Left.DriveMenu"), Command: appcmd.CmLeftDriveMenu, Shortcut: "Alt+F1"},
 			{Separator: true},
 			{Text: i18n.Msg("FileOp.BtnBackground"), Command: appcmd.CmBackground},
 			{Text: i18n.Msg("Action.Workspace.New"), Command: appcmd.CmWorkspaceNew, Shortcut: "Ctrl+N"},
@@ -604,9 +614,9 @@ func (pf *PanelsFrame) LeftMenu() vtui.MenuBarItem {
 		{Text: "&" + i18n.Msg("Menu.SortSize"), Command: appcmd.CmLeftSortSize},
 		{Text: "&" + i18n.Msg("Menu.SortUnsorted"), Command: appcmd.CmLeftSortUnsorted},
 		{Text: "&" + i18n.Msg("Menu.SortUseGroups"), Command: appcmd.CmLeftSortGroups},
-		{Text: i18n.Msg("Group.Menu"), Command: appcmd.CmLeftGroupMenu},
+		{Text: sideMenuText("Group.Menu"), Command: appcmd.CmLeftGroupMenu},
 		{Separator: true},
-		{Text: i18n.Msg("Menu.Left.DriveMenu"), Command: appcmd.CmLeftDriveMenu, Shortcut: "Alt+F1"},
+		{Text: sideMenuText("Menu.Left.DriveMenu"), Command: appcmd.CmLeftDriveMenu, Shortcut: "Alt+F1"},
 		{Separator: true},
 		{Text: i18n.Msg("FileOp.BtnBackground"), Command: appcmd.CmBackground},
 		{Text: i18n.Msg("Action.Workspace.New"), Command: appcmd.CmWorkspaceNew, Shortcut: "Ctrl+N"},
@@ -625,7 +635,7 @@ func (pf *PanelsFrame) RightMenu() vtui.MenuBarItem {
 			{Text: "&3. " + i18n.Msg("Action.AI.ViewOut"), Command: appcmd.CmRightAIOut, Shortcut: "Ctrl+3"},
 			{Text: "&4. " + i18n.Msg("Action.AI.ViewMem"), Command: appcmd.CmRightAIMem, Shortcut: "Ctrl+4"},
 			{Separator: true},
-			{Text: i18n.Msg("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
+			{Text: sideMenuText("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
 		}}
 	}
 	return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Right"), SubItems: []vtui.MenuItem{
@@ -640,9 +650,9 @@ func (pf *PanelsFrame) RightMenu() vtui.MenuBarItem {
 		{Text: "&" + i18n.Msg("Menu.SortSize"), Command: appcmd.CmRightSortSize},
 		{Text: "&" + i18n.Msg("Menu.SortUnsorted"), Command: appcmd.CmRightSortUnsorted},
 		{Text: "&" + i18n.Msg("Menu.SortUseGroups"), Command: appcmd.CmRightSortGroups},
-		{Text: i18n.Msg("Group.Menu"), Command: appcmd.CmRightGroupMenu},
+		{Text: sideMenuText("Group.Menu"), Command: appcmd.CmRightGroupMenu},
 		{Separator: true},
-		{Text: i18n.Msg("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
+		{Text: sideMenuText("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
 	}}
 }
 
@@ -676,11 +686,16 @@ func appendTerminalMenuItems(items []vtui.MenuBarItem) []vtui.MenuBarItem {
 // terminal-log menu.
 func (pf *PanelsFrame) BuildMenuItems() []vtui.MenuBarItem {
 	if !pf.ShowPanels {
-		return appendTerminalMenuItems(BuildMenuBarItems("Shell"))
+		items := appendTerminalMenuItems(BuildMenuBarItems("Shell"))
+		menuhotkeys.UniqueBar(items)
+		return items
 	}
 	items := []vtui.MenuBarItem{pf.LeftMenu()}
 	items = append(items, BuildMenuBarItems("Shell")...)
-	return append(items, pf.RightMenu())
+	items = append(items, pf.RightMenu())
+	// Also here, so that no menu ever holds the default-hotkey marker.
+	menuhotkeys.UniqueBar(items)
+	return items
 }
 
 // GetMenuBar returns the main menu bar. Items are rebuilt on every
