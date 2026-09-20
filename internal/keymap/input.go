@@ -264,6 +264,34 @@ func ctrlCharFromVK(vk uint16) int {
 	return -1
 }
 
+// win32UnicodeChar is the character field of a win32-input-mode record. A
+// console key event of Enter, Backspace, Tab, Escape or Space carries its
+// control character there, and a program that reads a line in cooked mode (as
+// DiskPart does) ignores such a key without it. Some backends deliver these
+// keys with no character, so it is filled in, unless Ctrl or Alt changes what
+// the key means (#207).
+func win32UnicodeChar(e *vtinput.InputEvent) rune {
+	if e.Char != 0 {
+		return e.Char
+	}
+	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 {
+		return 0
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_RETURN:
+		return '\r'
+	case vtinput.VK_BACK:
+		return '\b'
+	case vtinput.VK_TAB:
+		return '\t'
+	case vtinput.VK_ESCAPE:
+		return 0x1b
+	case vtinput.VK_SPACE:
+		return ' '
+	}
+	return 0
+}
+
 // TranslateInput converts f4 input events into ANSI sequences that interactive shell apps expect.
 func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCursorKeys bool) string {
 	if win32Mode && e.Type == vtinput.KeyEventType {
@@ -273,7 +301,7 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCu
 		}
 		// Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
 		return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
-			e.VirtualKeyCode, e.VirtualScanCode, e.Char, kd, e.ControlKeyState, e.RepeatCount)
+			e.VirtualKeyCode, e.VirtualScanCode, win32UnicodeChar(e), kd, e.ControlKeyState, e.RepeatCount)
 	}
 
 	if kittyFlags != 0 {
