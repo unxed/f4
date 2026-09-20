@@ -1797,12 +1797,12 @@ func TestPanelsFrame_F9HiddenPanels_UsesShellMenuAndKeepsTerminalLog(t *testing.
 	}
 
 	wantTerminalItems := map[string]bool{
-		i18n.Msg("Action.Terminal.ViewLog"): false,
-		i18n.Msg("Action.Terminal.EditLog"): false,
+		plainMenuText(i18n.Msg("Action.Terminal.ViewLog")): false,
+		plainMenuText(i18n.Msg("Action.Terminal.EditLog")): false,
 	}
 	for _, item := range items[0].SubItems {
-		if _, ok := wantTerminalItems[item.Text]; ok {
-			wantTerminalItems[item.Text] = true
+		if _, ok := wantTerminalItems[plainMenuText(item.Text)]; ok {
+			wantTerminalItems[plainMenuText(item.Text)] = true
 		}
 	}
 	for label, found := range wantTerminalItems {

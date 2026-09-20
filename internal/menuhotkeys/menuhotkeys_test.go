@@ -2,6 +2,7 @@ package menuhotkeys
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/unxed/vtui"
@@ -148,5 +149,29 @@ func TestUniqueBarCoversTheMenuNamesToo(t *testing.T) {
 	}
 	if vtui.ExtractHotkey(bar[0].SubItems[1].Text) == 'b' {
 		t.Fatalf("the Left menu still repeats B: %q", texts(bar[0].SubItems))
+	}
+}
+
+func TestAutoHotkeyGivesWayToAMarkedLabel(t *testing.T) {
+	// The first letter of "Link" is only a default; "Edit symbolic &link" was
+	// marked by somebody, and it is below the item that wants the same L.
+	items := menu(Auto("Link"), "Edit symbolic &link", Auto("Edit"), Auto("Copy"))
+	Unique(items)
+	want := []string{"Li&nk", "Edit symbolic &link", "&Edit", "&Copy"}
+	if got := texts(items); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestAutoMarkerNeverSurvives(t *testing.T) {
+	items := menu("√ "+Auto("Copy"), Auto("Cut"), Auto("Cat"))
+	Unique(items)
+	for _, item := range items {
+		if strings.Contains(item.Text, autoMarker) {
+			t.Fatalf("the marker was left in %q", item.Text)
+		}
+	}
+	if items[0].Text != "√ &Copy" {
+		t.Fatalf("got %q", items[0].Text)
 	}
 }

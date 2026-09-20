@@ -129,7 +129,7 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 	}
 	var foundEditSymlink bool
 	for _, item := range files {
-		if item.Text == editSymlinkAction.DisplayLabel() || item.Text == "&"+editSymlinkAction.DisplayLabel() {
+		if plainMenuText(item.Text) == plainMenuText(editSymlinkAction.DisplayLabel()) {
 			foundEditSymlink = true
 			break
 		}

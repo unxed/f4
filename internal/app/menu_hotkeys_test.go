@@ -11,6 +11,14 @@ import (
 	"github.com/unxed/vtui"
 )
 
+// plainMenuText is what a menu item reads as: its text without the hotkey
+// marker, which is not the same letter in every language and moves when a menu
+// has two items that want the same one (#1258).
+func plainMenuText(text string) string {
+	plain, _, _ := vtui.ParseAmpersandString(text)
+	return plain
+}
+
 // requireDistinctHotkeys fails for every item whose hotkey another item of the
 // same menu already has (#1258).
 func requireDistinctHotkeys(t *testing.T, where string, items []vtui.MenuItem) {

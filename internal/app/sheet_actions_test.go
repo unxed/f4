@@ -17,7 +17,7 @@ func spreadsheetMenuItem(items []vtui.MenuBarItem) (vtui.MenuBarItem, vtui.MenuI
 	label := i18n.Msg("Action.App.Spreadsheet")
 	for _, bar := range items {
 		for _, item := range bar.SubItems {
-			if strings.Contains(item.Text, label) {
+			if strings.Contains(plainMenuText(item.Text), plainMenuText(label)) {
 				return bar, item, true
 			}
 		}

@@ -58,7 +58,7 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		}
 		text := a.DisplayLabel()
 		if !strings.Contains(text, "&") {
-			text = "&" + text // first letter becomes the menu hotkey
+			text = menuhotkeys.Auto(text) // first letter becomes the menu hotkey
 		}
 		if a.Checked != nil && a.Checked() {
 			text = "√ " + text
@@ -87,7 +87,7 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 					subTitle = a.MenuSubPath
 				}
 				if !strings.Contains(subTitle, "&") {
-					subTitle = "&" + subTitle
+					subTitle = menuhotkeys.Auto(subTitle)
 				}
 				m.items = append(m.items, vtui.MenuItem{
 					Text:     subTitle,
@@ -123,7 +123,7 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		}
 		text := action.PlainLabel(plughost.PluginCommandDisplayLabel(command))
 		if !strings.Contains(text, "&") {
-			text = "&" + text
+			text = menuhotkeys.Auto(text)
 		}
 		if !m.pluginSeparator {
 			m.pluginSeparator = true

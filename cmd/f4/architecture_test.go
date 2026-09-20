@@ -70,6 +70,9 @@ var architectureLayers = map[string]int{
 	// association, and neither may import the other.
 	"internal/filemask": 0,
 
+	// Menu hotkeys made distinct once a menu is built. A leaf over vtui only.
+	"internal/menuhotkeys": 0,
+
 	// The frame watchdog: a leaf that imports nothing of ours, so any view
 	// can mark its frame and the root can arm it from a command line switch.
 	"internal/stallwatch": 0,

@@ -46,28 +46,59 @@ func Unique(items []vtui.MenuItem) {
 	assign(texts)
 }
 
+// autoMarker precedes the "&" of a hotkey that was only the first letter of a
+// label, not a letter somebody chose. It never leaves this package: assign
+// takes it out.
+const autoMarker = "\uE000"
+
+// Auto marks text with the hotkey of its first letter, the way a menu builder
+// does for a label nobody marked. Such a hotkey gives way to one that a
+// translator put in a label of the same menu, wherever the two are: Unique
+// settles the marked labels first.
+func Auto(text string) string {
+	return autoMarker + "&" + text
+}
+
 func assign(texts []*string) {
-	claimed := make(map[rune]bool, len(texts))
-	var repeats []*string
-	for _, text := range texts {
-		hotkey := vtui.ExtractHotkey(*text)
-		if hotkey == 0 {
-			continue
-		}
-		if claimed[hotkey] {
-			repeats = append(repeats, text)
-			continue
-		}
-		claimed[hotkey] = true
+	type entry struct {
+		text *string
+		auto bool
 	}
-	for _, text := range repeats {
-		plain := withoutHotkey(*text)
+	entries := make([]entry, 0, len(texts))
+	for _, text := range texts {
+		auto := strings.Contains(*text, autoMarker)
+		if auto {
+			*text = strings.ReplaceAll(*text, autoMarker, "")
+		}
+		entries = append(entries, entry{text, auto})
+	}
+
+	claimed := make(map[rune]bool, len(texts))
+	var repeats []entry
+	for _, wantAuto := range []bool{false, true} {
+		for _, e := range entries {
+			if e.auto != wantAuto {
+				continue
+			}
+			hotkey := vtui.ExtractHotkey(*e.text)
+			if hotkey == 0 {
+				continue
+			}
+			if claimed[hotkey] {
+				repeats = append(repeats, e)
+				continue
+			}
+			claimed[hotkey] = true
+		}
+	}
+	for _, e := range repeats {
+		plain := withoutHotkey(*e.text)
 		if marked, hotkey, ok := withFreeHotkey(plain, claimed); ok {
-			*text = marked
+			*e.text = marked
 			claimed[hotkey] = true
 			continue
 		}
-		*text = plain
+		*e.text = plain
 	}
 }
 
@@ -102,7 +133,7 @@ func withFreeHotkey(s string, claimed map[rune]bool) (string, rune, bool) {
 		if isText && !claimed[unicode.ToLower(r)] {
 			c := candidate{at, r}
 			switch {
-			case prev == 0 || !(unicode.IsLetter(prev) || unicode.IsDigit(prev)):
+			case prev == 0 || (!unicode.IsLetter(prev) && !unicode.IsDigit(prev)):
 				initials = append(initials, c)
 			case !strings.ContainsRune(vowels, unicode.ToLower(r)):
 				consonants = append(consonants, c)
