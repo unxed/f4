@@ -246,6 +246,9 @@ func (e *sudoRemoteError) Error() string { return e.msg }
 func (e *sudoRemoteError) Unwrap() error { return e.errno }
 
 func newSudoRemoteError(msg string) error {
+	if strings.HasSuffix(msg, ErrDestinationExists.Error()) {
+		return ErrDestinationExists
+	}
 	for _, errno := range sudoRemoteErrnos {
 		if strings.HasSuffix(msg, errno.Error()) {
 			return &sudoRemoteError{msg: msg, errno: errno}
@@ -284,6 +287,13 @@ func (c *SudoClient) Rename(oldPath, newPath string) error {
 	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath})
 	return err
 }
+
+// RenameNoReplace renames as root without replacing what is at newPath.
+func (c *SudoClient) RenameNoReplace(oldPath, newPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath, Flags: SudoRenameNoReplace})
+	return err
+}
+
 func (c *SudoClient) SetAttributes(path string, item VFSItem) error {
 	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdSetAttributes, Path: path, Item: item})
 	return err

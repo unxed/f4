@@ -111,3 +111,59 @@ func TestOSVFSLookupInAFolderThatNeedsSudoReportsAMissingName(t *testing.T) {
 		t.Errorf("Stat = %v, want the refusal to stay a refusal", err)
 	}
 }
+
+// Shift+F6 in a folder that needs sudo renames without replacing, and that
+// path had no elevated fallback (#1255): the request has to reach the
+// dispatcher and keep its no-replace meaning there.
+func TestSudoClientRenameNoReplaceGoesThroughTheDispatcher(t *testing.T) {
+	dir := shortSocketDir(t)
+	addr, err := net.ResolveUnixAddr("unix", filepath.Join(dir, "d.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener := listenUnixForTest(t, addr)
+	defer func() { _ = listener.Close() }()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if conn, err := listener.AcceptUnix(); err == nil {
+			handleSudoClient(conn)
+		}
+	}()
+	conn, err := net.DialUnix("unix", nil, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &SudoClient{conn: conn}
+	defer func() {
+		_ = conn.Close()
+		<-done
+	}()
+
+	write := func(name, data string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	a, b := write("a.txt", "A"), write("b.txt", "B")
+
+	if err := client.RenameNoReplace(a, b); !errors.Is(err, ErrDestinationExists) {
+		t.Fatalf("renaming onto an existing name = %v, want ErrDestinationExists", err)
+	}
+	if got, _ := os.ReadFile(b); string(got) != "B" {
+		t.Fatalf("b.txt was replaced: %q", got)
+	}
+
+	c := filepath.Join(dir, "c.txt")
+	if err := client.RenameNoReplace(a, c); err != nil {
+		t.Fatalf("renaming to a free name: %v", err)
+	}
+	if got, _ := os.ReadFile(c); string(got) != "A" {
+		t.Fatalf("c.txt = %q, want the content of a.txt", got)
+	}
+	if _, err := os.Lstat(a); !os.IsNotExist(err) {
+		t.Fatalf("a.txt is still there: %v", err)
+	}
+}

@@ -14,6 +14,11 @@ const (
 	CmdSetAttributes
 )
 
+// SudoRenameNoReplace, in Flags of a CmdRename, makes the dispatcher refuse to
+// replace what is already at the destination, atomically, as a plain
+// RenameNoReplace does.
+const SudoRenameNoReplace = 1
+
 type SudoRequest struct {
 	Cmd   SudoCommand
 	Path  string

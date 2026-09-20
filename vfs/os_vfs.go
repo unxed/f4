@@ -397,7 +397,12 @@ func (v *OSVFS) RenameNoReplace(ctx context.Context, old, new string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return renameNoReplace(prepareOSPath(old), prepareOSPath(new))
+	err := renameNoReplace(prepareOSPath(old), prepareOSPath(new))
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for RenameNoReplace(%q), attempting sudo...", old)
+		return globalSudoClient.RenameNoReplace(prepareOSPath(old), prepareOSPath(new))
+	}
+	return err
 }
 func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) error {
 	if ctx.Err() != nil {

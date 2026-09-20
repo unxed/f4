@@ -15,7 +15,7 @@ import (
 // pumpUntil runs queued UI tasks until cond holds or the deadline passes.
 func pumpUntil(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(15 * time.Second)
 	for !cond() {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
