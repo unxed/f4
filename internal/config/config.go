@@ -504,7 +504,11 @@ type F4Config struct {
 	// ArchiveEnterExcludeMask names the files Enter must not open as an
 	// archive even when their content is one. It is a far2l file mask, so
 	// "|" still carves an exception out of it.
-	ArchiveEnterExcludeMask  string
+	ArchiveEnterExcludeMask string
+	// ArchiveTarIndexCache keeps the file index of an opened tar archive in the
+	// cache so that opening it again is instant. Off rebuilds the index every
+	// time, which is slower and never out of date (#1187).
+	ArchiveTarIndexCache     bool
 	EditorExpandTabs         int
 	EditorAutoIndent         bool
 	EditorCursorBeyondEOL    bool
@@ -709,6 +713,7 @@ var App = F4Config{
 	// far2l's KnownDocumentTypes (multiarc/src/MultiArc.cpp), the list it
 	// refuses to sink into on Enter "even while its really archive", plus
 	// .epub, which f4 issue #1184 named and far2l's list does not.
+	ArchiveTarIndexCache:     true,
 	ArchiveEnterExcludeMask:  "*.docx,*.docm,*.dotx,*.dotm,*.xlsx,*.xlsm,*.xltx,*.xltm,*.xlsb,*.xlam,*.pptx,*.pptm,*.potx,*.potm,*.ppam,*.ppsx,*.ppsm,*.sldx,*.sldm,*.thmx,*.odt,*.ods,*.odp,*.epub",
 	EditorExpandTabs:         0,
 	EditorAutoIndent:         true,
@@ -1048,6 +1053,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 
 	cfg.EditorAutoComplete = merged.GetString("Editor", "AutoComplete", "1") == "1"
 	cfg.EditorAutoCompleteMask = merged.GetString("Editor", "AutoCompleteMask", "*.go;*.c;*.cpp;*.h;*.hpp;*.py;*.js;*.ts;*.rs;*.java;*.sh;*.txt;*.md;*.html;*.css;*.json")
+	cfg.ArchiveTarIndexCache = merged.GetString("Panel", "ArchiveTarIndexCache", "1") == "1"
 	cfg.ArchiveEnterExcludeMask = merged.GetString("Panel", "ArchiveEnterExcludeMask", "*.docx,*.docm,*.dotx,*.dotm,*.xlsx,*.xlsm,*.xltx,*.xltm,*.xlsb,*.xlam,*.pptx,*.pptm,*.potx,*.potm,*.ppam,*.ppsx,*.ppsm,*.sldx,*.sldm,*.thmx,*.odt,*.ods,*.odp,*.epub")
 
 	cfg.EditorExpandTabs = 0
@@ -1255,6 +1261,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "MacKeyboard = %s\n\n", ParseMacKeysMode(cfg.MacKeyboard))
 	sb.WriteString("[Panel]\n")
 	fmt.Fprintf(&sb, "ArchiveEnterExcludeMask = %s\n", cfg.ArchiveEnterExcludeMask)
+	fmt.Fprintf(&sb, "ArchiveTarIndexCache = %d\n", map[bool]int{true: 1, false: 0}[cfg.ArchiveTarIndexCache])
 	fmt.Fprintf(&sb, "ShowHiddenFiles = %d\n", map[bool]int{true: 1, false: 0}[cfg.ShowHiddenFiles])
 	fmt.Fprintf(&sb, "ShowDirPrefix = %d\n", map[bool]int{true: 1, false: 0}[cfg.ShowDirPrefix])
 	fmt.Fprintf(&sb, "ShowHighlightMarks = %d\n", map[bool]int{true: 1, false: 0}[cfg.ShowHighlightMarks])

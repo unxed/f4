@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/tarindexcache"
 )
 
@@ -52,6 +53,13 @@ func tarIndexPath(localPath string) string {
 	// very archive, under either scheme, are recognisable by their prefix.
 	prefix := tarindexcache.Prefix(localPath)
 	current := prefix + "-" + fingerprint + ".index.sqlite"
+	if !config.App.ArchiveTarIndexCache {
+		// The user does not want a saved index trusted: every open builds its
+		// own. The one of the last open is removed here rather than after the
+		// archive is closed, which nothing here gets to see (#1187).
+		removeOldTarIndexes(dir, prefix, "")
+		return filepath.Join(dir, current)
+	}
 	removeOldTarIndexes(dir, prefix, current)
 	return filepath.Join(dir, current)
 }
@@ -93,7 +101,7 @@ func tarFingerprint(path string) (string, error) {
 }
 
 // removeOldTarIndexes deletes the index files (and SQLite's side files) of the
-// same archive other than current. Failures are ignored: a file another
+// same archive other than current; with no current one, all of them. Failures are ignored: a file another
 // process holds open cannot be removed on Windows, and it is only clutter.
 func removeOldTarIndexes(dir, prefix, current string) {
 	entries, err := os.ReadDir(dir)
@@ -102,7 +110,7 @@ func removeOldTarIndexes(dir, prefix, current string) {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if !strings.HasPrefix(name, prefix) || strings.HasPrefix(name, current) {
+		if !strings.HasPrefix(name, prefix) || (current != "" && strings.HasPrefix(name, current)) {
 			continue
 		}
 		// The prefix ends where the name must: either the library's old

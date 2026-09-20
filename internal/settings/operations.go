@@ -17,6 +17,7 @@ import (
 	"github.com/unxed/f4/internal/netproxy"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/plughost"
+	"github.com/unxed/f4/internal/tarindexcache"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/sdk/f4settings"
 	"github.com/unxed/f4/vfs"
@@ -44,6 +45,10 @@ func (settingsOperationsProvider) Catalog() f4settings.Catalog {
 			editor.ResetColorerScheme()
 		}
 		return colorerCheckError(check)
+	})
+	add("archives.clearTarIndexes", "panels", "Directory loading", "Rebuild all tar indexes", "Delete every cached tar archive index. Each is built again the next time its archive is opened.", false, func(context.Context) error {
+		tarindexcache.Clear()
+		return nil
 	})
 	add("syntax.check", "syntax", "Colorer", "Check all schemes", "Load the scheme of every Colorer file type in the applied configuration and report the first one Colorer cannot load, and what it reports on the way. Applies nothing.", true, func(ctx context.Context) error {
 		// Every file type is loaded in turn and that takes a while; the status

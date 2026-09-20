@@ -321,6 +321,16 @@
   },
   {
     "category": "panels",
+    "description": "Keep the file index of an opened tar archive in the cache, so opening it again is instant. Off rebuilds the index each time the archive is opened: slower, but never out of date.",
+    "group": "Directory loading",
+    "id": "ArchiveTarIndexCache",
+    "kind": "boolean",
+    "label": "Cache tar archive indexes",
+    "timing": "live",
+    "unavailable": ""
+  },
+  {
+    "category": "panels",
     "description": "Replace the listing only when all directory results are ready and bypass cached previews. Off permits incremental results. It does not block all UI work.",
     "group": "Directory loading",
     "id": "SyncPanelLoad",

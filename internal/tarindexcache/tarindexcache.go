@@ -85,3 +85,25 @@ func Move(oldPath, newPath string) {
 		_ = os.Rename(file, filepath.Join(dir, newPrefix+name[len(oldPrefix):]))
 	}
 }
+
+// Clear removes every cached index and reports how many files went. It is the
+// "rebuild all indexes" button: what is missing is built again the next time an
+// archive is opened. A file another process holds open cannot be removed on
+// Windows; it is left, and does not count.
+func Clear() int {
+	dir := Dir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	removed := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.Contains(e.Name(), ".index.sqlite") {
+			continue
+		}
+		if os.Remove(filepath.Join(dir, e.Name())) == nil {
+			removed++
+		}
+	}
+	return removed
+}

@@ -95,3 +95,25 @@ func TestFilesWithoutACacheFolder(t *testing.T) {
 	}
 	Move("/x/a.tar", "/x/b.tar") // must not panic
 }
+
+func TestClearRemovesEveryIndexAndOnlyIndexes(t *testing.T) {
+	withCache(t)
+	put(t, "a.tar-1111-aaaa.index.sqlite")
+	put(t, "a.tar-1111-aaaa.index.sqlite-wal")
+	put(t, "b.tar-2222-bbbb.index.sqlite")
+	put(t, "notes.txt")
+
+	if got := Clear(); got != 3 {
+		t.Fatalf("Clear removed %d files, want 3", got)
+	}
+	entries, err := os.ReadDir(Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "notes.txt" {
+		t.Fatalf("what is left: %v", entries)
+	}
+	if got := Clear(); got != 0 {
+		t.Fatalf("a second Clear removed %d files", got)
+	}
+}
