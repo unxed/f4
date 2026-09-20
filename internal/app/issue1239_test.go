@@ -146,3 +146,45 @@ func TestIssue1239F3ShowsTheWholeRow(t *testing.T) {
 		}
 	}
 }
+
+// TestIssue1239ListKeysActOnTheSelectedRow: F4, Ins and Del in the hotkey
+// list do what the Assign and Unbind buttons do, without leaving the list.
+func TestIssue1239ListKeysActOnTheSelectedRow(t *testing.T) {
+	previous := keymap.GlobalHotkeysMgr
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = previous })
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
+	t.Cleanup(testutil.SwapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(140, 35)
+	vtui.FrameManager.Init(scr)
+
+	owner := vtui.NewCenteredDialog(100, 25, "Settings")
+	vtui.FrameManager.Push(owner)
+	page := (settingsHost{}).HotkeyPage(owner, nil).(*hotkeyPage)
+	page.SetPosition(owner.X1+1, owner.Y1+1, owner.X1+60, owner.Y1+20)
+	page.SetFocusedItem(page.table)
+
+	var assigned, unbound int
+	page.assign.OnClick = func() { assigned++ }
+	page.unbind.OnClick = func() { unbound++ }
+	press := func(vk uint16) bool {
+		return page.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vk})
+	}
+
+	if !press(vtinput.VK_F4) || assigned != 1 {
+		t.Fatalf("F4: handled or not, Assign ran %d times, want 1", assigned)
+	}
+	if !press(vtinput.VK_INSERT) || assigned != 2 {
+		t.Fatalf("Ins: Assign ran %d times, want 2", assigned)
+	}
+	if !press(vtinput.VK_DELETE) || unbound != 1 {
+		t.Fatalf("Del: Unbind ran %d times, want 1", unbound)
+	}
+
+	// With a search typed, Del edits the search and leaves the binding alone.
+	page.table.SetSearchText("ab")
+	press(vtinput.VK_DELETE)
+	if unbound != 1 {
+		t.Fatalf("Del with a search typed unbound a row (%d)", unbound)
+	}
+}
