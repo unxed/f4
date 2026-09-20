@@ -403,6 +403,39 @@ func materializeNestedSFX(localPath string) (embeddedArchive, string, io.Closer,
 	return materializeSFX(localPath, false)
 }
 
+// zipEndRecordAtTail reports whether the file ends with a zip end-of-central-
+// directory record: the signature within the last 64 KB, which is where the
+// format puts it (the record is 22 bytes and its comment up to 65535).
+func zipEndRecordAtTail(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return true // cannot tell; the open that follows reports the real error
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return true
+	}
+	const record, maxComment = 22, 65535
+	size := int64(record + maxComment)
+	if info.Size() < size {
+		size = info.Size()
+	}
+	tail := make([]byte, size)
+	if _, err := file.ReadAt(tail, info.Size()-size); err != nil && !errors.Is(err, io.EOF) {
+		return true
+	}
+	for i := len(tail) - record; i >= 0; i-- {
+		if !bytes.HasPrefix(tail[i:], []byte("PK\x05\x06")) {
+			continue
+		}
+		if i+record+int(binary.LittleEndian.Uint16(tail[i+20:i+22])) <= len(tail) {
+			return true
+		}
+	}
+	return false
+}
+
 func materializeSFX(localPath string, volumesBeside bool) (embeddedArchive, string, io.Closer, error) {
 	// A zip keeps the offsets of its entries in the central directory at the
 	// end of the file, and a tool that appends one to an executable stub may
@@ -423,6 +456,15 @@ func materializeSFX(localPath string, volumesBeside bool) (embeddedArchive, stri
 		return embeddedArchive{}, "", nil, err
 	}
 	if !found || embedded.offset <= 0 {
+		return embeddedArchive{}, localPath, nil, nil
+	}
+	// The scan takes the first "PK" header it sees, and an executable can hold
+	// those bytes as data of its own (an installer's compressed payload does).
+	// The zip reader then hunts through the rest of the file for entries to
+	// recover, which took half a minute on a 30 MB installer and minutes on a
+	// larger program (#1272). A zip that is really there has its end record in
+	// the last 64 KB; without one the file is not treated as an archive.
+	if embedded.suffix == ".zip" && !zipEndRecordAtTail(localPath) {
 		return embeddedArchive{}, localPath, nil, nil
 	}
 	var backingPath string
