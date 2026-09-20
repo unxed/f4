@@ -919,6 +919,48 @@ func (ch *ColorerHighlighter) DropAfterEdit(idx, lineCount int) {
 	ch.abandonWork()
 }
 
+// DropAfterReplace is DropAfterEdit for Undo and Redo, which put back an
+// earlier text without saying what changed. The colours of every line are kept
+// to draw until the worker has fresh ones (else the whole screen blinks plain,
+// #1230); the lines from idx on, where the change begins, move by the change in
+// the line count, and those above it stay where they are. Everything is
+// recomputed from the top: none of it is trusted as current.
+func (ch *ColorerHighlighter) DropAfterReplace(idx, lineCount int) {
+	if idx < 0 {
+		idx = 0
+	}
+	delta := 0
+	if ch.lineCount > 0 {
+		delta = lineCount - ch.lineCount
+	}
+	ch.lineCount = lineCount
+
+	old := make(map[int]colorerStaleLine, len(ch.stale)+len(ch.attrCache))
+	for key, line := range ch.stale {
+		old[key] = line
+	}
+	for key, attrs := range ch.attrCache {
+		old[key] = colorerStaleLine{attrs: attrs, bg: ch.bgCache[key]}
+	}
+	ch.stale = make(map[int]colorerStaleLine, len(old))
+	// The lines that moved go in first, so that one that lands on a line above
+	// the change does not displace what has always been there.
+	for key, line := range old {
+		if key >= idx {
+			if to := key + delta; to >= idx {
+				ch.stale[to] = line
+			}
+		}
+	}
+	for key, line := range old {
+		if key < idx {
+			ch.stale[key] = line
+		}
+	}
+	ch.dropCacheFrom(0)
+	ch.abandonWork()
+}
+
 // noteLineCount records the line count the cached colours belong to. The
 // editor calls it every frame, so an edit sees how many lines it added or
 // removed.

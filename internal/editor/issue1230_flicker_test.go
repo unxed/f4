@@ -104,3 +104,57 @@ func TestIssue1230FreshColoursReplaceTheOldOnes(t *testing.T) {
 		}
 	}
 }
+
+// TestIssue1230UndoKeepsTheColoursUntilNewOnesArrive: Undo and Redo dropped
+// every colour at once, so the whole screen blinked plain, as reported for
+// Undo. The colours of the text they replace stay until fresh ones arrive.
+func TestIssue1230UndoKeepsTheColoursUntilNewOnesArrive(t *testing.T) {
+	ev, ch := newFlickerEditor(t)
+	ev.CursorLine, ev.CursorPos = 1, 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: 'x'})
+	// The worker has coloured the edited text.
+	for line := 0; line < 4; line++ {
+		ch.storeAttrs(line, []uint64{uint64(100 + line)}, uint64(200+line), nil)
+	}
+
+	ev.Undo()
+
+	if got := ev.Pt.String(); got != "first\nsecond\nthird\nfourth" {
+		t.Fatalf("text after Undo = %q", got)
+	}
+	for line := 0; line < 4; line++ {
+		if got := ch.HighlightLine(line, "", 0); !reflect.DeepEqual(got, []uint64{uint64(100 + line)}) {
+			t.Errorf("line %d colours right after Undo = %v, want the kept [%d]", line, got, 100+line)
+		}
+	}
+
+	ev.Redo()
+	for line := 0; line < 4; line++ {
+		if got := ch.HighlightLine(line, "", 0); got == nil {
+			t.Errorf("line %d blinked plain right after Redo", line)
+		}
+	}
+}
+
+// Undoing an Enter takes a line away: the colours below it move up with the
+// text, and the ones above stay.
+func TestIssue1230UndoOfEnterMovesTheKeptColoursWithTheText(t *testing.T) {
+	ev, ch := newFlickerEditor(t)
+	ev.CursorLine, ev.CursorPos = 1, 0
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	for line := 0; line < 5; line++ {
+		ch.storeAttrs(line, []uint64{uint64(10 + line)}, 0, nil)
+	}
+
+	ev.Undo()
+
+	if got := ev.Pt.String(); got != "first\nsecond\nthird\nfourth" {
+		t.Fatalf("text after Undo = %q", got)
+	}
+	want := map[int][]uint64{0: {10}, 1: {12}, 2: {13}, 3: {14}}
+	for line, attrs := range want {
+		if got := ch.HighlightLine(line, "", 0); !reflect.DeepEqual(got, attrs) {
+			t.Errorf("line %d colours after Undo = %v, want %v", line, got, attrs)
+		}
+	}
+}
