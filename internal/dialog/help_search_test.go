@@ -402,3 +402,31 @@ func TestHelpDecorationsSurviveAFrameAbove(t *testing.T) {
 		t.Fatal("search state outlived its Help window")
 	}
 }
+
+// f4 #378: the help window breaks a line that is longer than it is wide, so the
+// rows it shows are not the lines the engine holds. The search counts matches
+// in the rows on screen, and counts them again when a zoom changes the layout.
+func TestHelpSearchFollowsTheLaidOutTopicWhenTheWindowChangesWidth(t *testing.T) {
+	long := "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron"
+	view, scr := newSearchableHelpForTestAtSize(t, 100, 25, []string{"first", long, "last"})
+	view.Show(scr)
+	if rows := len(view.CurrentTopic().Lines); rows <= 3 {
+		t.Fatalf("the default window laid the topic out in %d rows, want the long line broken", rows)
+	}
+
+	for _, r := range "omicron" {
+		if !HandleHelpSearchHotkey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r}) {
+			t.Fatalf("character %q was not consumed", r)
+		}
+	}
+	if len(CurrentHelpSearch.Matches) != 1 || CurrentHelpSearch.Matches[0].line != 2 {
+		t.Fatalf("matches = %#v, want one on row 2, the second row of the broken line", CurrentHelpSearch.Matches)
+	}
+
+	view.SetPosition(0, 0, 99, 20)
+	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	if len(CurrentHelpSearch.Matches) != 1 || CurrentHelpSearch.Matches[0].line != 1 {
+		t.Fatalf("after widening, matches = %#v, want one on line 1: the line is a single row again", CurrentHelpSearch.Matches)
+	}
+}

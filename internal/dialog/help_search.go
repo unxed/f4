@@ -23,6 +23,10 @@ type HelpSearchState struct {
 	Matches   []HelpSearchMatch
 	Selected  int
 	scrollTop int
+	// layout is the topic the matches were found in. The window lays a topic
+	// out for its own width, so a zoom or a resize gives the same topic other
+	// lines, and matches found before it point at the wrong ones.
+	layout *vtui.HelpTopic
 }
 
 var CurrentHelpSearch *HelpSearchState
@@ -65,7 +69,17 @@ func HelpTopicForFrame(frame vtui.Frame) (string, *vtui.HelpTopic, bool) {
 	}
 	name := strings.TrimSpace(strings.TrimPrefix(title, prefix))
 	topic := vtui.GlobalHelpEngine.GetTopic(name)
-	return name, topic, topic != nil
+	if topic == nil {
+		return name, nil, false
+	}
+	// The window breaks lines that are longer than it is wide (f4 #378), and its
+	// rows are what the matches and the scroll position are counted in.
+	if laid, ok := frame.(interface{ CurrentTopic() *vtui.HelpTopic }); ok {
+		if shown := laid.CurrentTopic(); shown != nil && shown.Name == name {
+			topic = shown
+		}
+	}
+	return name, topic, true
 }
 
 func HandleHelpSearchHotkey(e *vtinput.InputEvent) bool {
@@ -156,6 +170,7 @@ func UpdateHelpSearch(frame vtui.Frame) {
 		vtui.FrameManager.Redraw()
 		return
 	}
+	CurrentHelpSearch.layout = topic
 	CurrentHelpSearch.Matches = collectHelpMatches(topic, string(CurrentHelpSearch.Query))
 	CurrentHelpSearch.Selected = -1
 	if len(CurrentHelpSearch.Matches) > 0 {
@@ -460,6 +475,14 @@ func RenderHelpFrame(scr *vtui.ScreenBuf, frame vtui.Frame) {
 		} else {
 			helpSearchFrameShown = true
 			searching = true
+			if CurrentHelpSearch.layout != nil && CurrentHelpSearch.layout != topic {
+				// The window laid the topic out again (zoom, resize): find the
+				// matches in the lines it shows now.
+				CurrentHelpSearch.layout = topic
+				selected := CurrentHelpSearch.Selected
+				CurrentHelpSearch.Matches = collectHelpMatches(topic, string(CurrentHelpSearch.Query))
+				CurrentHelpSearch.Selected = min(selected, len(CurrentHelpSearch.Matches)-1)
+			}
 		}
 	}
 
