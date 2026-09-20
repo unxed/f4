@@ -85,25 +85,12 @@ func (c *SudoClient) Connect() error {
 	env = append(env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 	cmd.Env = env
 
-	// Capture subprocess stderr to main log
-	stderrPipe, _ := cmd.StderrPipe()
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := stderrPipe.Read(buf)
-			if n > 0 {
-				lines := strings.Split(string(buf[:n]), "\n")
-				for _, l := range lines {
-					if l != "" {
-						vtui.DebugLog("SUDO_SUBPROCESS: %s", l)
-					}
-				}
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
+	// Capture subprocess stderr to the main log, and keep what sudo itself
+	// said: when it gives up, that is the only explanation there is. A writer
+	// rather than a pipe read by hand, because Wait then returns only after
+	// the last of it has been copied.
+	sudoSaid := &sudoStderr{}
+	cmd.Stderr = sudoSaid
 
 	c.attempts = 0
 	vtui.DebugLog("SUDO_CLIENT: Spawning %q with SUDO_ASKPASS=%q", cmd.String(), c.appPath)
@@ -133,7 +120,7 @@ func (c *SudoClient) Connect() error {
 		select {
 		case <-sudoExited:
 			vtui.DebugLog("SUDO_CLIENT: Sudo process exited prematurely.")
-			return fmt.Errorf("sudo process exited prematurely")
+			return sudoExitedError(sudoSaid.Reason())
 		default:
 		}
 
@@ -191,6 +178,70 @@ func (c *SudoClient) Connect() error {
 	}
 
 	return fmt.Errorf("failed to connect to elevated dispatcher: %v", err)
+}
+
+// sudoStderr is the stderr of the sudo process: logged line by line, and the
+// last few lines that sudo wrote itself (not the dispatcher's progress notes)
+// are kept to say why it exited.
+type sudoStderr struct {
+	mu      sync.Mutex
+	partial string
+	lines   []string
+}
+
+func (s *sudoStderr) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.partial += string(p)
+	for {
+		i := strings.IndexByte(s.partial, '\n')
+		if i < 0 {
+			break
+		}
+		s.keep(s.partial[:i])
+		s.partial = s.partial[i+1:]
+	}
+	return len(p), nil
+}
+
+func (s *sudoStderr) keep(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	vtui.DebugLog("SUDO_SUBPROCESS: %s", line)
+	if strings.HasPrefix(line, "SUDO_DISPATCHER:") {
+		return
+	}
+	s.lines = append(s.lines, line)
+	if len(s.lines) > 3 {
+		s.lines = s.lines[len(s.lines)-3:]
+	}
+}
+
+// Reason is what sudo said before it exited, or "" when it said nothing.
+func (s *sudoStderr) Reason() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rest := strings.TrimSpace(s.partial); rest != "" {
+		s.partial = ""
+		s.keep(rest)
+	}
+	return strings.Join(s.lines, "; ")
+}
+
+// sudoExitedError explains that sudo gave up before the dispatcher started.
+// A user who is not allowed to use sudo used to be told only that the process
+// "exited prematurely" (#1255).
+func sudoExitedError(reason string) error {
+	if reason == "" {
+		return errors.New("sudo process exited prematurely")
+	}
+	lower := strings.ToLower(reason)
+	if strings.Contains(lower, "not in the sudoers") || strings.Contains(lower, "not allowed to") {
+		return fmt.Errorf("sudo is not available to this user (%s)", reason)
+	}
+	return fmt.Errorf("sudo process exited prematurely (%s)", reason)
 }
 
 // SendRequest sends a command to the dispatcher and waits for the response.

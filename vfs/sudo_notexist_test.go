@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -165,5 +166,31 @@ func TestSudoClientRenameNoReplaceGoesThroughTheDispatcher(t *testing.T) {
 	}
 	if _, err := os.Lstat(a); !os.IsNotExist(err) {
 		t.Fatalf("a.txt is still there: %v", err)
+	}
+}
+
+func TestSudoStderrKeepsWhatSudoSaid(t *testing.T) {
+	s := &sudoStderr{}
+	_, _ = s.Write([]byte("SUDO_DISPATCHER: STARTING\n[sudo] password for ann: \nSorry, try again.\nann is not in the sudoers"))
+	_, _ = s.Write([]byte(" file.  This incident will be reported.\n"))
+	got := s.Reason()
+	if strings.Contains(got, "SUDO_DISPATCHER") {
+		t.Fatalf("the dispatcher's notes were kept: %q", got)
+	}
+	if !strings.Contains(got, "ann is not in the sudoers file.  This incident will be reported.") {
+		t.Fatalf("reason = %q", got)
+	}
+}
+
+func TestSudoExitedErrorExplainsWhySudoGaveUp(t *testing.T) {
+	if got := sudoExitedError("").Error(); got != "sudo process exited prematurely" {
+		t.Fatalf("no reason: %q", got)
+	}
+	notAllowed := sudoExitedError("ann is not in the sudoers file.").Error()
+	if !strings.Contains(notAllowed, "not available to this user") || !strings.Contains(notAllowed, "not in the sudoers") {
+		t.Fatalf("a user who may not use sudo: %q", notAllowed)
+	}
+	if other := sudoExitedError("sudo: 3 incorrect password attempts").Error(); !strings.Contains(other, "incorrect password attempts") {
+		t.Fatalf("other reasons are kept: %q", other)
 	}
 }
