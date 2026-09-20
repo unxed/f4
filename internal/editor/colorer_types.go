@@ -173,20 +173,13 @@ func (f *colorerTypeFrame) rebuild(selectType int) {
 	f.SetSelectPos(selected)
 }
 
-// Show paints the group names on their separators and the total of types
-// under the list, which VMenu does not.
+// Show paints the total of types under the list, which VMenu does not. The
+// group names are the text of the separators and VMenu draws them itself: they
+// used to be painted here by row number, which left them on rows that held other
+// items once the list was filtered (#263).
 func (f *colorerTypeFrame) Show(scr *vtui.ScreenBuf) {
 	f.VMenu.Show(scr)
 	p := vtui.NewPainter(scr)
-	for i := 0; i < f.Y2-f.Y1-1; i++ {
-		idx := f.TopPos + i
-		if idx >= len(f.Items) {
-			break
-		}
-		if item := f.Items[idx]; item.Separator && item.Text != "" {
-			p.DrawTitle(f.X1, f.Y1+1+i, f.X2, " "+item.Text+" ", vtui.Palette[f.ColorTitleIdx])
-		}
-	}
 	p.DrawTitle(f.X1, f.Y2, f.X2, " "+fmt.Sprintf(i18n.Msg("Colorer.TotalTypes"), len(f.types))+" ", vtui.Palette[f.ColorTitleIdx])
 }
 

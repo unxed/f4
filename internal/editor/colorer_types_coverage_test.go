@@ -1,10 +1,12 @@
 package editor
 
 import (
+	"strings"
 	"testing"
 
 	colorer "github.com/unxed/colorer4go"
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -64,4 +66,61 @@ func TestColorerTypeFrameShowPaintsSeparatorsAndTotal(t *testing.T) {
 	f.rebuild(-1)
 	f.SetPosition(1, 1, 30, 10)
 	f.Show(vtui.NewSilentScreenBuf())
+}
+
+// Typing into the list of types hides the ones that do not match. The group
+// names went by row number and were left on rows that held other items, and
+// stayed on an empty list (#263).
+func TestColorerTypeFrameGroupNamesFollowTheFilter(t *testing.T) {
+	vtui.SetDefaultPalette()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	f := &colorerTypeFrame{
+		VMenu: vtui.NewVMenu("types"),
+		types: []colorerTypeEntry{
+			{name: "go", group: "Languages", description: "Go"},
+			{name: "rust", group: "Languages", description: "Rust"},
+			{name: "json", group: "Data", description: "JSON"},
+		},
+	}
+	f.rebuild(-1)
+	f.SetPosition(0, 0, 40, 12)
+	f.ClearDone()
+
+	rows := func() []string {
+		scr := vtui.NewSilentScreenBuf()
+		scr.AllocBuf(50, 15)
+		f.Show(scr)
+		var out []string
+		for y := f.Y1 + 1; y < f.Y2; y++ {
+			var b strings.Builder
+			for x := f.X1 + 1; x < f.X2; x++ {
+				b.WriteRune(rune(scr.GetCell(x, y).Char))
+			}
+			out = append(out, b.String())
+		}
+		return out
+	}
+	has := func(rows []string, s string) bool {
+		for _, r := range rows {
+			if strings.Contains(r, s) {
+				return true
+			}
+		}
+		return false
+	}
+
+	all := rows()
+	if !has(all, "Languages") || !has(all, "Data") {
+		t.Fatalf("the group names are missing from the full list: %q", all)
+	}
+
+	// Only JSON matches "js": no other group name is left on screen.
+	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.LeftAltPressed})
+	for _, r := range "js" {
+		f.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: r})
+	}
+	filtered := rows()
+	if !has(filtered, "JSON") || has(filtered, "Languages") || has(filtered, "Go") {
+		t.Fatalf("filtered list %q shows what the filter hides", filtered)
+	}
 }
