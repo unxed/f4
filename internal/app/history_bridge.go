@@ -203,19 +203,19 @@ func revealViewerEditorHistoryEntry(pf *panel.PanelsFrame, entry viewerEditorHis
 		return false
 	}
 	dir, name := filepath.Dir(entry.Path), filepath.Base(entry.Path)
-	alreadyThere := panel.SameFolderHistoryPath(target.Vfs.GetPath(), dir)
+	if panel.SameFolderHistoryPath(target.Vfs.GetPath(), dir) {
+		// Already there: navigating would reload the folder and put the cursor
+		// back where it was, so only the cursor is moved.
+		pf.ShowPanels = true
+		target.SelectName(name)
+		return true
+	}
 	if !pf.NavigateToPath(target, dir) {
 		return false
 	}
 	pf.ShowPanels = true
-	if alreadyThere {
-		// Nothing reloads, so a pending selection would wait for a load that
-		// never comes: move the cursor now.
-		target.SelectName(name)
-	} else {
-		// After the navigation, which sets a selection of its own.
-		target.PendingSelection = name
-	}
+	// After the navigation, which sets a selection of its own.
+	target.PendingSelection = name
 	return true
 }
 
