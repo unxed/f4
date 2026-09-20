@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -240,4 +241,22 @@ func TestDiagnosticFlags_ArmPanicsOnAPathItCannotWrite(t *testing.T) {
 	}()
 	d := diagnosticFlags{tracePath: filepath.Join(blocked, "trace.out")}
 	d.arm(t.TempDir())()
+}
+
+// The UI of a terminal session is drawn by the daemon, so a profile of the
+// process the user ran is empty (#884): the switches have to reach the daemon.
+func TestServerDiagnosticArgsReachTheDaemonWithItsOwnFiles(t *testing.T) {
+	if got := serverDiagnosticArgs("", diagnosticFlags{}); len(got) != 0 {
+		t.Fatalf("nothing was asked for, yet the daemon gets %q", got)
+	}
+	got := serverDiagnosticArgs("/tmp/f4.prof", diagnosticFlags{tracePath: "/tmp/f4.trace", stallLimit: 300 * time.Millisecond})
+	want := []string{"--cpuprofile", "/tmp/f4.prof.server", "--trace", "/tmp/f4.trace.server", "--stall-watchdog", "300ms"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	// What the daemon is given has to be read back by the same parser.
+	limit, _, err := stallWatchdogLimit("", got[5])
+	if err != nil || limit != 300*time.Millisecond {
+		t.Fatalf("the stall limit given to the daemon does not read back: %v, %v", limit, err)
+	}
 }

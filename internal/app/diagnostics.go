@@ -144,6 +144,24 @@ func (d *diagnosticFlags) apply(name, flagVal, next string) (consumed int, err e
 	return 0, nil
 }
 
+// serverDiagnosticArgs are the switches that go on to the daemon a terminal
+// session starts. The daemon writes next to the file that was asked for, with
+// ".server" added: this process writes the file itself, and two processes on one
+// profile would overwrite each other.
+func serverDiagnosticArgs(cpuprofile string, d diagnosticFlags) []string {
+	var args []string
+	if cpuprofile != "" {
+		args = append(args, "--cpuprofile", cpuprofile+".server")
+	}
+	if d.tracePath != "" {
+		args = append(args, "--trace", d.tracePath+".server")
+	}
+	if d.stallLimit > 0 {
+		args = append(args, "--stall-watchdog", d.stallLimit.String())
+	}
+	return args
+}
+
 // wanted reports whether the command line asked for any of this at all.
 func (d diagnosticFlags) wanted() bool {
 	return d.tracePath != "" || d.stallLimit > 0

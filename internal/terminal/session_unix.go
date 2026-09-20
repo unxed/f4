@@ -189,7 +189,7 @@ func startNewSession() {
 	sockPath := filepath.Join(sessionDir(), fmt.Sprintf("f4-new-%d-%d.sock", pid, time.Now().Unix()))
 	vtui.DebugLog("SESSION: Starting new daemon server at %s", sockPath)
 
-	cmd := update.SelfCommand(os.Args[0], "--server", sockPath)
+	cmd := update.SelfCommand(os.Args[0], append([]string{"--server", sockPath}, ServerDiagnosticArgs...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // Detach from terminal
 
 	// Crucial for GUI startup: redirect daemon's own I/O to null so it doesn't

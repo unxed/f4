@@ -706,14 +706,8 @@ see in vtinput project: https://github.com/unxed/vtinput
 		}
 	}
 
-	if serverPath != "" {
-		terminal.RunServer(serverPath)
-		return
-	}
-	if clientPath != "" {
-		terminal.RunClient(clientPath, 0)
-		return
-	}
+	// Before the daemon and client branches below, so that a daemon started
+	// with these switches measures itself (#884).
 	if cpuprofile != "" {
 		// #nosec G703 -- cpuprofile is the path the user typed after
 		// --cpuprofile; writing where they asked is the whole feature.
@@ -727,6 +721,16 @@ see in vtinput project: https://github.com/unxed/vtinput
 	if diagFlags.wanted() {
 		stopDiagnostics := diagFlags.arm(filepath.Join(config.GetF4ConfigDir(), "crashes"))
 		defer stopDiagnostics()
+	}
+	terminal.ServerDiagnosticArgs = serverDiagnosticArgs(cpuprofile, diagFlags)
+
+	if serverPath != "" {
+		terminal.RunServer(serverPath)
+		return
+	}
+	if clientPath != "" {
+		terminal.RunClient(clientPath, 0)
+		return
 	}
 
 	// Settings.ini supplies whatever this run did not (issue #601). The
