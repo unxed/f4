@@ -748,6 +748,73 @@ func (ev *EditorView) AddCursorAtNextOccurrence() {
 	vtui.FrameManager.Redraw()
 }
 
+// SkipOccurrence moves the copy that was added last, the primary caret, on to
+// the next copy of the text without keeping a caret on the one it leaves: the
+// key for "not this one" while walking through the copies. Copies that already
+// have a caret are passed over, and the search wraps round the end of the file.
+func (ev *EditorView) SkipOccurrence() {
+	needle, ok := ev.caretSearchNeedle()
+	if !ok {
+		return
+	}
+	_, from := ev.GetSelectionRange()
+	taken := make(map[int]bool, len(ev.extraCursors))
+	for _, span := range ev.caretSpans() {
+		taken[span.selStart] = true
+	}
+	size := ev.Pt.Size()
+	for tries := 0; tries < editorMaxOccurrenceCarets; tries++ {
+		match := ev.findBytesIn(needle, from, size)
+		if match < 0 {
+			match = ev.findBytesIn(needle, 0, from)
+		}
+		if match < 0 {
+			return
+		}
+		if !taken[match] {
+			ev.setPrimarySelection(match, match+len(needle))
+			ev.normalizeExtraCarets()
+			ev.EnsureCursorVisible()
+			vtui.FrameManager.Redraw()
+			return
+		}
+		from = match + len(needle)
+	}
+}
+
+// RemoveLastOccurrence takes back the copy that was added last: the primary
+// caret is dropped and the caret before it, in the text, becomes the primary
+// one, so the view goes back to it. With no earlier caret it wraps to the last.
+func (ev *EditorView) RemoveLastOccurrence() {
+	if len(ev.extraCursors) == 0 {
+		return
+	}
+	primary := ev.caretOffset()
+	best := -1
+	for i, caret := range ev.extraCursors {
+		if caret.off < primary && (best < 0 || caret.off > ev.extraCursors[best].off) {
+			best = i
+		}
+	}
+	if best < 0 {
+		for i, caret := range ev.extraCursors {
+			if best < 0 || caret.off > ev.extraCursors[best].off {
+				best = i
+			}
+		}
+	}
+	caret := ev.extraCursors[best]
+	ev.extraCursors = append(ev.extraCursors[:best], ev.extraCursors[best+1:]...)
+	if caret.hasSel {
+		ev.setPrimarySelection(min(caret.anchor, caret.off), max(caret.anchor, caret.off))
+	} else {
+		ev.setPrimarySelection(caret.off, caret.off)
+	}
+	ev.normalizeExtraCarets()
+	ev.EnsureCursorVisible()
+	vtui.FrameManager.Redraw()
+}
+
 // SelectAllOccurrences puts a caret on every copy of the selected text.
 func (ev *EditorView) SelectAllOccurrences() {
 	needle, ok := ev.caretSearchNeedle()

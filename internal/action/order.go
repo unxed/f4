@@ -182,6 +182,8 @@ var actionMenuOrder = []string{
 	"Editor.DeleteLine",
 	"Editor.DuplicateLine",
 	"Editor.AddCursorAtNextOccurrence",
+	"Editor.SkipOccurrence",
+	"Editor.RemoveLastOccurrence",
 	"Editor.SelectAllOccurrences",
 	"Editor.MoveLineUp",
 	"Editor.MoveLineDown",

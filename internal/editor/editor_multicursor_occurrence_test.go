@@ -136,3 +136,62 @@ func TestEditor_MultiCursor_SearchCrossesChunkBoundaries(t *testing.T) {
 		t.Errorf("primary selection = [%d %d), want [%d %d)", start, end, wantStart, wantStart+len(needle))
 	}
 }
+
+// "Not this one": the copy added last moves on to the next one and the carets
+// before it stay (#317).
+func TestEditor_MultiCursor_SkipOccurrenceMovesThePrimaryOn(t *testing.T) {
+	ev := multiCursorEditor(t, "aa bb aa bb aa bb aa")
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+
+	ev.AddCursorAtNextOccurrence() // selects "aa" at 0
+	ev.AddCursorAtNextOccurrence() // adds the copy at 6, which is now primary
+	ev.SkipOccurrence()            // 6 is not wanted: on to 12
+
+	if start, end := ev.GetSelectionRange(); start != 12 || end != 14 {
+		t.Errorf("primary selection = [%d %d), want [12 14)", start, end)
+	}
+	if got, want := extraCaretSelections(ev), [][2]int{{0, 2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("extra selections = %v, want %v: the skipped copy must not keep a caret", got, want)
+	}
+
+	// Copies that already have a caret are passed over, and the search wraps.
+	ev.SkipOccurrence() // 18
+	ev.SkipOccurrence() // wraps past 0, which has a caret, to 6
+	if start, end := ev.GetSelectionRange(); start != 6 || end != 8 {
+		t.Errorf("after wrapping the primary selection = [%d %d), want [6 8)", start, end)
+	}
+}
+
+// Going back takes the last copy away and returns to the one before it.
+func TestEditor_MultiCursor_RemoveLastOccurrenceGoesBack(t *testing.T) {
+	ev := multiCursorEditor(t, "aa bb aa bb aa")
+	ev.CursorLine = 0
+	ev.CursorPos = 0
+
+	ev.AddCursorAtNextOccurrence() // selects "aa" at 0
+	ev.AddCursorAtNextOccurrence() // 6
+	ev.AddCursorAtNextOccurrence() // 12, primary
+
+	ev.RemoveLastOccurrence()
+	if start, end := ev.GetSelectionRange(); start != 6 || end != 8 {
+		t.Errorf("primary selection = [%d %d), want the previous copy [6 8)", start, end)
+	}
+	if got, want := extraCaretSelections(ev), [][2]int{{0, 2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("extra selections = %v, want %v", got, want)
+	}
+
+	ev.RemoveLastOccurrence()
+	if start, end := ev.GetSelectionRange(); start != 0 || end != 2 {
+		t.Errorf("primary selection = [%d %d), want [0 2)", start, end)
+	}
+	if ev.MultiCursor() {
+		t.Errorf("carets are left after going back to the first copy: %v", extraCaretOffsets(ev))
+	}
+
+	// With one caret there is nothing to take back.
+	ev.RemoveLastOccurrence()
+	if start, end := ev.GetSelectionRange(); start != 0 || end != 2 {
+		t.Errorf("a lone caret moved: [%d %d)", start, end)
+	}
+}

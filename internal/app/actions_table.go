@@ -2309,6 +2309,28 @@ func init() {
 		Handler:     withMultiEditor(func(ev *editor.EditorView) { ev.AddCursorAtNextOccurrence() }),
 	})
 	registerAction(action.Action{
+		Name:        "Editor.SkipOccurrence",
+		Area:        "Editor",
+		Label:       "Skip Occurrence",
+		LabelKey:    "Action.Editor.SkipOccurrence",
+		Description: "Move the last added cursor to the next copy of the selected text, without keeping the one it leaves",
+		DescKey:     "Action.Editor.SkipOccurrence.Desc",
+		DefaultKeys: []string{"CtrlAltShiftN"},
+		MenuPath:    "Edit",
+		Handler:     withMultiEditor(func(ev *editor.EditorView) { ev.SkipOccurrence() }),
+	})
+	registerAction(action.Action{
+		Name:        "Editor.RemoveLastOccurrence",
+		Area:        "Editor",
+		Label:       "Remove Last Occurrence",
+		LabelKey:    "Action.Editor.RemoveLastOccurrence",
+		Description: "Take back the last added cursor and go back to the previous copy",
+		DescKey:     "Action.Editor.RemoveLastOccurrence.Desc",
+		DefaultKeys: []string{"CtrlAltShiftU"},
+		MenuPath:    "Edit",
+		Handler:     withMultiEditor(func(ev *editor.EditorView) { ev.RemoveLastOccurrence() }),
+	})
+	registerAction(action.Action{
 		Name:        "Editor.SelectAllOccurrences",
 		Area:        "Editor",
 		Label:       "Select All Occurrences",
