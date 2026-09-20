@@ -695,12 +695,26 @@ func (c *settingsCenter) restrictTo(ids ...string) {
 	c.layoutWindow()
 }
 
+// A terminal smaller than this cannot hold the settings in a window of half its
+// width: the pages, and the hotkey table above all, need every column there is.
+// The dialog then opens maximized, and its zoom button gives the ordinary size
+// back (#1239).
+const (
+	smallSettingsScreenWidth  = 120
+	smallSettingsScreenHeight = 30
+)
+
 func (c *settingsCenter) ResizeConsole(w, h int) {
 	c.screenW, c.screenH = max(1, w), max(1, h)
 	if !c.positioned {
 		dw, dh := min(w, max(72, w/2)), min(h, max(22, h*3/4))
 		c.SetPosition((w-dw)/2, (h-dh)/2, (w+dw)/2-1, (h+dh)/2-1)
 		c.positioned = true
+		if w < smallSettingsScreenWidth || h < smallSettingsScreenHeight {
+			c.SavedBounds = &vtui.Rect{X1: c.X1, Y1: c.Y1, X2: c.X2, Y2: c.Y2}
+			top := vtui.FrameManager.WorkspaceTopInset()
+			c.SetPosition(0, top, w-1, max(top, h-2))
+		}
 	} else if c.SavedBounds != nil {
 		// Match vtui's BaseWindow.ToggleZoom: the workspace tab strip owns the
 		// rows above and the key bar owns the row below, and both are drawn
