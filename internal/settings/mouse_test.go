@@ -82,3 +82,48 @@ func TestSettingsMouseCaptureAcrossPanes(t *testing.T) {
 		d.Close()
 	}
 }
+
+// Scrolling the page with the wheel moves the settings under a pointer that
+// stays where it is; the explanation has to follow to the one it is over now
+// (#1273).
+func TestSettingsWheelScrollDescribesTheSettingUnderThePointer(t *testing.T) {
+	values := map[string]string{}
+	var fields []f4settings.Field
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprint(i)
+		values[id] = "false"
+		fields = append(fields, f4settings.Scalar(id, "panels", "Options", "Option "+id, "Explanation of option "+id, f4settings.Boolean))
+	}
+	d := f4settings.NewDraft(values, nil)
+	c := newSettingsCenter([]*settingsSession{{catalog: f4settings.Catalog{ID: "wheel", Categories: Categories, Fields: fields}, draft: d}})
+	c.selectCategory("panels")
+	c.SetPosition(0, 0, 149, 39)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(150, 40)
+	c.Show(scr)
+
+	x, y := c.page.X1+3, c.page.Y1+6
+	rowAt := func() *settingsRow {
+		for _, r := range c.page.rows {
+			if y >= c.page.Y1+r.y-c.page.scroll && y < c.page.Y1+r.y+r.height-c.page.scroll {
+				return r
+			}
+		}
+		return nil
+	}
+	c.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, MouseX: testutil.Int16(x), MouseY: testutil.Int16(y), MouseEventFlags: vtinput.MouseMoved})
+	before := rowAt()
+	if before == nil || !strings.Contains(c.help.text, "Explanation of option "+before.field.ID) {
+		t.Fatalf("hovering did not describe the setting under the pointer: %q", c.help.text)
+	}
+
+	// One wheel notch down, the pointer not moving.
+	c.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, MouseX: testutil.Int16(x), MouseY: testutil.Int16(y), WheelDirection: -1})
+	after := rowAt()
+	if after == nil || after == before {
+		t.Fatalf("the wheel did not move a different setting under the pointer")
+	}
+	if !strings.Contains(c.help.text, "Explanation of option "+after.field.ID) {
+		t.Fatalf("after the wheel the explanation is %q, want that of option %s", c.help.text, after.field.ID)
+	}
+}

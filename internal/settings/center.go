@@ -336,19 +336,31 @@ func (v *settingsViewport) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 		v.scroll = max(0, min(v.bar.Max, v.scroll+step))
 		v.positionRows()
+		// The rows moved under a pointer that did not: the setting it is over
+		// now is the one to explain (#1273).
+		v.describeRowAt(int(e.MouseY))
 		return true
 	}
 	if int(e.MouseX) == v.X2 && v.bar.ProcessMouse(e) {
 		return true
 	}
 	handled := v.Group.ProcessMouse(e)
+	v.describeRowAt(int(e.MouseY))
+	return handled
+}
+
+// describeRowAt hands the setting drawn on screen row y to onFocus, which
+// shows what it does.
+func (v *settingsViewport) describeRowAt(y int) {
+	if v.onFocus == nil {
+		return
+	}
 	for _, r := range v.rows {
-		if int(e.MouseY) >= v.Y1+r.y-v.scroll && int(e.MouseY) < v.Y1+r.y+r.height-v.scroll && v.onFocus != nil {
+		if y >= v.Y1+r.y-v.scroll && y < v.Y1+r.y+r.height-v.scroll {
 			v.onFocus(r)
-			break
+			return
 		}
 	}
-	return handled
 }
 
 type settingsHelp struct {
