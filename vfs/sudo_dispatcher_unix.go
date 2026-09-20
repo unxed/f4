@@ -206,6 +206,16 @@ func handleSudoClient(conn *net.UnixConn) {
 			if err != nil {
 				resp.Error = err.Error()
 			}
+		case CmdSymlink:
+			if err := os.Symlink(req.Path2, req.Path); err != nil {
+				resp.Error = err.Error()
+			}
+
+		case CmdHardlink:
+			if err := os.Link(req.Path2, req.Path); err != nil {
+				resp.Error = err.Error()
+			}
+
 		case CmdSetAttributes:
 			// Apply all 3 metadata types at once under root
 			err := os.Chmod(req.Path, os.FileMode(req.Item.UnixMode))

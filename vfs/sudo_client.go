@@ -339,6 +339,18 @@ func (c *SudoClient) Rename(oldPath, newPath string) error {
 	return err
 }
 
+// Symlink makes linkPath a symbolic link to target, as root.
+func (c *SudoClient) Symlink(target, linkPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdSymlink, Path: linkPath, Path2: target})
+	return err
+}
+
+// Hardlink makes linkPath a hard link to the existing target, as root.
+func (c *SudoClient) Hardlink(target, linkPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdHardlink, Path: linkPath, Path2: target})
+	return err
+}
+
 // RenameNoReplace renames as root without replacing what is at newPath.
 func (c *SudoClient) RenameNoReplace(oldPath, newPath string) error {
 	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath, Flags: SudoRenameNoReplace})

@@ -194,3 +194,56 @@ func TestSudoExitedErrorExplainsWhySudoGaveUp(t *testing.T) {
 		t.Fatalf("other reasons are kept: %q", other)
 	}
 }
+
+// Creating a link in a folder that needs sudo (#1255) has to reach the
+// dispatcher: the request carries the link's path and its target.
+func TestSudoClientLinksGoThroughTheDispatcher(t *testing.T) {
+	dir := shortSocketDir(t)
+	addr, err := net.ResolveUnixAddr("unix", filepath.Join(dir, "d.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener := listenUnixForTest(t, addr)
+	defer func() { _ = listener.Close() }()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if conn, err := listener.AcceptUnix(); err == nil {
+			handleSudoClient(conn)
+		}
+	}()
+	conn, err := net.DialUnix("unix", nil, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &SudoClient{conn: conn}
+	defer func() {
+		_ = conn.Close()
+		<-done
+	}()
+
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("payload"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sym := filepath.Join(dir, "sym")
+	if err := client.Symlink("target.txt", sym); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	if got, err := os.Readlink(sym); err != nil || got != "target.txt" {
+		t.Fatalf("the link points at %q, %v; want the target as given", got, err)
+	}
+
+	hard := filepath.Join(dir, "hard")
+	if err := client.Hardlink(target, hard); err != nil {
+		t.Fatalf("Hardlink: %v", err)
+	}
+	if got, err := os.ReadFile(hard); err != nil || string(got) != "payload" {
+		t.Fatalf("the hard link reads %q, %v", got, err)
+	}
+
+	if err := client.Symlink("elsewhere", sym); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("linking over an existing name = %v, want it to exist", err)
+	}
+}

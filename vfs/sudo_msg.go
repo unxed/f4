@@ -12,6 +12,10 @@ const (
 	CmdRemove
 	CmdRename
 	CmdSetAttributes
+	// CmdSymlink makes Path a symbolic link that points at Path2.
+	CmdSymlink
+	// CmdHardlink makes Path a hard link to the existing Path2.
+	CmdHardlink
 )
 
 // SudoRenameNoReplace, in Flags of a CmdRename, makes the dispatcher refuse to

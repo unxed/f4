@@ -808,7 +808,12 @@ func (v *OSVFS) Symlink(ctx context.Context, target, linkPath string) error {
 	if err != nil {
 		return err
 	}
-	return hostfs.Symlink(target, prepareOSPath(abs))
+	err = hostfs.Symlink(target, prepareOSPath(abs))
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for Symlink(%q), attempting sudo...", linkPath)
+		return globalSudoClient.Symlink(target, prepareOSPath(abs))
+	}
+	return err
 }
 
 // OpenWriteAt makes OSVFS a RandomWriteVFS. A local file is the case where
@@ -836,7 +841,12 @@ func (v *OSVFS) Hardlink(ctx context.Context, target, linkPath string) error {
 	if err != nil {
 		return err
 	}
-	return hostfs.Link(prepareOSPath(absTarget), prepareOSPath(absLink))
+	err = hostfs.Link(prepareOSPath(absTarget), prepareOSPath(absLink))
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for Hardlink(%q), attempting sudo...", linkPath)
+		return globalSudoClient.Hardlink(prepareOSPath(absTarget), prepareOSPath(absLink))
+	}
+	return err
 }
 
 func (v *OSVFS) Junction(ctx context.Context, target, linkPath string) error {
