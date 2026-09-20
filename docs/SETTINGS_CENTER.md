@@ -385,10 +385,10 @@ in both the command line and eligible dialog fields. The former Navigation &
 suggestions category is removed; its terminology remains searchable, and the
 legacy path-hints action opens Terminal & environment.
 
-The former Options → Save Settings entry is now a deep link into Workspaces &
-saving, alongside the existing Manual saving commands. App.SaveSettings and its
-Shift+F9 binding remain compatible; it no longer exposes a separate menu item
-or opens the legacy save-settings dialog.
+Options → Save Settings (Shift+F9, as in Far) opens its own small dialog that
+asks what to save. It was briefly a deep link into Workspaces & saving; that left
+Shift+F9 without the question and the Center without a hotkey (#1282). The Manual
+saving commands of Workspaces & saving remain as another way to do the same.
 Settings search hover profiling (2026-09-09): `BenchmarkSettingsHoverSearch`
 measures a mouse move followed by a silent-screen repaint with real core/provider
 snapshots. The nonempty `editor` query previously repeated catalog matching for
