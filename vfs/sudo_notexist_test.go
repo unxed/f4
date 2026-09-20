@@ -44,7 +44,7 @@ func TestSudoRemoteErrorKeepsTheErrnoOfTheText(t *testing.T) {
 // answer.
 func answeringDispatcher(t *testing.T, answer string) *SudoClient {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), "d.sock")
+	sock := filepath.Join(shortSocketDir(t), "d.sock") // unix socket paths are short on macOS
 	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
 	if err != nil {
 		t.Fatal(err)
