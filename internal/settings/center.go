@@ -1350,8 +1350,21 @@ func (c *settingsCenter) runBackground(worker func(context.Context) error, done 
 	c.apply.SetDisabled(true)
 	c.ok.SetDisabled(true)
 	c.running = vtui.RunAsync(func(task *vtui.TaskContext) {
-		err := worker(task)
+		progressShown := false
+		report := func(text string) {
+			task.RunOnUI(func() {
+				if c.running != nil {
+					progressShown = true
+					c.status = text
+					vtui.FrameManager.Redraw()
+				}
+			})
+		}
+		err := worker(context.WithValue(task, settingsProgressKey{}, report))
 		task.RunOnUI(func() {
+			if progressShown && err == nil {
+				c.status = "" // what it said while working is not a result
+			}
 			c.running = nil
 			c.search.SetDisabled(false)
 			c.sidebar.SetDisabled(false)

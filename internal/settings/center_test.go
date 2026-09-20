@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/theme"
@@ -761,5 +762,46 @@ func TestSettingsCenterOpensMaximizedInASmallTerminal(t *testing.T) {
 	small.ResizeConsole(90, 26)
 	if small.X2 != 89 || small.Y2 != 24 {
 		t.Fatalf("after a resize the window is at %d,%d–%d,%d", small.X1, small.Y1, small.X2, small.Y2)
+	}
+}
+
+// A long operation says what it is doing in the status row while it runs, and
+// the row is empty again when it has finished without error (#277).
+func TestSettingsCenterShowsAnOperationsProgress(t *testing.T) {
+	t.Cleanup(testutil.SwapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(100, 30)
+	vtui.FrameManager.Init(scr)
+	d, _ := (coreSettingsProvider{}).Begin(context.Background())
+	defer d.Close()
+	c := newSettingsCenter([]*settingsSession{{catalog: (coreSettingsProvider{}).Catalog(), draft: d}})
+	c.ResizeConsole(100, 30)
+	vtui.FrameManager.Push(c)
+
+	release := make(chan struct{})
+	c.runBackground(func(ctx context.Context) error {
+		reportSettingsProgress(ctx, "1/2  first")
+		<-release
+		return nil
+	}, nil)
+
+	pump := func(cond func() bool) {
+		t.Helper()
+		deadline := time.After(10 * time.Second)
+		for !cond() {
+			select {
+			case task := <-vtui.FrameManager.TaskChan:
+				task()
+			case <-time.After(5 * time.Millisecond):
+			case <-deadline:
+				t.Fatalf("timed out; status is %q", c.status)
+			}
+		}
+	}
+	pump(func() bool { return c.status == "1/2  first" })
+	close(release)
+	pump(func() bool { return c.running == nil })
+	if c.status != "" {
+		t.Fatalf("the progress line stayed after the operation finished: %q", c.status)
 	}
 }

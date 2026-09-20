@@ -46,7 +46,11 @@ func (settingsOperationsProvider) Catalog() f4settings.Catalog {
 		return colorerCheckError(check)
 	})
 	add("syntax.check", "syntax", "Colorer", "Check all schemes", "Load the scheme of every Colorer file type in the applied configuration and report the first one Colorer cannot load, and what it reports on the way. Applies nothing.", true, func(ctx context.Context) error {
-		return colorerCheckError(editor.CheckColorerSource(ctx, editor.CurrentColorerSource(), config.App.EditorColorerScheme, true, nil))
+		// Every file type is loaded in turn and that takes a while; the status
+		// line says which one it is at, or the window looks hung (#277).
+		return colorerCheckError(editor.CheckColorerSource(ctx, editor.CurrentColorerSource(), config.App.EditorColorerScheme, true, func(done, total int, label string) {
+			reportSettingsProgress(ctx, fmt.Sprintf("%d/%d  %s", done+1, total, label))
+		}))
 	})
 	add("syntax.download", "syntax", "Colorer", "Download schemas", "Download and validate the Colorer schema archive, then install it at the applied configuration directory.", true, func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -181,6 +185,19 @@ func RunOnUI(ctx context.Context, run func()) {
 
 // colorerCheckError reports a Colorer check as a command's result: nil when it
 // is clean, otherwise why it failed followed by what Colorer reported.
+// settingsProgressKey carries, in the context of an operation started from the
+// Settings Center, the function that puts a line of progress in its status row.
+type settingsProgressKey struct{}
+
+// reportSettingsProgress shows text in the status row while the operation runs.
+// It is safe to call from the operation's goroutine, and does nothing when the
+// operation was not started by the Settings Center.
+func reportSettingsProgress(ctx context.Context, text string) {
+	if report, ok := ctx.Value(settingsProgressKey{}).(func(string)); ok {
+		report(text)
+	}
+}
+
 func colorerCheckError(check editor.ColorerCheck) error {
 	if check.Clean() {
 		return nil
