@@ -229,14 +229,24 @@ func actionTestArchive(app vfs.App) {
 		app.RunAdvancedProgressTask(" Testing... ", false, func(ctx context.Context, reporter vfs.TaskReporter) error {
 			reporter.UpdateTransfer("Testing", filepath.Base(srcPath), -1, "", -1, "")
 			return testArchiveWithPasswordPrompt(ctx, srcPath, reporter)
-		}, func(err error) {
-			if err == nil {
-				go app.Message(" Test archive ", fmt.Sprintf("%s\nNo errors found.", filepath.Base(srcPath)), []string{"&Ok"})
-			} else if err != context.Canceled {
-				go showArchiveTestFailure(app, srcPath, err)
-			}
-		})
+		}, func(err error) { finishArchiveTest(app, srcPath, err) })
 	}()
+}
+
+// finishArchiveTest reports how a test of the archive ended. A test the user
+// stopped is not a failed one: the cancellation reaches here wrapped with the
+// name of the member being read and joined with those of the other workers, so
+// it is recognised by what it is and not by comparing the error (#1250).
+func finishArchiveTest(app vfs.App, srcPath string, err error) {
+	name := filepath.Base(srcPath)
+	switch {
+	case err == nil:
+		go app.Message(" Test archive ", fmt.Sprintf("%s\nNo errors found.", name), []string{"&Ok"})
+	case errors.Is(err, context.Canceled):
+		go app.Message(" Test archive ", fmt.Sprintf("Test for %s has been interrupted by user.", name), []string{"&Ok"})
+	default:
+		go showArchiveTestFailure(app, srcPath, err)
+	}
 }
 
 func testArchiveWithPasswordPrompt(ctx context.Context, srcPath string, reporter vfs.TaskReporter) error {
