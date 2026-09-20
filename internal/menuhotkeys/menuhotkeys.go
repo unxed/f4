@@ -120,7 +120,7 @@ type entry struct {
 	text    *string
 	plain   string // the text without its hotkey marker
 	letter  rune   // the hotkey it has now, 0 for none
-	fixed   bool   // marked by a translator and first to claim its letter
+	fixed   bool   // marked by a translator and first to claim its letter: moved only as a last resort
 	cands   []candidate
 	changed bool
 }
@@ -177,9 +177,9 @@ func assign(texts []*string) {
 	}
 	// One that found none may still be given a letter by moving items that had
 	// only settled for theirs: a big menu of short words runs out of letters
-	// for whoever comes last, though a way to give every item one exists. A
-	// letter somebody chose is never moved, and free letters and letters of
-	// items already moved are tried before the untouched ones.
+	// for whoever comes last, though a way to give every item one exists. Free
+	// letters, and letters of items already moved, are tried before the untouched
+	// ones, and a letter somebody chose is moved only as a last resort.
 	for _, e := range stranded {
 		visited := map[rune]bool{}
 		place(e, owner, visited)
@@ -222,14 +222,16 @@ func place(e *entry, owner map[int32]*entry, visited map[rune]bool) bool {
 			return true
 		}
 	}
-	// Then the letters of items that were already moved, then of the others.
-	for _, moved := range []bool{true, false} {
+	// Then the letters of items that were already moved, then of the untouched
+	// defaults, and only last of the letters a translator chose: those are moved
+	// only when the alternative is an item with no hotkey at all.
+	for _, pass := range []struct{ fixed, moved bool }{{false, true}, {false, false}, {true, false}, {true, true}} {
 		for _, c := range e.cands {
 			if visited[c.char] {
 				continue
 			}
 			holder := owner[int32(c.char)]
-			if holder == nil || holder.fixed || holder.changed != moved {
+			if holder == nil || holder.fixed != pass.fixed || holder.changed != pass.moved {
 				continue
 			}
 			visited[c.char] = true

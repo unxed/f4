@@ -65,7 +65,7 @@ func TestPanelsFrame_SideMenusExposeDriveHotkeys(t *testing.T) {
 
 func findSideDriveMenuItem(items []vtui.MenuItem, label, shortcut string, command int) bool {
 	for _, item := range items {
-		if item.Text == label && item.Shortcut == shortcut && item.Command == command {
+		if plainMenuText(item.Text) == label && item.Shortcut == shortcut && item.Command == command {
 			return true
 		}
 	}

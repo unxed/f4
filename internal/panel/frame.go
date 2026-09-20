@@ -582,10 +582,22 @@ func sideMenuText(key string) string {
 	return menuhotkeys.Auto(text)
 }
 
+// finishSideMenu settles the hotkeys of a side menu, so that what LeftMenu and
+// RightMenu return never holds the default-hotkey marker.
+func finishSideMenu(m vtui.MenuBarItem) vtui.MenuBarItem {
+	bar := []vtui.MenuBarItem{m}
+	menuhotkeys.UniqueBar(bar)
+	return bar[0]
+}
+
 // leftMenu builds the custom side menu for the left panel. View and
 // sort modes act on a fixed side through Cm commands, so they stay
 // command-routed rather than generated from the action registry.
 func (pf *PanelsFrame) LeftMenu() vtui.MenuBarItem {
+	return finishSideMenu(pf.leftMenu())
+}
+
+func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 	if IsAIPanel(pf.Panels[0]) {
 		return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Left"), SubItems: []vtui.MenuItem{
 			{Text: "&1. " + i18n.Msg("Action.AI.ViewContext"), Command: appcmd.CmLeftAIContext, Shortcut: "Ctrl+1"},
@@ -628,6 +640,10 @@ func (pf *PanelsFrame) LeftMenu() vtui.MenuBarItem {
 
 // rightMenu builds the custom side menu for the right panel.
 func (pf *PanelsFrame) RightMenu() vtui.MenuBarItem {
+	return finishSideMenu(pf.rightMenu())
+}
+
+func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 	if IsAIPanel(pf.Panels[1]) {
 		return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Right"), SubItems: []vtui.MenuItem{
 			{Text: "&1. " + i18n.Msg("Action.AI.ViewContext"), Command: appcmd.CmRightAIContext, Shortcut: "Ctrl+1"},

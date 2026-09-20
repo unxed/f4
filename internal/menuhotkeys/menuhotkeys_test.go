@@ -214,3 +214,18 @@ func TestUniqueRanksALetterByItsBestRole(t *testing.T) {
 		t.Fatalf("got %q", texts(items))
 	}
 }
+
+// When both letters an item can have were chosen by translators, the item would
+// have no hotkey at all; one of those is then moved to a third letter instead.
+func TestUniqueMovesAChosenLetterRatherThanLeaveAnItemWithNone(t *testing.T) {
+	items := menu("&Abc", "A&bc", Auto("Ab"))
+	Unique(items)
+	seen := map[rune]bool{}
+	for _, item := range items {
+		hk := vtui.ExtractHotkey(item.Text)
+		if hk == 0 || seen[hk] {
+			t.Fatalf("hotkeys are not distinct or one is missing: %q", texts(items))
+		}
+		seen[hk] = true
+	}
+}
