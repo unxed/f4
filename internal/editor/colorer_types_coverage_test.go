@@ -6,6 +6,7 @@ import (
 
 	colorer "github.com/unxed/colorer4go"
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -94,7 +95,7 @@ func TestColorerTypeFrameGroupNamesFollowTheFilter(t *testing.T) {
 		for y := f.Y1 + 1; y < f.Y2; y++ {
 			var b strings.Builder
 			for x := f.X1 + 1; x < f.X2; x++ {
-				b.WriteRune(rune(scr.GetCell(x, y).Char))
+				b.WriteRune(testutil.Rune(scr.GetCell(x, y).Char))
 			}
 			out = append(out, b.String())
 		}
