@@ -4058,8 +4058,12 @@ func (pf *PanelsFrame) RunProgressTaskAfter(delay time.Duration, title, startMsg
 	dialogShown := false // accessed only from UI tasks
 	uiFrames := vtui.FrameManager
 	var showDialog func()
+	// waited is set once the dialog has had to wait for a modal to go. The
+	// worker may be finished by the time it is let through, and a dialog shown
+	// then is never closed: nothing is left to close it (#1268).
+	waited := false
 	showDialog = func() {
-		if delay > 0 {
+		if delay > 0 || waited {
 			select {
 			case <-done:
 				return
@@ -4075,6 +4079,7 @@ func (pf *PanelsFrame) RunProgressTaskAfter(delay time.Duration, title, startMsg
 		// between a rejected answer and the next dialog, when no modal frame
 		// is on screen yet. Retry after the prompt is over.
 		if vfs.InteractivePromptPending() || progressBlockedByModal(uiFrames) {
+			waited = true
 			time.AfterFunc(50*time.Millisecond, func() {
 				uiFrames.PostTask(showDialog)
 			})
