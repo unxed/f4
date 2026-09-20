@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/internal/tarindexcache"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/tar"
 	"github.com/unxed/vtui"
@@ -209,5 +210,53 @@ loop:
 	}
 	if _, err := os.Stat(oldIdx); err == nil {
 		t.Error("Old index remained after ExecuteFileOp (Move)")
+	}
+}
+
+// The index f4 keeps in its own cache follows an archive that is moved and is
+// removed with one that is deleted, instead of being left behind (#1187).
+func TestArchiveIndex_MoveAndDeleteTakeTheCachedIndexAlong(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("HOME", cache)
+	t.Setenv("LocalAppData", cache)
+
+	root := t.TempDir()
+	v := vfs.NewOSVFS(root)
+	oldPath, newPath := filepath.Join(root, "a.tar"), filepath.Join(root, "b.tar")
+	if err := os.WriteFile(oldPath, []byte("archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(tarindexcache.Dir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tarindexcache.Dir(), tarindexcache.Prefix(oldPath)+"-ffff.index.sqlite"), []byte("index"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		t.Fatal(err)
+	}
+	handleArchiveIndexOp(v, oldPath, v, newPath, true)
+	if len(tarindexcache.Files(oldPath)) != 0 || len(tarindexcache.Files(newPath)) != 1 {
+		t.Fatalf("after the move: old %v, new %v", tarindexcache.Files(oldPath), tarindexcache.Files(newPath))
+	}
+
+	indexes := collectArchiveIndexes(context.Background(), v, newPath)
+	if len(indexes) != 1 {
+		t.Fatalf("collected %v, want the cached index of the archive", indexes)
+	}
+	removeArchiveIndexes(indexes)
+	if left := tarindexcache.Files(newPath); len(left) != 0 {
+		t.Fatalf("the cached index stayed after the delete: %v", left)
+	}
+
+	// A copy keeps the original's index and builds its own on demand.
+	if err := os.WriteFile(filepath.Join(tarindexcache.Dir(), tarindexcache.Prefix(newPath)+"-ffff.index.sqlite"), []byte("index"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handleArchiveIndexOp(v, newPath, v, filepath.Join(root, "c.tar"), false)
+	if len(tarindexcache.Files(newPath)) != 1 {
+		t.Fatal("copying an archive took the original's index")
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/unxed/f4/internal/tarindexcache"
 )
 
 // The tar index is built once, by scanning the whole archive, and kept in the
@@ -41,25 +43,14 @@ func tarIndexPath(localPath string) string {
 	if err != nil {
 		return ""
 	}
-	abs, err := filepath.Abs(localPath)
-	if err != nil {
-		abs = localPath
-	}
-	pathHash := sha256.Sum256([]byte(abs))
-	dirKey := hex.EncodeToString(pathHash[:16])
-
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		cacheDir = os.TempDir()
-	}
-	dir := filepath.Join(cacheDir, "f4", "tar-indexes")
+	dir := tarindexcache.Dir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ""
 	}
 	// The library named its files "<name>-<hash of the path>.index.sqlite";
 	// the fingerprint goes in after the same hash, so the older indexes of this
 	// very archive, under either scheme, are recognisable by their prefix.
-	prefix := filepath.Base(localPath) + "-" + dirKey
+	prefix := tarindexcache.Prefix(localPath)
 	current := prefix + "-" + fingerprint + ".index.sqlite"
 	removeOldTarIndexes(dir, prefix, current)
 	return filepath.Join(dir, current)
