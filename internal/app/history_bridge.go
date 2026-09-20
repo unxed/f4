@@ -190,6 +190,33 @@ func openViewerEditorHistoryEntry(pf *panel.PanelsFrame, entry viewerEditorHisto
 	return true
 }
 
+// revealViewerEditorHistoryEntry opens the folder of a history entry in the
+// active panel and puts the cursor on the file, the way Find file's "Go to"
+// does: for the case where the name is forgotten but the place is not, and the
+// file is wanted in the panel, not in the viewer (#408). A file that no longer
+// exists still gets its folder. Only files of the local disk can be shown, as a
+// panel has to be pointed at their folder.
+func revealViewerEditorHistoryEntry(pf *panel.PanelsFrame, entry viewerEditorHistoryEntry) bool {
+	target := pf.GetActivePanel()
+	if target == nil || !entry.Local {
+		vtui.ShowMessage(i18n.Msg("History.ViewEditTitle"), i18n.Msg("History.SourceUnavailable"), []string{i18n.Msg("vtui.Ok")})
+		return false
+	}
+	dir, name := filepath.Dir(entry.Path), filepath.Base(entry.Path)
+	target.PendingSelection = name
+	if !pf.NavigateToPath(target, dir) {
+		target.PendingSelection = ""
+		return false
+	}
+	pf.ShowPanels = true
+	// A panel already in that folder does not reload it, and the pending
+	// selection would wait for a load that never comes.
+	if panel.SameFolderHistoryPath(target.Vfs.GetPath(), dir) {
+		target.SelectName(name)
+	}
+	return true
+}
+
 func actionViewerEditorHistory(pf *panel.PanelsFrame) {
 	entries := loadViewerEditorHistory()
 	if len(entries) == 0 {
@@ -228,6 +255,18 @@ func actionViewerEditorHistory(pf *panel.PanelsFrame) {
 		saveViewerEditorHistory(entries)
 	}
 	search.setSecondaryWidth(modes, true, 10)
+
+	// Ctrl+F10, as in the command history: show the file's folder in the panel.
+	search.onCtrlF10 = func(history.HistoryRecord) {
+		idx, _, ok := search.selected()
+		if !ok || idx < 0 || idx >= len(entries) {
+			return
+		}
+		entry := entries[idx]
+		search.cleanup()
+		menu.Close()
+		revealViewerEditorHistoryEntry(pf, entry)
+	}
 
 	openCurrent := func(override viewerEditorHistoryMode) {
 		idx, _, ok := search.selected()
