@@ -19,7 +19,6 @@ import (
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
 	"github.com/unxed/f4/internal/plughost"
-	"github.com/unxed/f4/internal/settings"
 	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/vfs"
@@ -1936,28 +1935,13 @@ func TestPanelsFrame_ShiftF9_SaveSettings(t *testing.T) {
 	if !pressKey(pf, ev) {
 		t.Error("Expected PanelsFrame to handle Shift+F9 keypress")
 	}
-	center, ok := vtui.FrameManager.GetTopFrame().(*settings.Center)
-	if !ok || center.Category() != "workspaces" {
-		t.Fatalf("Shift+F9 top frame=%T", vtui.FrameManager.GetTopFrame())
+	// Shift+F9 is Far's "save setup": the dialog that asks what to save (#1282).
+	top := vtui.FrameManager.GetTopFrame()
+	dlg, ok := top.(vtui.Container)
+	if !ok || top.GetTitle() != i18n.Msg("SaveSettings.Title") {
+		t.Fatalf("Shift+F9 top frame=%T, want the save-settings dialog", top)
 	}
-	defer center.Close()
-	var save *vtui.Button
-	var walk func(vtui.UIElement)
-	walk = func(item vtui.UIElement) {
-		if item.GetId() == "settings-command:save.preferences" {
-			save, _ = item.(*vtui.Button)
-		}
-		if c, ok := item.(vtui.Container); ok {
-			for _, child := range c.GetChildren() {
-				walk(child)
-			}
-		}
-	}
-	walk(center)
-	if save == nil {
-		t.Fatal("manual save command missing")
-	}
-	save.OnClick()
+	testutil.ClickDialogButton(t, dlg, "Save")
 
 	// Проверяем, что файл настроек действительно был записан на диск
 	info, err := os.Stat(tmp.Name())
