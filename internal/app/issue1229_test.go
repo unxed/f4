@@ -121,3 +121,55 @@ func TestIssue1229RenameOntoExistingFileCanBeCancelled(t *testing.T) {
 		t.Errorf("b.txt = %q after cancelling, want it untouched", got)
 	}
 }
+
+// A rename whose new name differs from the old one only in letter case is one
+// entry on a file system that folds case, but two files on one that does not.
+// There, renaming a.txt onto an existing A.txt must ask like any other rename
+// onto an existing file, and not replace it silently (#1229).
+func TestIssue1229CaseOnlyRenameOntoAnotherFileAsks(t *testing.T) {
+	pf, fsp, dir := setupRenameConflict(t)
+	upper := filepath.Join(dir, "A.txt")
+	// #nosec G304 G703 -- the path is inside the private test temp directory.
+	f, err := os.OpenFile(upper, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			t.Skip("this file system folds letter case: a.txt and A.txt are one file")
+		}
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("UPPER")
+	_ = f.Close()
+
+	renameEntry(pf, fsp, "a.txt", "A.txt")
+	pumpUntil(t, "the overwrite question", func() bool {
+		dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+		return ok && dlg.OnResult != nil
+	})
+	if got, _ := readFile(t, upper); got != "UPPER" {
+		t.Fatalf("A.txt was replaced before the user agreed: %q", got)
+	}
+	topDialog(t).OnResult(1) // Cancel
+}
+
+// With nothing in the way a case-only rename just happens, on any file system.
+func TestIssue1229CaseOnlyRenameWithNothingInTheWayJustRenames(t *testing.T) {
+	pf, fsp, dir := setupRenameConflict(t)
+
+	renameEntry(pf, fsp, "a.txt", "A.txt")
+	pumpUntil(t, "the rename", func() bool {
+		// #nosec G304 G703 -- the path is inside the private test temp directory.
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if e.Name() == "A.txt" {
+				return true
+			}
+		}
+		return false
+	})
+	if dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); ok && dlg.OnResult != nil {
+		t.Fatal("asked to overwrite although nothing was in the way")
+	}
+}

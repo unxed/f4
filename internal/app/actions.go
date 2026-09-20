@@ -2440,13 +2440,16 @@ func renameEntry(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, name, newNam
 	}
 
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
-		// A case-only rename names the same entry on a case-insensitive file
-		// system, and a folder cannot be replaced by a rename.
+		// A folder cannot be replaced by a rename. Names that differ only in
+		// case are one entry on a case-insensitive file system, where the
+		// listing carries the old spelling alone, and two on a case-sensitive
+		// one, where the target may really be another file: only the exact
+		// name in the listing tells them apart.
 		taken := false
-		if !strings.EqualFold(name, newName) {
-			if existing, err := v.Stat(ctx.Context, newPath); err == nil && !existing.IsDir {
-				taken = true
-			}
+		if strings.EqualFold(name, newName) {
+			taken = fileListedAs(ctx.Context, v, v.GetPath(), newName)
+		} else if existing, err := v.Stat(ctx.Context, newPath); err == nil && !existing.IsDir {
+			taken = true
 		}
 		ctx.RunOnUI(func() {
 			if !taken {
@@ -2467,6 +2470,21 @@ func renameEntry(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, name, newNam
 		})
 	})
 }
+
+// fileListedAs reports whether the listing of dir holds a file named exactly
+// name, letter case included.
+func fileListedAs(ctx context.Context, v vfs.VFS, dir, name string) bool {
+	found := false
+	_ = v.ReadDir(ctx, dir, func(items []vfs.VFSItem) {
+		for _, item := range items {
+			if item.Name == name && !item.IsDir {
+				found = true
+			}
+		}
+	})
+	return found
+}
+
 func actionCreateLink(pf *panel.PanelsFrame) {
 	fspSrc := pf.GetActivePanel()
 	fspDst := pf.GetInactivePanel()
