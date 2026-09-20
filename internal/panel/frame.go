@@ -30,6 +30,7 @@ import (
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/macro"
+	"github.com/unxed/f4/internal/menuhotkeys"
 	"github.com/unxed/f4/internal/plughost"
 	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/theme"
@@ -697,6 +698,10 @@ func (pf *PanelsFrame) GetMenuBar() *vtui.MenuBar {
 	}
 	pf.MenuBar.Items = pf.BuildMenuItems()
 	pf.UpdateMenuCheckmarks()
+	// After the checkmarks: they set the text of the side menus' rows again.
+	// The bar is the whole of it, the side menus and the generated ones
+	// together, so a hotkey is unique across the letters that open the menus.
+	menuhotkeys.UniqueBar(pf.MenuBar.Items)
 	return pf.MenuBar
 }
 

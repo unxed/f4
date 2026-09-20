@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/unxed/f4/internal/keymap"
+	"github.com/unxed/f4/internal/menuhotkeys"
 	"github.com/unxed/f4/internal/panel"
 
 	"github.com/unxed/f4/internal/action"
@@ -194,6 +195,9 @@ func BuildMenuBarItems(area string) []vtui.MenuBarItem {
 		}
 		result = append(result, vtui.MenuBarItem{Label: m.title, SubItems: normalizeMenuSeparators(items)})
 	}
+	// Every item above took the first letter of its label, so the menus were
+	// full of items that shared a hotkey (#1258).
+	menuhotkeys.UniqueBar(result)
 	return result
 }
 
