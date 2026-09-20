@@ -605,9 +605,15 @@ type F4Config struct {
 	// StartupMode, GuiBackend and TTYBackend answer "what should plain `f4`
 	// do?". They are only defaults: --gui/--tty still win on any single run.
 	// An empty backend means automatic selection.
-	StartupMode            StartupMode
-	GuiBackend             string
-	TTYBackend             string
+	StartupMode StartupMode
+	GuiBackend  string
+	TTYBackend  string
+	// StartInCurrentFolder picks what a start from a terminal does with the
+	// panels. Off is far2l's and Far's way: `f4` restores the panels of the
+	// last session, and a folder on the command line replaces only its own
+	// panel. On is mc's way: `f4` opens the current folder in both panels
+	// (issues #822, #495).
+	StartInCurrentFolder   bool
 	ConsoleTitleTemplate   string
 	DisplayFullPathInTitle bool
 	UpdateChannel          int // 0 = Stable, 1 = Nightly
@@ -780,6 +786,7 @@ var App = F4Config{
 	GuiPosY:                  0,
 	GuiPositionSaved:         false,
 	StartupMode:              StartupModeAuto,
+	StartInCurrentFolder:     false,
 	GuiBackend:               "",
 	TTYBackend:               "",
 	ConsoleTitleTemplate:     "f4 %Ver %Platform %Admin - %State",
@@ -1022,6 +1029,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 	cfg.StartupMode = ParseStartupMode(merged.GetString("Startup", "Mode", "auto"))
 	cfg.GuiBackend = NormalizeStartupGuiBackend(merged.GetString("Startup", "GuiBackend", ""))
 	cfg.TTYBackend = NormalizeStartupTTYBackend(merged.GetString("Startup", "TTYBackend", ""))
+	cfg.StartInCurrentFolder = merged.GetString("Startup", "StartInCurrentFolder", "0") == "1"
 	cfg.EnforceColorCorrection = merged.GetString("Dialogs", "EnforceColorCorrection", "1") == "1"
 	cfg.MenuLoopScroll = merged.GetString("VMenu", "MenuStopWrapOnEdge", "1") == "1"
 	_, _ = fmt.Sscanf(merged.GetString("Appearance", "HighlightPriority", "0"), "%d", &cfg.HighlightPriority)
@@ -1322,6 +1330,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "Mode = %s\n", cfg.StartupMode.String())
 	fmt.Fprintf(&sb, "GuiBackend = %s\n", cfg.GuiBackend)
 	fmt.Fprintf(&sb, "TTYBackend = %s\n", cfg.TTYBackend)
+	fmt.Fprintf(&sb, "StartInCurrentFolder = %d\n", map[bool]int{true: 1, false: 0}[cfg.StartInCurrentFolder])
 
 	sb.WriteString("\n[Update]\n")
 	fmt.Fprintf(&sb, "Channel = %d\n", cfg.UpdateChannel)

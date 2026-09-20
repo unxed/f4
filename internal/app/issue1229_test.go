@@ -88,8 +88,10 @@ func TestIssue1229RenameOntoExistingFileAsksToOverwrite(t *testing.T) {
 
 	topDialog(t).OnResult(0) // "Overwrite" is the first button
 	pumpUntil(t, "the rename", func() bool {
-		_, oldExists := readFile(t, filepath.Join(dir, "a.txt"))
-		return !oldExists
+		// Stat, not a read: on Windows a file that is being renamed cannot be
+		// opened, and the sharing violation is not a failure of the test.
+		_, err := os.Stat(filepath.Join(dir, "a.txt"))
+		return os.IsNotExist(err)
 	})
 	if got, _ := readFile(t, filepath.Join(dir, "b.txt")); got != "A" {
 		t.Errorf("b.txt = %q after overwriting, want the content of a.txt", got)

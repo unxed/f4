@@ -51,6 +51,14 @@ func TestWithOptionReadsTheValueBackLikeLoadConfig(t *testing.T) {
 	if next := WithOption(cfg, "Panel", "ShowSymlinkArrow", "1"); !next.ShowSymlinkArrow {
 		t.Error("ShowSymlinkArrow = 1 was not honoured")
 	}
+	// A plain start restores the panels (far2l) unless the key asks for the
+	// current folder (mc).
+	if cfg.StartInCurrentFolder {
+		t.Error("StartInCurrentFolder is on by default; a plain start must restore the panels like far2l")
+	}
+	if next := WithOption(cfg, "Startup", "StartInCurrentFolder", "1"); !next.StartInCurrentFolder {
+		t.Error("Startup/StartInCurrentFolder = 1 was not honoured")
+	}
 	cfg.EditorTabSize = 2
 	next := WithOption(cfg, "Panel", "ShowDirPrefix", "1")
 	if !next.ShowDirPrefix || next.EditorTabSize != 2 {
