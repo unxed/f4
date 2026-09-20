@@ -83,3 +83,22 @@ func TestDefaultDarkStyle_SurvivesContrastCorrection(t *testing.T) {
 		}
 	}
 }
+
+// The viewer's scrollbar column and the addresses of its Hex mode are drawn on
+// the viewer's own background: the blue of the far2l file they came from
+// showed as a stripe next to the grey text (#1232).
+func TestDefaultDarkStyle_ViewerScrollbarAndAddressesShareTheTextBackground(t *testing.T) {
+	oldCfg := config.App
+	config.App.EnforceColorCorrection = false
+	defer func() { config.App = oldCfg }()
+
+	if err := ApplyColorStyle("Default Dark"); err != nil {
+		t.Fatalf("Failed to apply Default Dark style: %v", err)
+	}
+	_, textBg := GetColorRGBBoth(vtui.Palette[ColViewerText])
+	for name, index := range map[string]int{"Viewer.Scrollbar": ColViewerScrollbar, "Viewer.Arrows": ColViewerArrows} {
+		if _, bg := GetColorRGBBoth(vtui.Palette[index]); bg != textBg {
+			t.Errorf("%s is on #%06x, the viewer text is on #%06x", name, bg, textBg)
+		}
+	}
+}
