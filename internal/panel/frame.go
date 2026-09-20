@@ -599,7 +599,7 @@ func (pf *PanelsFrame) LeftMenu() vtui.MenuBarItem {
 
 func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 	if IsAIPanel(pf.Panels[0]) {
-		return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Left"), SubItems: []vtui.MenuItem{
+		return vtui.MenuBarItem{Label: menuhotkeys.Auto(i18n.Msg("Menu.Left")), SubItems: []vtui.MenuItem{
 			{Text: "&1. " + i18n.Msg("Action.AI.ViewContext"), Command: appcmd.CmLeftAIContext, Shortcut: "Ctrl+1"},
 			{Text: "&2. " + i18n.Msg("Action.AI.ViewChat"), Command: appcmd.CmLeftAIChat, Shortcut: "Ctrl+2"},
 			{Text: "&3. " + i18n.Msg("Action.AI.ViewOut"), Command: appcmd.CmLeftAIOut, Shortcut: "Ctrl+3"},
@@ -614,18 +614,18 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 			{Text: i18n.Msg("Menu.Exit"), Command: vtui.CmQuit},
 		}}
 	}
-	return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Left"), SubItems: []vtui.MenuItem{
-		{Text: "&" + i18n.Msg("Menu.Left.Brief"), Command: appcmd.CmLeftBrief},
-		{Text: "&" + i18n.Msg("Menu.Left.Medium"), Command: appcmd.CmLeftMedium},
-		{Text: "&" + i18n.Msg("Menu.Left.Detailed"), Command: appcmd.CmLeftDetailed},
-		{Text: "&" + i18n.Msg("Menu.Left.Wide"), Command: appcmd.CmLeftWide},
+	return vtui.MenuBarItem{Label: menuhotkeys.Auto(i18n.Msg("Menu.Left")), SubItems: []vtui.MenuItem{
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Brief")), Command: appcmd.CmLeftBrief},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Medium")), Command: appcmd.CmLeftMedium},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Detailed")), Command: appcmd.CmLeftDetailed},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Wide")), Command: appcmd.CmLeftWide},
 		{Separator: true},
-		{Text: "&" + i18n.Msg("Menu.SortName"), Command: appcmd.CmLeftSortName},
-		{Text: "&" + i18n.Msg("Menu.SortExt"), Command: appcmd.CmLeftSortExt},
-		{Text: "&" + i18n.Msg("Menu.SortTime"), Command: appcmd.CmLeftSortTime},
-		{Text: "&" + i18n.Msg("Menu.SortSize"), Command: appcmd.CmLeftSortSize},
-		{Text: "&" + i18n.Msg("Menu.SortUnsorted"), Command: appcmd.CmLeftSortUnsorted},
-		{Text: "&" + i18n.Msg("Menu.SortUseGroups"), Command: appcmd.CmLeftSortGroups},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortName")), Command: appcmd.CmLeftSortName},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortExt")), Command: appcmd.CmLeftSortExt},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortTime")), Command: appcmd.CmLeftSortTime},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortSize")), Command: appcmd.CmLeftSortSize},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUnsorted")), Command: appcmd.CmLeftSortUnsorted},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups")), Command: appcmd.CmLeftSortGroups},
 		{Text: sideMenuText("Group.Menu"), Command: appcmd.CmLeftGroupMenu},
 		{Separator: true},
 		{Text: sideMenuText("Menu.Left.DriveMenu"), Command: appcmd.CmLeftDriveMenu, Shortcut: "Alt+F1"},
@@ -645,7 +645,7 @@ func (pf *PanelsFrame) RightMenu() vtui.MenuBarItem {
 
 func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 	if IsAIPanel(pf.Panels[1]) {
-		return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Right"), SubItems: []vtui.MenuItem{
+		return vtui.MenuBarItem{Label: menuhotkeys.Auto(i18n.Msg("Menu.Right")), SubItems: []vtui.MenuItem{
 			{Text: "&1. " + i18n.Msg("Action.AI.ViewContext"), Command: appcmd.CmRightAIContext, Shortcut: "Ctrl+1"},
 			{Text: "&2. " + i18n.Msg("Action.AI.ViewChat"), Command: appcmd.CmRightAIChat, Shortcut: "Ctrl+2"},
 			{Text: "&3. " + i18n.Msg("Action.AI.ViewOut"), Command: appcmd.CmRightAIOut, Shortcut: "Ctrl+3"},
@@ -654,18 +654,18 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 			{Text: sideMenuText("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
 		}}
 	}
-	return vtui.MenuBarItem{Label: "&" + i18n.Msg("Menu.Right"), SubItems: []vtui.MenuItem{
-		{Text: "&" + i18n.Msg("Menu.Left.Brief"), Command: appcmd.CmRightBrief},
-		{Text: "&" + i18n.Msg("Menu.Left.Medium"), Command: appcmd.CmRightMedium},
-		{Text: "&" + i18n.Msg("Menu.Left.Detailed"), Command: appcmd.CmRightDetailed},
-		{Text: "&" + i18n.Msg("Menu.Left.Wide"), Command: appcmd.CmRightWide},
+	return vtui.MenuBarItem{Label: menuhotkeys.Auto(i18n.Msg("Menu.Right")), SubItems: []vtui.MenuItem{
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Brief")), Command: appcmd.CmRightBrief},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Medium")), Command: appcmd.CmRightMedium},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Detailed")), Command: appcmd.CmRightDetailed},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.Left.Wide")), Command: appcmd.CmRightWide},
 		{Separator: true},
-		{Text: "&" + i18n.Msg("Menu.SortName"), Command: appcmd.CmRightSortName},
-		{Text: "&" + i18n.Msg("Menu.SortExt"), Command: appcmd.CmRightSortExt},
-		{Text: "&" + i18n.Msg("Menu.SortTime"), Command: appcmd.CmRightSortTime},
-		{Text: "&" + i18n.Msg("Menu.SortSize"), Command: appcmd.CmRightSortSize},
-		{Text: "&" + i18n.Msg("Menu.SortUnsorted"), Command: appcmd.CmRightSortUnsorted},
-		{Text: "&" + i18n.Msg("Menu.SortUseGroups"), Command: appcmd.CmRightSortGroups},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortName")), Command: appcmd.CmRightSortName},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortExt")), Command: appcmd.CmRightSortExt},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortTime")), Command: appcmd.CmRightSortTime},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortSize")), Command: appcmd.CmRightSortSize},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUnsorted")), Command: appcmd.CmRightSortUnsorted},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups")), Command: appcmd.CmRightSortGroups},
 		{Text: sideMenuText("Group.Menu"), Command: appcmd.CmRightGroupMenu},
 		{Separator: true},
 		{Text: sideMenuText("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
@@ -877,21 +877,21 @@ func (pf *PanelsFrame) UpdateMenuCheckmarks() {
 		key  string
 	}{{ViewModeBrief, "Brief"}, {ViewModeMedium, "Medium"}, {ViewModeDetailed, "Detailed"}, {ViewModeWide, "Wide"}}
 	for i, item := range modeItems {
-		pf.MenuBar.Items[0].SubItems[i].Text = getMenuText(lMode, item.mode, "&"+i18n.Msg("Menu.Left."+item.key))
-		pf.MenuBar.Items[4].SubItems[i].Text = getMenuText(rMode, item.mode, "&"+i18n.Msg("Menu.Left."+item.key))
+		pf.MenuBar.Items[0].SubItems[i].Text = getMenuText(lMode, item.mode, menuhotkeys.Auto(i18n.Msg("Menu.Left."+item.key)))
+		pf.MenuBar.Items[4].SubItems[i].Text = getMenuText(rMode, item.mode, menuhotkeys.Auto(i18n.Msg("Menu.Left."+item.key)))
 	}
 	for i, item := range []struct {
 		mode SortMode
 		key  string
 	}{{SortName, "SortName"}, {SortExt, "SortExt"}, {SortTime, "SortTime"}, {SortSize, "SortSize"}, {SortUnsorted, "SortUnsorted"}} {
-		pf.MenuBar.Items[0].SubItems[i+5].Text = getSortMenuText(lSort, item.mode, "&"+i18n.Msg("Menu."+item.key))
-		pf.MenuBar.Items[4].SubItems[i+5].Text = getSortMenuText(rSort, item.mode, "&"+i18n.Msg("Menu."+item.key))
+		pf.MenuBar.Items[0].SubItems[i+5].Text = getSortMenuText(lSort, item.mode, menuhotkeys.Auto(i18n.Msg("Menu."+item.key)))
+		pf.MenuBar.Items[4].SubItems[i+5].Text = getSortMenuText(rSort, item.mode, menuhotkeys.Auto(i18n.Msg("Menu."+item.key)))
 	}
 
 	// The sort-group toggle sits right after the sort modes; a mock menu bar
 	// built with fewer rows (tests) simply keeps its own text.
 	if len(pf.MenuBar.Items[0].SubItems) > 10 && len(pf.MenuBar.Items[4].SubItems) > 10 {
-		groupLabel := "&" + i18n.Msg("Menu.SortUseGroups")
+		groupLabel := menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups"))
 		pf.MenuBar.Items[0].SubItems[10].Text = getToggleMenuText(lGroups, groupLabel)
 		pf.MenuBar.Items[4].SubItems[10].Text = getToggleMenuText(rGroups, groupLabel)
 	}

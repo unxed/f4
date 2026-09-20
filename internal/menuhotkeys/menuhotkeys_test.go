@@ -229,3 +229,12 @@ func TestUniqueMovesAChosenLetterRatherThanLeaveAnItemWithNone(t *testing.T) {
 		seen[hk] = true
 	}
 }
+
+func TestAutoLeavesAMarkedLabelAlone(t *testing.T) {
+	if got := Auto("E&xit"); got != "E&xit" {
+		t.Fatalf("Auto(%q) = %q", "E&xit", got)
+	}
+	if got := Auto("Q&&A"); got != autoMarker+"&Q&&A" {
+		t.Fatalf("a literal ampersand is not a marker: %q", got)
+	}
+}

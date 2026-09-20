@@ -56,6 +56,9 @@ const autoMarker = "\uE000"
 // translator put in a label of the same menu, wherever the two are: Unique
 // settles the marked labels first.
 func Auto(text string) string {
+	if vtui.ExtractHotkey(text) != 0 {
+		return text // the label already says which letter it wants
+	}
 	return autoMarker + "&" + text
 }
 
