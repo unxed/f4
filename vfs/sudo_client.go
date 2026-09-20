@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -84,25 +85,12 @@ func (c *SudoClient) Connect() error {
 	env = append(env, "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 	cmd.Env = env
 
-	// Capture subprocess stderr to main log
-	stderrPipe, _ := cmd.StderrPipe()
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := stderrPipe.Read(buf)
-			if n > 0 {
-				lines := strings.Split(string(buf[:n]), "\n")
-				for _, l := range lines {
-					if l != "" {
-						vtui.DebugLog("SUDO_SUBPROCESS: %s", l)
-					}
-				}
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
+	// Capture subprocess stderr to the main log, and keep what sudo itself
+	// said: when it gives up, that is the only explanation there is. A writer
+	// rather than a pipe read by hand, because Wait then returns only after
+	// the last of it has been copied.
+	sudoSaid := &sudoStderr{}
+	cmd.Stderr = sudoSaid
 
 	c.attempts = 0
 	vtui.DebugLog("SUDO_CLIENT: Spawning %q with SUDO_ASKPASS=%q", cmd.String(), c.appPath)
@@ -132,7 +120,7 @@ func (c *SudoClient) Connect() error {
 		select {
 		case <-sudoExited:
 			vtui.DebugLog("SUDO_CLIENT: Sudo process exited prematurely.")
-			return fmt.Errorf("sudo process exited prematurely")
+			return sudoExitedError(sudoSaid.Reason())
 		default:
 		}
 
@@ -192,6 +180,70 @@ func (c *SudoClient) Connect() error {
 	return fmt.Errorf("failed to connect to elevated dispatcher: %v", err)
 }
 
+// sudoStderr is the stderr of the sudo process: logged line by line, and the
+// last few lines that sudo wrote itself (not the dispatcher's progress notes)
+// are kept to say why it exited.
+type sudoStderr struct {
+	mu      sync.Mutex
+	partial string
+	lines   []string
+}
+
+func (s *sudoStderr) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.partial += string(p)
+	for {
+		i := strings.IndexByte(s.partial, '\n')
+		if i < 0 {
+			break
+		}
+		s.keep(s.partial[:i])
+		s.partial = s.partial[i+1:]
+	}
+	return len(p), nil
+}
+
+func (s *sudoStderr) keep(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	vtui.DebugLog("SUDO_SUBPROCESS: %s", line)
+	if strings.HasPrefix(line, "SUDO_DISPATCHER:") {
+		return
+	}
+	s.lines = append(s.lines, line)
+	if len(s.lines) > 3 {
+		s.lines = s.lines[len(s.lines)-3:]
+	}
+}
+
+// Reason is what sudo said before it exited, or "" when it said nothing.
+func (s *sudoStderr) Reason() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rest := strings.TrimSpace(s.partial); rest != "" {
+		s.partial = ""
+		s.keep(rest)
+	}
+	return strings.Join(s.lines, "; ")
+}
+
+// sudoExitedError explains that sudo gave up before the dispatcher started.
+// A user who is not allowed to use sudo used to be told only that the process
+// "exited prematurely" (#1255).
+func sudoExitedError(reason string) error {
+	if reason == "" {
+		return errors.New("sudo process exited prematurely")
+	}
+	lower := strings.ToLower(reason)
+	if strings.Contains(lower, "not in the sudoers") || strings.Contains(lower, "not allowed to") {
+		return fmt.Errorf("sudo is not available to this user (%s)", reason)
+	}
+	return fmt.Errorf("sudo process exited prematurely (%s)", reason)
+}
+
 // SendRequest sends a command to the dispatcher and waits for the response.
 func (c *SudoClient) SendRequest(req SudoRequest) (SudoResponse, *os.File, error) {
 	if err := c.Connect(); err != nil {
@@ -220,10 +272,40 @@ func (c *SudoClient) SendRequest(req SudoRequest) (SudoResponse, *os.File, error
 		if f != nil {
 			_ = f.Close() // The rejected response's descriptor was never used.
 		}
-		return resp, nil, errors.New(resp.Error)
+		return resp, nil, newSudoRemoteError(resp.Error)
 	}
 
 	return resp, f, nil
+}
+
+// sudoRemoteErrnos are the answers a caller decides by, as the dispatcher's
+// text spells them.
+var sudoRemoteErrnos = []syscall.Errno{
+	syscall.ENOENT, syscall.ENOTDIR, syscall.EEXIST, syscall.ENOTEMPTY, syscall.EACCES, syscall.EPERM,
+}
+
+// sudoRemoteError is what the dispatcher reported. Only its text crosses the
+// socket, so the errno it ended with is read back from that text: the caller
+// can then tell "this name is not there" from "this was refused" with errors.Is
+// (or errors.As for the errno), as it can for a local call.
+type sudoRemoteError struct {
+	msg   string
+	errno syscall.Errno
+}
+
+func (e *sudoRemoteError) Error() string { return e.msg }
+func (e *sudoRemoteError) Unwrap() error { return e.errno }
+
+func newSudoRemoteError(msg string) error {
+	if strings.HasSuffix(msg, ErrDestinationExists.Error()) {
+		return ErrDestinationExists
+	}
+	for _, errno := range sudoRemoteErrnos {
+		if strings.HasSuffix(msg, errno.Error()) {
+			return &sudoRemoteError{msg: msg, errno: errno}
+		}
+	}
+	return errors.New(msg)
 }
 
 // Open uses SudoClient to securely fetch a File Descriptor to a protected file.
@@ -256,6 +338,25 @@ func (c *SudoClient) Rename(oldPath, newPath string) error {
 	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath})
 	return err
 }
+
+// Symlink makes linkPath a symbolic link to target, as root.
+func (c *SudoClient) Symlink(target, linkPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdSymlink, Path: linkPath, Path2: target})
+	return err
+}
+
+// Hardlink makes linkPath a hard link to the existing target, as root.
+func (c *SudoClient) Hardlink(target, linkPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdHardlink, Path: linkPath, Path2: target})
+	return err
+}
+
+// RenameNoReplace renames as root without replacing what is at newPath.
+func (c *SudoClient) RenameNoReplace(oldPath, newPath string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdRename, Path: oldPath, Path2: newPath, Flags: SudoRenameNoReplace})
+	return err
+}
+
 func (c *SudoClient) SetAttributes(path string, item VFSItem) error {
 	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdSetAttributes, Path: path, Item: item})
 	return err

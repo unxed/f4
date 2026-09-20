@@ -232,9 +232,16 @@ NormalColor = foreground:#FF00FF | background:#000000
 ```
 
 `Group` is the position of the cluster on the panel. Rules with the same
-number form one cluster. The legacy `[SortGroup_N]` sections are still
-accepted for existing profiles; they have the same matching keys and can be
-removed after their rules are folded into `[Highlight_N]` sections.
+number form one cluster.
+
+A `[SortGroup_N]` section is the other way to define a group: a rule that only
+sorts and colours nothing (the sample `highlight.ini` is written this way). It
+has the same matching keys. Use it when a group has no colour of its own; a
+`[Highlight_N]` section written only for sorting would hide the colours of the
+sections below it, because the first matching section wins, unless it also
+says `ContinueProcessing = 1`.
+
+The file is read when f4 starts, so restart f4 after editing it.
 
 Two keys are specific to group configuration:
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"strings"
@@ -225,6 +227,21 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 	return nil
 }
 
+// elevatedLookupError picks what to report when the plain call was refused and
+// the elevated one failed as well. A refusal only says the path could not be
+// looked at; when the elevated call could, and the name is not there, that is
+// the answer, and it must reach the caller as "does not exist". Copying into a
+// folder that needs sudo asks whether the destination is already there before
+// it creates it, and was told "permission denied" for a file that simply had
+// not been written yet (#1255).
+func elevatedLookupError(op, path string, refused, sudoErr error) error {
+	var errno syscall.Errno
+	if errors.As(sudoErr, &errno) && (errno == syscall.ENOENT || errno == syscall.ENOTDIR) {
+		return &fs.PathError{Op: op, Path: path, Err: errno}
+	}
+	return refused
+}
+
 func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	if ctx.Err() != nil {
 		return VFSItem{}, ctx.Err()
@@ -240,6 +257,7 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 				return item, nil
 			}
 			vtui.DebugLog("VFS: Sudo Stat(%q) FAILED: %v", path, sudoErr)
+			return VFSItem{}, elevatedLookupError("stat", preparedPath, err, sudoErr)
 		}
 		return VFSItem{}, err
 	}
@@ -292,6 +310,7 @@ func (v *OSVFS) Lstat(ctx context.Context, path string) (VFSItem, error) {
 			if sudoErr == nil {
 				return item, nil
 			}
+			return VFSItem{}, elevatedLookupError("lstat", preparedPath, err, sudoErr)
 		}
 		return VFSItem{}, err
 	}
@@ -378,7 +397,12 @@ func (v *OSVFS) RenameNoReplace(ctx context.Context, old, new string) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	return renameNoReplace(prepareOSPath(old), prepareOSPath(new))
+	err := renameNoReplace(prepareOSPath(old), prepareOSPath(new))
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for RenameNoReplace(%q), attempting sudo...", old)
+		return globalSudoClient.RenameNoReplace(prepareOSPath(old), prepareOSPath(new))
+	}
+	return err
 }
 func (v *OSVFS) SetAttributes(ctx context.Context, path string, item VFSItem) error {
 	if ctx.Err() != nil {
@@ -576,6 +600,7 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 				return &osFileWrapper{File: sudoF, size: size}, nil
 			}
 			vtui.DebugLog("VFS: Sudo Open(%q) FAILED: %v", path, sudoErr)
+			return nil, elevatedLookupError("open", prepareOSPath(path), err, sudoErr)
 		}
 		return nil, err
 	}
@@ -783,7 +808,12 @@ func (v *OSVFS) Symlink(ctx context.Context, target, linkPath string) error {
 	if err != nil {
 		return err
 	}
-	return hostfs.Symlink(target, prepareOSPath(abs))
+	err = hostfs.Symlink(target, prepareOSPath(abs))
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for Symlink(%q), attempting sudo...", linkPath)
+		return globalSudoClient.Symlink(target, prepareOSPath(abs))
+	}
+	return err
 }
 
 // OpenWriteAt makes OSVFS a RandomWriteVFS. A local file is the case where
@@ -811,7 +841,12 @@ func (v *OSVFS) Hardlink(ctx context.Context, target, linkPath string) error {
 	if err != nil {
 		return err
 	}
-	return hostfs.Link(prepareOSPath(absTarget), prepareOSPath(absLink))
+	err = hostfs.Link(prepareOSPath(absTarget), prepareOSPath(absLink))
+	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		vtui.DebugLog("VFS: Permission denied for Hardlink(%q), attempting sudo...", linkPath)
+		return globalSudoClient.Hardlink(prepareOSPath(absTarget), prepareOSPath(absLink))
+	}
+	return err
 }
 
 func (v *OSVFS) Junction(ctx context.Context, target, linkPath string) error {

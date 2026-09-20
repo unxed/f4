@@ -724,5 +724,40 @@ func TestSettingsCenterShowsAFailureThatDoesNotFitInFull(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the message lacks %q; it shows %q", want, joined)
 		}
+
+// A small terminal gets the settings maximized, a large one the ordinary
+// window; the zoom button gives the ordinary size back (#1239).
+func TestSettingsCenterOpensMaximizedInASmallTerminal(t *testing.T) {
+	d, _ := (coreSettingsProvider{}).Begin(context.Background())
+	defer d.Close()
+	open := func(w, h int) *settingsCenter {
+		c := newSettingsCenter([]*settingsSession{{catalog: (coreSettingsProvider{}).Catalog(), draft: d}})
+		c.ResizeConsole(w, h)
+		return c
+	}
+
+	small := open(100, 28)
+	if small.X1 != 0 || small.X2 != 99 || small.Y1 != 0 || small.Y2 != 26 {
+		t.Fatalf("small terminal: window at %d,%d–%d,%d, want the whole screen above the key bar", small.X1, small.Y1, small.X2, small.Y2)
+	}
+	if small.SavedBounds == nil {
+		t.Fatal("the ordinary size was not kept for the zoom button")
+	}
+	// Narrow only, and short only, are small too.
+	for _, size := range [][2]int{{110, 50}, {200, 25}} {
+		if c := open(size[0], size[1]); c.SavedBounds == nil || c.X1 != 0 {
+			t.Fatalf("%dx%d terminal did not get a maximized dialog", size[0], size[1])
+		}
+	}
+
+	large := open(180, 60)
+	if large.SavedBounds != nil || large.X1 != 45 || large.X2 != 134 {
+		t.Fatalf("large terminal: window at %d–%d, saved=%v; want the ordinary centered window", large.X1, large.X2, large.SavedBounds)
+	}
+
+	// A resize of the terminal keeps it maximized.
+	small.ResizeConsole(90, 26)
+	if small.X2 != 89 || small.Y2 != 24 {
+		t.Fatalf("after a resize the window is at %d,%d–%d,%d", small.X1, small.Y1, small.X2, small.Y2)
 	}
 }

@@ -653,6 +653,25 @@ func (p *hotkeyPage) ProcessKey(e *vtinput.InputEvent) bool {
 			return true
 		}
 	}
+	// The keys of the other big lists (user menu, histories, folder shortcuts):
+	// F4 changes the selected entry, Ins adds to it, Del removes. The buttons
+	// stay, but reaching them takes the focus off the list, and it is then not
+	// clear which row they act on (#1239). While a search text is being typed
+	// Del belongs to the search.
+	if e.KeyDown && e.ControlKeyState&modifiers == 0 {
+		switch e.VirtualKeyCode {
+		case vtinput.VK_F4, vtinput.VK_INSERT:
+			if p.assign.OnClick != nil {
+				p.assign.OnClick()
+				return true
+			}
+		case vtinput.VK_DELETE:
+			if p.table.SearchText() == "" && p.unbind.OnClick != nil {
+				p.unbind.OnClick()
+				return true
+			}
+		}
+	}
 	previous := p.WrapFocus
 	p.WrapFocus = e.KeyDown && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN)
 	defer func() { p.WrapFocus = previous }()

@@ -608,6 +608,17 @@ func (ev *EditorView) ClearCaches() {
 		ch.DropFrom(0)
 	}
 }
+
+// clearCachesAfterReplace is ClearCaches for Undo and Redo, which change the
+// text from line fromLine on: the Colorer keeps drawing the old colours until
+// the worker has new ones, as it does for an edit (#1230).
+func (ev *EditorView) clearCachesAfterReplace(fromLine int) {
+	ev.Engine.InvalidateCache()
+	if ch, ok := ev.Highlighter.(*ColorerHighlighter); ok {
+		ch.DropAfterReplace(fromLine, ev.Li.LineCount())
+	}
+}
+
 func (ev *EditorView) saveUndo(op undoOpType) {
 	if ev.inGroup {
 		return
@@ -668,13 +679,15 @@ func (ev *EditorView) Undo() {
 	state := ev.undoStack[last]
 	ev.undoStack = ev.undoStack[:last]
 
+	// The change lies between where the cursor was and where it goes back to.
+	changedFrom := min(ev.CursorLine, state.line)
 	ev.Pt.LoadState(state.table)
 	ev.noteIndexRebuilt(ev.Li.Rebuild(ev.Pt))
 	ev.CursorLine = state.line
 	ev.CursorPos = state.pos
 	ev.extraCursors = append(ev.extraCursors[:0], state.carets...)
 
-	ev.ClearCaches()
+	ev.clearCachesAfterReplace(changedFrom)
 	// Intelligent modified flag: if structure matches clean state, it's not modified
 	ev.Modified = ev.UnsavedBaseline || !ev.Pt.GetState().Equals(ev.cleanState)
 	ev.lastOp = opNone
@@ -705,13 +718,14 @@ func (ev *EditorView) Redo() {
 	state := ev.redoStack[last]
 	ev.redoStack = ev.redoStack[:last]
 
+	changedFrom := min(ev.CursorLine, state.line)
 	ev.Pt.LoadState(state.table)
 	ev.noteIndexRebuilt(ev.Li.Rebuild(ev.Pt))
 	ev.CursorLine = state.line
 	ev.CursorPos = state.pos
 	ev.extraCursors = append(ev.extraCursors[:0], state.carets...)
 
-	ev.ClearCaches()
+	ev.clearCachesAfterReplace(changedFrom)
 	// Intelligent modified flag
 	ev.Modified = ev.UnsavedBaseline || !ev.Pt.GetState().Equals(ev.cleanState)
 	ev.lastOp = opNone
