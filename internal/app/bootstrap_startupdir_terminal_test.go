@@ -28,8 +28,9 @@ const (
 	startTermRows = 40
 )
 
-// TestTerminalStartOpensItsDirectoryOverTheSession starts f4 the way a person
-// does -- `cd here && f4` in a terminal -- and reads what it draws there.
+// startF4InTerminal starts f4 the way a person does -- `cd here && f4` in a
+// terminal -- and reads what it draws there. settingsIni, when not empty, is the
+// content of the settings.ini it starts with.
 //
 // The unit tests in bootstrap_startupdir_test.go check the decision
 // rememberStartupDirs makes. What issue #1152 broke lies around that decision
@@ -47,7 +48,7 @@ const (
 //
 // A plain start keeps the session on Windows (see plainStartOpensCwd), and
 // Windows has no pty to run this on; the build tag leaves it out.
-func TestTerminalStartOpensItsDirectoryOverTheSession(t *testing.T) {
+func startF4InTerminal(t *testing.T, settingsIni string) terminalStart {
 	if testing.Short() {
 		t.Skip("starts f4 and its session daemon in a pty")
 	}
@@ -78,6 +79,9 @@ func TestTerminalStartOpensItsDirectoryOverTheSession(t *testing.T) {
 	}
 	writeStartupFixture(t, sessionPath,
 		"[Panel/Left]\nFolder = "+restored+"\n\n[Panel/Right]\nFolder = "+restored+"\n")
+	if settingsIni != "" {
+		writeStartupFixture(t, filepath.Join(filepath.Dir(sessionPath), "settings.ini"), settingsIni)
+	}
 
 	// What a shell in a terminal hands f4, and nothing of this process: no
 	// F4_STARTUP_DIR or F4_NESTED from a developer running the tests inside f4.
@@ -178,13 +182,47 @@ wait:
 			"nothing to prefer over the current directory, and the check below would pass whatever f4 does.\n%s",
 			sessionPath, report())
 	}
-	hereLeft, hereRight := markerHalves(rows, hereMarker)
-	restoredLeft, restoredRight := markerHalves(rows, restoredMarker)
+	return terminalStart{here: here, rows: rows, hereMarker: hereMarker, restoredMarker: restoredMarker, report: report}
+}
+
+// terminalStart is what f4 drew after a start in a terminal: which of the two
+// directories, the current one and the session's, each panel shows.
+type terminalStart struct {
+	here                       string
+	rows                       [][]rune
+	hereMarker, restoredMarker string
+	report                     func() string
+}
+
+func (s terminalStart) halves() (hereLeft, hereRight, restoredLeft, restoredRight bool) {
+	hereLeft, hereRight = markerHalves(s.rows, s.hereMarker)
+	restoredLeft, restoredRight = markerHalves(s.rows, s.restoredMarker)
+	return
+}
+
+// With "Open the current folder at start" on, `cd here && f4` shows here in both
+// panels, like mc, over the panels session.ini restores (issues #822, #1152).
+func TestTerminalStartOpensItsDirectoryOverTheSessionWhenAsked(t *testing.T) {
+	start := startF4InTerminal(t, "[Startup]\nStartInCurrentFolder = 1\n")
+	hereLeft, hereRight, restoredLeft, restoredRight := start.halves()
 	if !hereLeft || !hereRight || restoredLeft || restoredRight {
-		t.Fatalf("`cd %s && f4` in a terminal must open that directory in both panels (issues #822, #1152).\n"+
+		t.Fatalf("`cd %s && f4` in a terminal, with the current folder asked for, must open that directory in both panels (issues #822, #1152).\n"+
 			"current directory shown: left panel %t, right panel %t\n"+
 			"restored session's directory shown: left panel %t, right panel %t\n%s",
-			here, hereLeft, hereRight, restoredLeft, restoredRight, report())
+			start.here, hereLeft, hereRight, restoredLeft, restoredRight, start.report())
+	}
+}
+
+// By default a plain start restores the session, as far2l and Far do, whatever
+// directory the terminal happens to be in (issue #495).
+func TestTerminalStartRestoresTheSessionByDefault(t *testing.T) {
+	start := startF4InTerminal(t, "")
+	hereLeft, hereRight, restoredLeft, restoredRight := start.halves()
+	if hereLeft || hereRight || !restoredLeft || !restoredRight {
+		t.Fatalf("a plain `f4` in a terminal must restore the session's panels, not open %s (issue #495).\n"+
+			"current directory shown: left panel %t, right panel %t\n"+
+			"restored session's directory shown: left panel %t, right panel %t\n%s",
+			start.here, hereLeft, hereRight, restoredLeft, restoredRight, start.report())
 	}
 }
 
