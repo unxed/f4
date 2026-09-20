@@ -18,8 +18,14 @@ func TestShouldTryGui_WindowsDefaultsToConsole(t *testing.T) {
 }
 
 func TestShouldTryGui_TTYTakesPrecedenceOverDisplay(t *testing.T) {
+	// A clipboard worker an earlier test started reads ProbeHostTTY; replacing
+	// it while one runs is a data race (Race shard 0, on the #378 pull request).
+	terminal.WaitForAsyncClipboard()
 	oldProbeTTY := terminal.ProbeHostTTY
-	t.Cleanup(func() { terminal.ProbeHostTTY = oldProbeTTY })
+	t.Cleanup(func() {
+		terminal.WaitForAsyncClipboard()
+		terminal.ProbeHostTTY = oldProbeTTY
+	})
 	terminal.ProbeHostTTY = func() bool { return true }
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DISPLAY", ":0")
