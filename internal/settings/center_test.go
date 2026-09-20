@@ -724,6 +724,8 @@ func TestSettingsCenterShowsAFailureThatDoesNotFitInFull(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the message lacks %q; it shows %q", want, joined)
 		}
+	}
+}
 
 // A small terminal gets the settings maximized, a large one the ordinary
 // window; the zoom button gives the ordinary size back (#1239).
