@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/unxed/f4/internal/panel"
 )
 
 // A start with no terminal -- Dock, the detached GUI copy, the daemon -- names
@@ -206,5 +208,62 @@ func TestResolveStartupPath(t *testing.T) {
 		if got := resolveStartupPath(cwd, tc.path); got != tc.want {
 			t.Errorf("resolveStartupPath(%q) = %q, want %q", tc.path, got, tc.want)
 		}
+	}
+}
+
+// far2l and Far (issue #495): no folders leaves the panels as the last session
+// left them, a first folder replaces its own panel and a second one the other;
+// with a single folder the other panel is not touched.
+func TestFarStartupDirs(t *testing.T) {
+	cwd := t.TempDir()
+	other := t.TempDir()
+	cases := []struct {
+		name        string
+		args        []string
+		left, right string
+		ok          bool
+	}{
+		{name: "no arguments keeps the session"},
+		{name: "one folder leaves the other panel alone", args: []string{other}, left: other, right: panel.StartupKeepPanel, ok: true},
+		{name: "relative folder", args: []string{"src"}, left: filepath.Join(cwd, "src"), right: panel.StartupKeepPanel, ok: true},
+		{name: "two folders", args: []string{other, "."}, left: other, right: cwd, ok: true},
+		{name: "a third has no panel", args: []string{other, cwd, other}, left: other, right: cwd, ok: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			left, right, ok := farStartupDirs(cwd, tc.args)
+			if left != tc.left || right != tc.right || ok != tc.ok {
+				t.Fatalf("farStartupDirs(%q, %v) = (%q, %q, %t), want (%q, %q, %t)",
+					cwd, tc.args, left, right, ok, tc.left, tc.right, tc.ok)
+			}
+		})
+	}
+}
+
+// The setting decides which reading applies. Off, the default, is far2l's: a
+// plain start names nothing. On, it is mc's: the current folder in both panels
+// (issue #822), except on Windows, where a console that Explorer opened has no
+// folder anyone chose.
+func TestStartupDirsChoice(t *testing.T) {
+	cwd := t.TempDir()
+	if left, right, ok := startupDirsChoice(cwd, nil, false); ok || left != "" || right != "" {
+		t.Errorf("plain start, far2l style = (%q, %q, %t), want nothing", left, right, ok)
+	}
+	left, right, ok := startupDirsChoice(cwd, nil, true)
+	if runtime.GOOS == "windows" {
+		if ok {
+			t.Errorf("plain start, current-folder style on Windows = (%q, %q, %t), want nothing", left, right, ok)
+		}
+	} else if !ok || left != cwd || right != "" {
+		t.Errorf("plain start, current-folder style = (%q, %q, %t), want (%q, empty, true)", left, right, ok, cwd)
+	}
+
+	// One folder: mc shows the current folder in the other panel, far2l leaves it.
+	dir := t.TempDir()
+	if _, right, _ := startupDirsChoice(cwd, []string{dir}, true); right != cwd {
+		t.Errorf("one folder, current-folder style: right = %q, want the current folder %q", right, cwd)
+	}
+	if _, right, _ := startupDirsChoice(cwd, []string{dir}, false); right != panel.StartupKeepPanel {
+		t.Errorf("one folder, far2l style: right = %q, want the keep marker", right)
 	}
 }

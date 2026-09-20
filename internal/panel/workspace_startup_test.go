@@ -77,3 +77,44 @@ func TestApplyStartupDirsFileOpensItsFolderWithCursorOnIt(t *testing.T) {
 		t.Fatalf("starting again in the folder already shown leaves the cursor on %q, want target.txt", got)
 	}
 }
+
+// far2l (issue #495): a single folder on the command line replaces its own
+// panel and leaves the other as the session restored it, which
+// StartupKeepPanel says in place of a path.
+func TestApplyStartupDirsKeepLeavesThePanelAlone(t *testing.T) {
+	scr := vtui.NewScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(root, "folder")
+	if err := os.Mkdir(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	pf := &PanelsFrame{ActiveIdx: 1}
+	lp := NewFileSystemPanel(0, 0, 40, 20, vfs.NewOSVFS(root))
+	rp := NewFileSystemPanel(40, 0, 40, 20, vfs.NewOSVFS(root))
+	pf.Panels[0] = lp
+	pf.Panels[1] = rp
+	defer pf.Close()
+	waitForLoad(t, lp)
+	waitForLoad(t, rp)
+
+	ApplyStartupDirs(pf, folder, StartupKeepPanel)
+	waitForLoad(t, lp)
+	waitForLoad(t, rp)
+
+	if got := filepath.Clean(lp.Vfs.GetPath()); got != folder {
+		t.Fatalf("left panel path = %q, want the folder %q", got, folder)
+	}
+	if got := filepath.Clean(rp.Vfs.GetPath()); got != root {
+		t.Fatalf("right panel path = %q, want it kept at %q", got, root)
+	}
+	if pf.ActiveIdx != 0 {
+		t.Fatalf("ActiveIdx = %d, want 0: the focus belongs to the folder named", pf.ActiveIdx)
+	}
+}

@@ -140,6 +140,16 @@
     "unavailable": ""
   },
   {
+    "category": "startup",
+    "description": "When f4 is started from a terminal, open the current folder in both panels, as mc does. Off restores the panels of the last session, as far2l and Far do. Folders named on the command line always win: with this on the other panel shows the current folder, with it off the other panel stays as it was.",
+    "group": "Launch defaults",
+    "id": "StartInCurrentFolder",
+    "kind": "boolean",
+    "label": "Open the current folder at start",
+    "timing": "restart",
+    "unavailable": ""
+  },
+  {
     "category": "workspaces",
     "description": "Show tabs always, only with multiple workspaces, while Ctrl is held, or never.",
     "group": "Tab presentation",

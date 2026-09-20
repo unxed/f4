@@ -69,8 +69,10 @@ func startupDirsFor(cwd string, args []string) (left, right string) {
 }
 
 // plainStartOpensCwd says what `f4` with no folders, started from a terminal,
-// shows: the current directory in both panels, the way mc does (issue #822),
-// or the panels the session restored.
+// shows when the "open the current folder at start" setting is on: the current
+// directory in both panels, the way mc does (issue #822), or the panels the
+// session restored. With the setting off (the default, far2l's way, issue #495)
+// a plain start always restores the session; see farStartupDirs.
 //
 // Outside Windows a terminal on stdin is what proves that a shell chose that
 // directory; a Dock or desktop start has no terminal and names nothing. On
@@ -94,6 +96,43 @@ func startupDirsOverride(cwd string, args []string, plainOpensCwd bool) (left, r
 	}
 	left, right = startupDirsFor(cwd, args)
 	return left, right, true
+}
+
+// farStartupDirs is what far2l and Far make of the command line: no folders
+// leaves the panels as the last session left them, a first folder replaces the
+// panel it names, a second replaces the other one. With a single folder the
+// other panel is not touched, which panel.StartupKeepPanel says in place of a
+// path. f4 has always named the panels by side, so the first folder goes to the
+// left one, and takes the focus with it (panel.ApplyStartupDirs).
+//
+// far2l is the reference: `far2l path1 path2` opens path1 in the active panel
+// and path2 in the passive one, and without paths the panels come from the saved
+// setup (far2l/src/main.cpp, Opt.strLeftFolder and friends).
+func farStartupDirs(cwd string, args []string) (left, right string, ok bool) {
+	abs := func(path string) string {
+		if filepath.IsAbs(path) {
+			return filepath.Clean(path)
+		}
+		return filepath.Join(cwd, path)
+	}
+	switch len(args) {
+	case 0:
+		return "", "", false
+	case 1:
+		return abs(args[0]), panel.StartupKeepPanel, true
+	default:
+		return abs(args[0]), abs(args[1]), true
+	}
+}
+
+// startupDirsChoice picks between the two ways to read a start from a
+// terminal: mc's (Settings: open the current folder at start), which
+// startupDirsOverride implements, and far2l's, which is the default.
+func startupDirsChoice(cwd string, args []string, currentFolderStyle bool) (left, right string, ok bool) {
+	if currentFolderStyle {
+		return startupDirsOverride(cwd, args, plainStartOpensCwd)
+	}
+	return farStartupDirs(cwd, args)
 }
 
 // startupDirArgs picks the panel directories out of a command line: the words
@@ -131,7 +170,7 @@ func rememberStartupDirs(args []string) {
 	if err != nil {
 		return
 	}
-	left, right, ok := startupDirsOverride(cwd, args, plainStartOpensCwd)
+	left, right, ok := startupDirsChoice(cwd, args, config.App.StartInCurrentFolder)
 	if !ok {
 		return
 	}

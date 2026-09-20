@@ -317,6 +317,12 @@ func IsStartupFile(path string) bool {
 	return err == nil && !st.IsDir()
 }
 
+// StartupKeepPanel stands in for a path in ApplyStartupDirs and says that panel
+// is left as the session restored it. It cannot be an absolute path, so it never
+// clashes with one, and a process that does not know it (an older daemon a newer
+// client attaches to) fails to navigate to it and leaves the panel alone anyway.
+const StartupKeepPanel = "-"
+
 // ApplyStartupDirs opens left and right in the two panels, so `cd dir && f4`
 // shows dir and `f4 dir1 dir2` shows both, rather than session.ini's paths. It
 // runs after ApplyWorkspaceSession and therefore wins; an empty left changes
@@ -336,6 +342,9 @@ func ApplyStartupDirs(pf *PanelsFrame, left, right string) {
 		right = left
 	}
 	for idx, dir := range [2]string{left, right} {
+		if dir == StartupKeepPanel {
+			continue
+		}
 		if fsp, ok := pf.Panels[idx].(*FileSystemPanel); ok && fsp != nil {
 			focus := ""
 			if IsStartupFile(dir) {
