@@ -1768,10 +1768,21 @@ func CreateDefaultHighlightIni(path string) {
 # FileNameUnderCursor = foreground:#FFFFFF | background:#008080
 # FileNameSelectedUnderCursor = foreground:#FFFF00 | background:#008080
 #
-# To use one coloured rule for sorting too, add Group to that Highlight
-# section. The same mask and attributes then control both its colour and its
-# position; sections with the same Group number form one cluster. Legacy
-# [SortGroup_N] sections are still accepted for old profiles.
+# Sort groups put files of one kind together on a panel that has "Use sort
+# groups" switched on (Left/Right menu). There are two ways to define them, and
+# both may be used in one file:
+#
+# 1. Add "Group = N" to a coloured [Highlight_N] section: its mask and
+#    attributes then decide both the colour and the position, and sections
+#    with the same Group number form one cluster. Remember that the first
+#    matching Highlight section wins, so a Highlight section written only for
+#    sorting hides the colours of the sections below it unless it also says
+#    ContinueProcessing = 1.
+# 2. A [SortGroup_N] section is a rule that only sorts and colours nothing;
+#    the examples below are of this kind. It has the same Mask and attribute
+#    keys and does not interfere with the colours.
+#
+# f4 reads this file at start: restart it after editing.
 
 [SortGroup_1]
 Name = Executables
