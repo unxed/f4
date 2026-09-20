@@ -968,6 +968,19 @@ func (c *settingsCenter) groupLabel(id string) string {
 	return settingsText(settingsGroupKey(id), id)
 }
 func settingsError(format string, args ...any) error { return f4settings.Error(format, args...) }
+
+// reportFailure puts a failure in the status line. That line is one row long
+// and cuts what does not fit, and what does not fit is often the part that says
+// what is wrong: a Colorer error names the file it could not open at the very
+// end (#277). A text that was cut is shown whole in a message as well.
+func (c *settingsCenter) reportFailure(text string) {
+	c.status = text
+	if c.apply == nil || vtui.StringWidth(text) <= max(0, c.apply.X1-c.X1-3) {
+		return
+	}
+	vtui.ShowMessageOnEx(c.Window, settingsText("Title", "Settings"), text, []string{i18n.Msg("vtui.Ok")}, vtui.MessageWarn)
+}
+
 func settingsErrorText(err error) string {
 	if localized, ok := err.(interface {
 		Localized(string, func(string) string) string
@@ -1262,7 +1275,7 @@ func (c *settingsCenter) commit(closeAfter bool) {
 		settingsTraceDirty(s)
 		for id, err := range s.draft.Validate() {
 			vtui.DebugLog("SETTINGS_TRACE: validate %s failed: %s: %v", s.catalog.ID, id, err)
-			c.status = id + ": " + settingsErrorText(err)
+			c.reportFailure(id + ": " + settingsErrorText(err))
 			return
 		}
 	}
@@ -1295,7 +1308,7 @@ func (c *settingsCenter) commit(closeAfter bool) {
 			}
 			if len(r.Errors) > 0 {
 				for id, err := range r.Errors {
-					c.status = id + ": " + settingsErrorText(err)
+					c.reportFailure(id + ": " + settingsErrorText(err))
 					break
 				}
 				c.rebuildCategory()
@@ -1332,7 +1345,7 @@ func (c *settingsCenter) runBackground(worker func(context.Context) error, done 
 			c.ok.SetDisabled(false)
 			c.rebuildCategory()
 			if err != nil {
-				c.status = settingsErrorText(err)
+				c.reportFailure(settingsErrorText(err))
 			}
 			if done != nil {
 				done(err)

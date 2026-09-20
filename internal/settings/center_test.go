@@ -677,3 +677,52 @@ func TestHotkeyCategoryHidesDescriptionRendering(t *testing.T) {
 		}
 	}
 }
+
+// The status line is one row, and a failure is cut to fit it: the part that
+// says what is wrong, at the end of a Colorer error, was cut off (#277). A cut
+// text is shown whole in a message; a short one stays in the line alone.
+func TestSettingsCenterShowsAFailureThatDoesNotFitInFull(t *testing.T) {
+	t.Cleanup(testutil.SwapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(100, 30)
+	vtui.FrameManager.Init(scr)
+	d, _ := (coreSettingsProvider{}).Begin(context.Background())
+	defer d.Close()
+	c := newSettingsCenter([]*settingsSession{{catalog: (coreSettingsProvider{}).Catalog(), draft: d}})
+	c.ResizeConsole(100, 30)
+	vtui.FrameManager.Push(c)
+
+	c.reportFailure("short")
+	if vtui.FrameManager.GetTopFrame() != vtui.Frame(c) || c.status != "short" {
+		t.Fatalf("a failure that fits opened a message (top %T) or was lost (%q)", vtui.FrameManager.GetTopFrame(), c.status)
+	}
+
+	long := "[warning] colorer4go: user colour styles not loaded: stat ~/.config/f4/colorer/mystyles/that-file-does-not-exist-anywhere.xml: no such file or directory"
+	c.reportFailure(long)
+	if c.status != long {
+		t.Fatalf("status = %q", c.status)
+	}
+	msg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+	if !ok || vtui.Frame(msg) == vtui.Frame(c) {
+		t.Fatalf("a cut failure did not open a message; top is %T", vtui.FrameManager.GetTopFrame())
+	}
+	var texts []string
+	var walk func(vtui.UIElement)
+	walk = func(el vtui.UIElement) {
+		if txt, ok := el.(interface{ GetText() string }); ok {
+			texts = append(texts, txt.GetText())
+		}
+		if container, ok := el.(vtui.Container); ok {
+			for _, child := range container.GetChildren() {
+				walk(child)
+			}
+		}
+	}
+	walk(msg)
+	joined := strings.Join(texts, " ")
+	for _, want := range []string{"no such file", "does-not-exist"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the message lacks %q; it shows %q", want, joined)
+		}
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -225,6 +227,36 @@ type ColorerSource struct {
 	UserHRCSettings string
 }
 
+var colorerPercentVar = regexp.MustCompile(`%([A-Za-z_][A-Za-z0-9_]*)%`)
+
+// expandColorerUserPath resolves what a user writes in a path setting: a
+// leading ~ for the home folder, $NAME and ${NAME}, and %NAME% on Windows. The
+// library is handed a plain path, and "stat ~/.config/...: no such file" was
+// the answer to a path that was perfectly good in a shell (#277). Names that are
+// not set are left as written.
+func expandColorerUserPath(path string) string {
+	if runtime.GOOS == "windows" {
+		path = colorerPercentVar.ReplaceAllStringFunc(path, func(m string) string {
+			if value, ok := os.LookupEnv(m[1 : len(m)-1]); ok {
+				return value
+			}
+			return m
+		})
+	}
+	path = os.Expand(path, func(name string) string {
+		if value, ok := os.LookupEnv(name); ok {
+			return value
+		}
+		return "$" + name
+	})
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			return filepath.Join(home, path[1:])
+		}
+	}
+	return path
+}
+
 // CurrentColorerSource is the source the applied configuration names.
 func CurrentColorerSource() ColorerSource {
 	return ColorerSource{
@@ -248,13 +280,13 @@ func (src ColorerSource) userOptions() []colorer.Option {
 		opts = append(opts, colorer.WithHRCSettings(settings))
 	}
 	if src.UserHRD != "" {
-		opts = append(opts, colorer.WithUserHRD(src.UserHRD))
+		opts = append(opts, colorer.WithUserHRD(expandColorerUserPath(src.UserHRD)))
 	}
 	if src.UserHRC != "" {
-		opts = append(opts, colorer.WithUserHRC(src.UserHRC))
+		opts = append(opts, colorer.WithUserHRC(expandColorerUserPath(src.UserHRC)))
 	}
 	if src.UserHRCSettings != "" {
-		opts = append(opts, colorer.WithUserHRCSettings(src.UserHRCSettings))
+		opts = append(opts, colorer.WithUserHRCSettings(expandColorerUserPath(src.UserHRCSettings)))
 	}
 	return opts
 }
