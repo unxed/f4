@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -220,10 +221,37 @@ func (c *SudoClient) SendRequest(req SudoRequest) (SudoResponse, *os.File, error
 		if f != nil {
 			_ = f.Close() // The rejected response's descriptor was never used.
 		}
-		return resp, nil, errors.New(resp.Error)
+		return resp, nil, newSudoRemoteError(resp.Error)
 	}
 
 	return resp, f, nil
+}
+
+// sudoRemoteErrnos are the answers a caller decides by, as the dispatcher's
+// text spells them.
+var sudoRemoteErrnos = []syscall.Errno{
+	syscall.ENOENT, syscall.ENOTDIR, syscall.EEXIST, syscall.ENOTEMPTY, syscall.EACCES, syscall.EPERM,
+}
+
+// sudoRemoteError is what the dispatcher reported. Only its text crosses the
+// socket, so the errno it ended with is read back from that text: the caller
+// can then tell "this name is not there" from "this was refused" with errors.Is
+// (or errors.As for the errno), as it can for a local call.
+type sudoRemoteError struct {
+	msg   string
+	errno syscall.Errno
+}
+
+func (e *sudoRemoteError) Error() string { return e.msg }
+func (e *sudoRemoteError) Unwrap() error { return e.errno }
+
+func newSudoRemoteError(msg string) error {
+	for _, errno := range sudoRemoteErrnos {
+		if strings.HasSuffix(msg, errno.Error()) {
+			return &sudoRemoteError{msg: msg, errno: errno}
+		}
+	}
+	return errors.New(msg)
 }
 
 // Open uses SudoClient to securely fetch a File Descriptor to a protected file.
