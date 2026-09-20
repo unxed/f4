@@ -85,6 +85,8 @@ func newHistorySearch(menu *vtui.VMenu, items []history.HistoryRecord, hint stri
 func (s *historySearch) applyFilter() {
 	items := make([]vtui.MenuItem, 0, len(s.all))
 	var pinned []vtui.MenuItem
+	// frozen is how many top rows the pinned area takes, its divider included.
+	frozen := 0
 	// History providers keep the newest entry first. Dialogs show chronological
 	// order instead: the oldest entry at the top and the newest at the bottom.
 	for i := len(s.all) - 1; i >= 0; i-- {
@@ -111,10 +113,15 @@ func (s *historySearch) applyFilter() {
 		if len(items) > 0 {
 			pinned = append(pinned, vtui.MenuItem{Separator: true})
 		}
+		frozen = len(pinned)
 		items = append(pinned, items...)
 	}
 	s.menu.Items = items
 	s.menu.ItemCount = len(items)
+	// The dialog opens at the newest entry, the end of the list, which scrolled
+	// the pinned folders out of sight in a long history; frozen, they stay on
+	// the top rows however far the rest is scrolled (#1233).
+	s.menu.FrozenTop = frozen
 	s.menu.TopPos = 0
 	s.resize()
 	// VMenu's default renderer draws MenuItem.Text after the leading margin,
@@ -557,7 +564,7 @@ func (s *historySearch) draw(scr *vtui.ScreenBuf) {
 	height := s.menu.Y2 - s.menu.Y1 - 1
 	var itemIdx int
 	for row := 0; row < height; row++ {
-		itemIdx = s.menu.TopPos + row
+		itemIdx = s.menu.ItemAtRow(row)
 		if itemIdx >= len(s.menu.Items) {
 			break
 		}
