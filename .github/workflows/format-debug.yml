@@ -1,0 +1,20 @@
+name: Format debug
+
+on:
+  push:
+    branches: [codex/f4-format-debug-20260924]
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.6'
+          cache: false
+      - name: Show gofmt diff
+        run: gofmt -d internal/panel/frame_coverage_batch25_test.go
