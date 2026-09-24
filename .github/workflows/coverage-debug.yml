@@ -23,10 +23,8 @@ jobs:
       - name: Inspect profile
         run: |
           echo '--- editor lines ---'
-          grep -E 'internal/editor/view.go:(446|447|448|450|451|452|3401|3402|3403|3404|3411|3412|3413|3414|6223|6224|6225|6226|6674|6675|6676|6677|6695|6696|6697|6698):' cover.out || true
+          grep -E 'internal/editor/view.go:(446|447|448|450|451|452|3401|3402|3403|3404|3411|3412|3413|3414|6223|6224|6225|6226|6674|6675|6676|6677|6695|6696|6697|6698)\.' cover.out || true
           echo '--- app lines ---'
-          grep -E 'internal/app/actions.go:(2752|2755|2756|2757|2758|2760|2761|2762|2763|2764|2765|2766|2767|2768|2769|2770|2771|2772|2773|2774|2775):' cover.out || true
-          echo '--- test names in source ---'
-          grep -R -n 'Batch23\|Batch24' internal/editor internal/app | head -80
+          grep -E 'internal/app/actions.go:(2752|2755|2756|2757|2758|2760|2761|2762|2763|2764|2765|2766|2767|2768|2769|2770|2771|2772|2773|2774|2775)\.' cover.out || true
           echo '--- profile stats ---'
           wc -l cover.out
