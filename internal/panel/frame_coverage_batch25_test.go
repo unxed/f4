@@ -11,9 +11,9 @@ import (
 
 func TestIsCommandFocusToggleKeyCoverageBatch25(t *testing.T) {
 	cases := []struct {
-		name string
+		name  string
 		event *vtinput.InputEvent
-		want bool
+		want  bool
 	}{
 		{"virtual grave", &vtinput.InputEvent{VirtualKeyCode: vtinput.VK_OEM_3}, true},
 		{"text grave", &vtinput.InputEvent{Char: rune(96)}, true},
@@ -93,7 +93,7 @@ func TestExpandEnvironmentVariablesCoverageBatch25(t *testing.T) {
 	t.Setenv("F4_BATCH25_VALUE", "value")
 	cases := map[string]string{
 		"$F4_BATCH25_VALUE":        "value",
-		"${F4_BATCH25_VALUE}/x":   "value/x",
+		"${F4_BATCH25_VALUE}/x":    "value/x",
 		"%F4_BATCH25_VALUE%/x":     "value/x",
 		"$F4_BATCH25_VALUE-suffix": "value-suffix",
 		"$F4_BATCH25_UNKNOWN":      "$F4_BATCH25_UNKNOWN",
@@ -160,7 +160,7 @@ func TestFolderHistoryStepBoundariesCoverageBatch25(t *testing.T) {
 func TestSameFolderHistoryPathCoverageBatch25(t *testing.T) {
 	cases := []struct {
 		a, b string
-		want bool
+		want  bool
 	}{
 		{"foo/../bar", "bar", true},
 		{"https://example.test/a", "https://example.test/a", true},
