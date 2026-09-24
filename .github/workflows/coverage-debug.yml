@@ -1,6 +1,8 @@
 name: Coverage debug
 
 on:
+  push:
+    branches: [codex/f4-coverage-debug-20260924]
   workflow_dispatch:
 
 permissions:
