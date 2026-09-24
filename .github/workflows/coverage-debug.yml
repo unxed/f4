@@ -20,6 +20,10 @@ jobs:
       - name: Generate profile
         run: |
           go test -coverpkg=./... -coverprofile=cover.out -shuffle=off -timeout 15m ./...
+      - name: Merge repeated blocks
+        run: |
+          go run github.com/wadey/gocovmerge@master cover.out > merged.out
+          mv merged.out cover.out
       - name: Inspect profile
         run: |
           echo '--- editor lines ---'
