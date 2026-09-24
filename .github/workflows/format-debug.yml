@@ -1,0 +1,23 @@
+name: format-debug
+
+on:
+  push:
+    branches:
+      - codex/f4-coverage-batch22-fix
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Show gofmt diff
+        run: |
+          gofmt -s -d internal/panel/frame_coverage_batch22_test.go
+          gofmt -s internal/panel/frame_coverage_batch22_test.go > /tmp/frame_coverage_batch22_test.go
+      - uses: actions/upload-artifact@v7
+        with:
+          name: formatted-frame-test
+          path: /tmp/frame_coverage_batch22_test.go
