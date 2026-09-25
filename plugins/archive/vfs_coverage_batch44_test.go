@@ -1,5 +1,7 @@
 package archive
 
+// Batch 44 covers archive formatting, progress, CRC and seek helper branches.
+
 import (
 	"bytes"
 	"errors"
