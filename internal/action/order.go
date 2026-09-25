@@ -117,6 +117,7 @@ var actionMenuOrder = []string{
 
 	"Settings.Language",
 	"Settings.Panel",
+	"Settings.PanelModes",
 	"Settings.Editor",
 	"Settings.Viewer",
 	"Settings.Colorer",
