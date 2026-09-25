@@ -108,7 +108,7 @@ func TestArchiveFileCRCReadsSevenZipHeadersCoverageBatch44(t *testing.T) {
 type archiveCoverageSeekFile struct{ *bytes.Reader }
 
 func (f archiveCoverageSeekFile) Stat() (fs.FileInfo, error) { return nil, nil }
-func (f archiveCoverageSeekFile) Close() error                { return nil }
+func (f archiveCoverageSeekFile) Close() error               { return nil }
 
 type archiveCoverageReadFile struct {
 	data []byte
@@ -125,7 +125,7 @@ func (f *archiveCoverageReadFile) Read(p []byte) (int, error) {
 }
 
 func (f *archiveCoverageReadFile) Stat() (fs.FileInfo, error) { return nil, nil }
-func (f *archiveCoverageReadFile) Close() error                { return nil }
+func (f *archiveCoverageReadFile) Close() error               { return nil }
 
 func TestSeekArchiveFileUsesSeekAndReadFallbackCoverageBatch44(t *testing.T) {
 	seekFile := archiveCoverageSeekFile{bytes.NewReader([]byte("abcdef"))}
