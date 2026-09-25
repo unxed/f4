@@ -1,6 +1,7 @@
 package netfox
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jlaffaye/ftp"
@@ -79,7 +80,7 @@ func TestFTPVFSAbsCleansAbsoluteAndJoinsRelativeCoverageBatch41(t *testing.T) {
 }
 
 func TestFTPVFSSetAttributesReportsUnsupportedCoverageBatch41(t *testing.T) {
-	if err := (&FTPVFS{}).SetAttributes(nil, "/file", vfs.VFSItem{}); err == nil {
+	if err := (&FTPVFS{}).SetAttributes(context.Background(), "/file", vfs.VFSItem{}); err == nil {
 		t.Fatal("SetAttributes unexpectedly succeeded")
 	}
 }
@@ -89,15 +90,16 @@ func TestFTPVFSGetCapabilitiesAndSearchStubCoverageBatch41(t *testing.T) {
 	if !caps.HasUnixPermissions || caps.HasWrite || caps.HasRandomAccess {
 		t.Fatalf("FTP capabilities = %+v", caps)
 	}
-	ch, err := (&FTPVFS{}).Search(nil, "/", "needle")
+	ch, err := (&FTPVFS{}).Search(context.Background(), "/", "needle")
 	if ch != nil || err != nil {
 		t.Fatalf("Search = (%v, %v), want (nil, nil)", ch, err)
 	}
 }
 
-func TestFTPVFSCloneWithoutSessionReturnsSameViewCoverageBatch41(t *testing.T) {
+func TestFTPVFSCloneWithoutSessionCreatesIndependentViewCoverageBatch41(t *testing.T) {
 	v := &FTPVFS{cwd: "/captured"}
-	if got := v.Clone(); got != v {
-		t.Fatalf("clone without session = %p, want original %p", got, v)
+	clone, ok := v.Clone().(*FTPVFS)
+	if !ok || clone == v || clone.GetPath() != v.GetPath() {
+		t.Fatalf("clone without session = %#v, want independent view with path %q", clone, v.GetPath())
 	}
 }
