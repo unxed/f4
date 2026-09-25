@@ -97,6 +97,7 @@ Panel.GroupFoldersSeparately
 Panel.GroupSettings
 Settings.Language
 Settings.Panel
+Settings.PanelModes
 Settings.Editor
 Settings.Viewer
 Settings.Colorer
