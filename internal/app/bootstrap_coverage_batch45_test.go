@@ -98,7 +98,7 @@ func TestSaveSessionFileWritesPanelStateCoverageBatch45(t *testing.T) {
 		panel.LastActivePanel, panel.LastWidePanel = oldActive, oldWide
 		panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight = oldPanels, oldLeft, oldRight
 	})
-	panel.LastActivePanel, panel.LastWidePanel = 1, true
+	panel.LastActivePanel, panel.LastWidePanel = 1, 1
 	panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight = true, false, true
 	data := readSessionSaveCoverageBatch45(t)
 	for _, want := range []string{"ActivePanel = 1", "WidePanel = 1", "ShowPanels = 1", "ShowLeft = 0", "ShowRight = 1"} {
