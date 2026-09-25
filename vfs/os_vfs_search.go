@@ -11,7 +11,6 @@ import (
 
 	"github.com/charlievieth/strcase"
 	"github.com/coregx/coregex"
-	"github.com/unxed/f4/internal/filemask"
 	"github.com/unxed/f4/vfs/hostfs"
 	"github.com/unxed/f4/vfs/hostpath"
 )
@@ -134,7 +133,7 @@ func findMaskMatches(name string, masks []string, ignoreCase bool) bool {
 		if mask == "" {
 			continue
 		}
-		if filemask.Match(name, mask, ignoreCase) {
+		if MatchFileMask(name, mask, ignoreCase) {
 			return true
 		}
 	}
