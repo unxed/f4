@@ -28,15 +28,38 @@ Other rules:
 - After a merge, update the fork from upstream, so that the fork differs from
   upstream only by what is still open or not sent.
 
+## CI of the open pull requests
+
+Checked on 2026-09-25 for every open PR in the tables below:
+
+- **goffi, sevenzip**: upstream CI runs on our PRs and is green. The goffi
+  PRs #83, #84, #87, #88 and #89 carry the commit of #85 at the bottom, because
+  the Android jobs fail without it; it drops out when they are rebased after
+  #85 is merged.
+- **archives, xz**: upstream CI does not run until a maintainer approves the
+  workflows for a first-time contributor ("awaiting approval"). The same
+  branches pass `go vet` and `go test` on Linux, Windows and macOS in the
+  sandbox.
+- **id3-go, xkb-go**: upstream has no CI. The branches pass `go vet` and
+  `go test` on Linux, Windows and macOS in the sandbox. id3-go #42 to #46 are
+  stacked on #41, because upstream has no `go.mod` and does not build with
+  current Go without it; xkb-go #3 is stacked on #4, whose test fix it needs
+  on Windows and macOS.
+- **wayland**: upstream has no test CI, and `go test ./...` fails on upstream
+  `master` itself (the `go-wayland-cube`, `browser` and `libwayland` examples
+  do not build). Our #36 fails in the same packages and no others.
+- **rardecode**: upstream runs only CodeQL. The branches pass `go test` on
+  Linux, Windows and macOS in the sandbox.
+
 ## Summary
 
 | Project | Our fork | Merged | Open | Ready | Not sent |
 | --- | --- | --- | --- | --- | --- |
-| [ulikunitz/xz](#ulikunitzxz) | unxed/xz `master` | 0 | 4 | 1 issue | encoder speed-ups, LZMA2 parallel decoding |
+| [ulikunitz/xz](#ulikunitzxz) | unxed/xz `master` | 0 | 4 + 1 issue | 0 | encoder speed-ups, LZMA2 parallel decoding |
 | [bodgit/sevenzip](#bodgitsevenzip) | unxed/sevenzip `write` | 0 | 2 | 0 | 7z writing |
 | [mholt/archives](#mholtarchives) | unxed/archives `write` | 0 | 4 | 0 | 7z writing, parallel 7z extraction |
-| [go-webgpu/goffi](#go-webgpugoffi) | unxed/goffi `main` | 1 | 5 | 1 (Profile U) | nothing |
-| [mikkyang/id3-go](#mikkyangid3-go) | unxed/id3-go `master` | 0 | 3 | 3 | nothing of our own |
+| [go-webgpu/goffi](#go-webgpugoffi) | unxed/goffi `main` | 1 | 6 | 0 | nothing |
+| [mikkyang/id3-go](#mikkyangid3-go) | unxed/id3-go `master` | 0 | 6 | 0 | nothing of our own |
 | [godesktop/xkb-go](#godesktopxkb-go) | unxed/xkb-go `main` | 0 | 2 | 0 | nothing |
 | [neurlang/wayland](#neurlangwayland) | unxed/wayland | 2 | 1 | 0 | nothing |
 | [nwaples/rardecode](#nwaplesrardecode) | unxed/rardecode (branches only) | 0 | 3 | 0 | nothing |
@@ -56,7 +79,7 @@ in step with upstream by merging (done up to upstream v0.5.17).
 | [#85](https://github.com/ulikunitz/xz/pull/85) | Opt-in parallel LZMA2 compression (`Workers` > 1); the default writer is unchanged | Open |
 | [#86](https://github.com/ulikunitz/xz/pull/86) | `ParseBlocks`, `NewBlockReader`, `ParallelReader`: random access to and parallel decoding of `.xz` blocks (fixes upstream issue #72) | Open |
 | [#87](https://github.com/ulikunitz/xz/pull/87) | Reading the branch-conversion (BCJ) and delta filters (upstream issue #20) | Open |
-| Issue | "LZMA speed-up techniques from the unxed/xz fork": a description of every technique, detailed enough to implement without our code, with a proposed order of PRs | Ready (text written, issue not filed yet) |
+| [Issue #88](https://github.com/ulikunitz/xz/issues/88) | "LZMA speed-up techniques from the unxed/xz fork": a description of every technique, detailed enough to implement without our code, with a proposed order of PRs | Open |
 | [#73](https://github.com/ulikunitz/xz/pull/73) | First version of #74, from the fork's `master` | Closed, replaced by #74 |
 
 Not sent:
@@ -64,8 +87,7 @@ Not sent:
 - **Encoder and match-finder speed-ups, including AMD64 assembly**
   (fork commits 6968e62, 45cfa6b, e79e487). They change the compressed output
   (more match candidates, sparse search), need Go 1.25.5, and are tied to the
-  fork's rewritten writer. The assembly also fails `go vet` (frame pointer
-  clobbered, wrong result names in `match_amd64.s`). Next step: the issue above
+  fork's rewritten writer. Next step: issue #88
   proposes how to split them; send them one by one after #74, starting with
   the changes that keep the output identical.
 - **LZMA2 parallel decoding inside the `lzma` package** (588d7d3). It changes
@@ -74,10 +96,13 @@ Not sent:
 - **Dictionary and buffer pooling**. Overlaps #74 and #86. Next step: after
   both are merged.
 
-Found while preparing the PRs, to fix in the fork: `lzma.Reader` in the fork
-always reads ahead, so data after an LZMA stream is consumed from the
-underlying reader (#74 does not have this problem), and the fork's range
-encoder may write past its buffer for a plain `lzma.Writer`.
+Found while preparing the PRs and fixed in the fork (v0.1.47, with regression
+tests): `lzma.Reader` read ahead and consumed data after the LZMA stream from
+the underlying reader; the range encoder could write past its 64 KiB buffer
+for a plain `lzma.Writer`; the AMD64 assembly failed `go vet` (it used BP as a
+scratch register, and a result name was wrong). None of #74, #85, #86 and #87
+has these bugs. Issue #88 was written before the fixes and still lists the
+`go vet` findings as open.
 
 ## bodgit/sevenzip
 
@@ -137,12 +162,12 @@ The large PR #76 was split at the maintainer's request; the plan is in
 | [#50](https://github.com/go-webgpu/goffi/pull/50) | README: pureffi as a solution for the purego duplicate-symbol conflict | Merged 2026-05-26 |
 | [#83](https://github.com/go-webgpu/goffi/pull/83) | Build `callback_amd64.s` on FreeBSD, and a CI check that the trampoline links as code | Open |
 | [#84](https://github.com/go-webgpu/goffi/pull/84) | `docs/CALLBACK_ABI.md`: what callbacks accept on each platform | Open |
-| [#85](https://github.com/go-webgpu/goffi/pull/85) | CI: stop `setup-android` from asking for the removed `tools` package (the Android jobs of the other PRs fail until this is merged) | Open |
+| [#85](https://github.com/go-webgpu/goffi/pull/85) | CI: stop `setup-android` from asking for the removed `tools` package; the other PRs carry this commit until it is merged | Open |
 | [#87](https://github.com/go-webgpu/goffi/pull/87) | `goffi_musl` build tag for Alpine and other musl systems, on top of upstream's `goffi_static` | Open |
 | [#88](https://github.com/go-webgpu/goffi/pull/88) | NetBSD amd64/arm64, a platform matrix check, a job that runs goffi next to purego. Carries #83; rebase after #83 is merged | Open |
 | [#76](https://github.com/go-webgpu/goffi/pull/76) | Profile U + musl + platform matrix in one PR | Closed, split into the PRs above |
 | [#77](https://github.com/go-webgpu/goffi/pull/77) | Second copy of #50 | Closed |
-| [`unxed:feature/profile-u`](https://github.com/go-webgpu/goffi/compare/main...unxed:goffi:feature/profile-u) | Profile U (`goffi_universal`): one binary for glibc and musl systems, re-executed through the host's dynamic loader. Stacked on #87. Includes what was promised on #76: the re-exec guard carries the pid, so a child started with `exec.Command(os.Args[0])` runs the bridge itself (checked by a respawn probe on glibc 2.31 and newer and on Alpine), and `ffi.Available()` documents its three modes | Ready |
+| [#89](https://github.com/go-webgpu/goffi/pull/89) | Profile U (`goffi_universal`): one binary for glibc and musl systems, re-executed through the host's dynamic loader. Stacked on #87. Includes what was promised on #76: the re-exec guard carries the pid, so a child started with `exec.Command(os.Args[0])` runs the bridge itself (checked by a respawn probe on glibc 2.31 and newer and on Alpine), and `ffi.Available()` documents its three modes. Our fork has the same guard since v0.1.11, and f4 starts copies of itself by path | Open |
 
 ## mikkyang/id3-go
 
@@ -154,9 +179,9 @@ and has no `go.mod`, so #41 adds one and most other PRs depend on it.
 | [#41](https://github.com/mikkyang/id3-go/pull/41) | Replace cgo iconv with `golang.org/x/text`; add `go.mod` | Open |
 | [#42](https://github.com/mikkyang/id3-go/pull/42) | Write ID3v2.2/v2.3 text frames as UTF-16, not UTF-8 (needs #41) | Open |
 | [#43](https://github.com/mikkyang/id3-go/pull/43) | Fix file corruption when a tag grows; TXXX description terminator (needs #41) | Open |
-| [`unxed:v1-codepage`](https://github.com/mikkyang/id3-go/compare/master...unxed:v1-codepage?expand=1) | Optional code page for ID3v1 text; `v1.UseLocaleEncoding()` picks it from the system locale through [localecp](https://github.com/unxed/localecp). Off by default (needs #41) | Ready |
-| [`unxed:json-converter`](https://github.com/mikkyang/id3-go/compare/master...unxed:json-converter?expand=1) | JSON tag converter and the `id3json` and `id3lister` tools (needs #41 and #43) | Ready |
-| [`unxed:more-tests`](https://github.com/mikkyang/id3-go/compare/master...unxed:more-tests?expand=1) | Tests for frames, tags, file handling and encodedbytes (needs #41) | Ready |
+| [#45](https://github.com/mikkyang/id3-go/pull/45) | Optional code page for ID3v1 text; `v1.UseLocaleEncoding()` picks it from the system locale through [localecp](https://github.com/unxed/localecp). Off by default (needs #41) | Open |
+| [#44](https://github.com/mikkyang/id3-go/pull/44) | JSON tag converter and the `id3json` and `id3lister` tools (needs #41 and #43) | Open |
+| [#46](https://github.com/mikkyang/id3-go/pull/46) | Tests for frames, tags, file handling and encodedbytes (needs #41) | Open |
 
 Not sent: the fork also carries four open upstream PRs by other people
 (#8, #16, #30, #37). They are not ours to send; they are merged when upstream
@@ -169,7 +194,7 @@ Our fork: `github.com/unxed/xkb-go` (upstream's module path is
 
 | PR | What | State |
 | --- | --- | --- |
-| [#3](https://github.com/godesktop/xkb-go/pull/3) | Several keyboard layouts and XKB group offsets, per-group key types, symbolic modifier names, variants with group suffixes in rules, XKB search paths for macOS and Windows, `State` getters | Open since 2026-05-10, no reply yet |
+| [#3](https://github.com/godesktop/xkb-go/pull/3) | Several keyboard layouts and XKB group offsets, per-group key types, symbolic modifier names, variants with group suffixes in rules, XKB search paths for macOS and Windows, `State` getters. Stacked on #4 | Open since 2026-05-10, no reply yet |
 | [#4](https://github.com/godesktop/xkb-go/pull/4) | `ExampleNewContext` no longer depends on which XKB directories exist, so tests pass on Windows and macOS | Open |
 | [#2](https://github.com/godesktop/xkb-go/pull/2) | First version of #3, from the fork's `main` | Closed, replaced by #3 |
 
