@@ -97,3 +97,10 @@ and the program most likely to be a universal build is f4. `buildChildEnv` now
 drops the bridge's variables, so a child does its own libc binding -- and with
 them `F4_EXE`, which is untagged and would tell a different f4 binary that it
 lives at this one's path.
+
+Later, `update.SelfCommand` stopped going through the loader by hand as well:
+glibc 2.31's loader refuses the `/proc/self/fd/<n>` image with `loader cannot
+load itself` (Debian 11, Ubuntu 20.04). goffi v0.1.11 tags the guard with the pid
+it was written for, so copies of f4 are now started from the file on disk,
+with the bridge's variables left out of their environment, and run the bridge
+themselves.

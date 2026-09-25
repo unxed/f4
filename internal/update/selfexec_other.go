@@ -17,8 +17,8 @@ import "os"
 // This is not a statement about goffi's platform support, which is wider than
 // Linux (see docs/PLATFORMS.md there); it is about the one build mode that
 // rewrites argv[0] and /proc/self/exe out from under the program.
-func universalHostLoader() (loader, preload string, ok bool) {
-	return "", "", false
+func universalBuild() bool {
+	return false
 }
 
 // executable is os.Executable where no build mode moves the executable out

@@ -5,26 +5,6 @@ import (
 	"testing"
 )
 
-// The preload list stays one argument: the loader splits it on spaces or
-// colons itself, and splitting it here would hand it the second library as
-// the program to run.
-func TestLoaderArgv(t *testing.T) {
-	const preload = "libc.so.6 libpthread.so.0 libdl.so.2"
-	got := loaderArgv(preload, "/proc/self/fd/3", []string{"--server", "/tmp/f4.sock"})
-	want := []string{"--preload", preload, "/proc/self/fd/3", "--server", "/tmp/f4.sock"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("loaderArgv() = %q, want %q", got, want)
-	}
-}
-
-func TestLoaderArgvWithoutArguments(t *testing.T) {
-	got := loaderArgv("libc.so.6", "/usr/bin/f4", nil)
-	want := []string{"--preload", "libc.so.6", "/usr/bin/f4"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("loaderArgv() = %q, want %q", got, want)
-	}
-}
-
 func TestLinkerArgv(t *testing.T) {
 	got := linkerArgv("f4", "/usr/bin/f4", []string{"--server", "/tmp/f4.sock"})
 	want := []string{"f4", "/usr/bin/f4", "--server", "/tmp/f4.sock"}
@@ -61,17 +41,12 @@ func TestLinkerArgvKeepsServerArgumentPositions(t *testing.T) {
 }
 
 // Outside a universal build -- which is every test run that is not itself
-// started through goffi's bridge -- selfExecArgv must hand back exactly what
+// started through goffi's bridge -- selfExecPath must hand back exactly what
 // the caller asked for.
-func TestSelfExecArgvPlain(t *testing.T) {
+func TestSelfExecPathPlain(t *testing.T) {
 	t.Setenv("GOFFI_UNIVERSAL_REEXEC", "")
 
-	args := []string{"--server", "/tmp/f4.sock"}
-	name, argv := selfExecArgv("/usr/bin/f4", args)
-	if name != "/usr/bin/f4" {
-		t.Errorf("program = %q, want %q", name, "/usr/bin/f4")
-	}
-	if !reflect.DeepEqual(argv, args) {
-		t.Errorf("args = %q, want %q", argv, args)
+	if got := selfExecPath("/usr/bin/f4"); got != "/usr/bin/f4" {
+		t.Errorf("program = %q, want %q", got, "/usr/bin/f4")
 	}
 }
