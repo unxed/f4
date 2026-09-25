@@ -180,7 +180,7 @@ func TestHandlePanelPathEditHotkeyRejectsInvalidEventsCoverageBatch25(t *testing
 		nil,
 		{Type: vtinput.KeyEventType},
 		{Type: vtinput.KeyEventType, KeyDown: true},
-		{Type: vtinput.KeyEventType, KeyDown: true, ControlKeyState: vtinput.LeftCtrlPressed, VirtualKeyCode: vtinput.VK_OEM_4},
+		{Type: vtinput.KeyEventType, KeyDown: true, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed, VirtualKeyCode: vtinput.VK_OEM_4},
 	}
 	for _, event := range cases {
 		if HandlePanelPathEditHotkey(event) {
