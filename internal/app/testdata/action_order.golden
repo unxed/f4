@@ -141,6 +141,12 @@ Panel.ViewBrief
 Panel.ViewMedium
 Panel.ViewDetailed
 Panel.ViewWide
+Panel.ViewMode5
+Panel.ViewMode6
+Panel.ViewMode7
+Panel.ViewMode8
+Panel.ViewMode9
+Panel.ViewMode0
 Panel.SortByName
 Panel.SortByExt
 Panel.SortByTime
@@ -265,12 +271,6 @@ AI.Setup
 AI.Help
 AI.AttachAPSpec
 AI.ListModels
-Panel.ViewMode5
-Panel.ViewMode6
-Panel.ViewMode7
-Panel.ViewMode8
-Panel.ViewMode9
-Panel.ViewMode0
 Settings.Category.navigation
 Settings.Open
 Settings.Category.appearance
