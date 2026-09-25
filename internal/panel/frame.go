@@ -1322,6 +1322,9 @@ func (pf *PanelsFrame) consumeLocalOutput(p terminal.PtyBackend, data []byte) {
 		// flags mean what reflow needs only for the session that wrote them.
 		pf.TermView.SetReflow(reflow)
 	}
+	if shouldProcess && pf.ShellMode == terminal.ShellModeHost {
+		pf.noteHostConsoleQueries(p, data)
+	}
 	pf.displayLocalOutput(shouldProcess, data)
 }
 
@@ -1332,7 +1335,6 @@ func (pf *PanelsFrame) displayLocalOutput(shouldProcess bool, data []byte) {
 		return
 	}
 	if pf.ShellMode == terminal.ShellModeHost && pf.IsHostConsoleActive() {
-		pf.noteHostConsoleQueries(p, data)
 		vtui.WritePassthrough(data)
 		pf.Parser.Process(data)
 		if pf.OverlayLines() > 0 && time.Since(pf.lastOverlayDraw) > 30*time.Millisecond {
