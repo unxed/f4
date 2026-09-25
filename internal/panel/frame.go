@@ -325,6 +325,7 @@ type PanelsFrame struct {
 	ShellMode         terminal.ShellMode
 	HostConsoleActive bool
 	hostConsoleMu     sync.Mutex
+	hostConsoleReplyState
 	lastOverlayDraw   time.Time
 
 	// Terminal mouse-selection state. Kept in PanelsFrame because
@@ -1331,6 +1332,7 @@ func (pf *PanelsFrame) displayLocalOutput(shouldProcess bool, data []byte) {
 		return
 	}
 	if pf.ShellMode == terminal.ShellModeHost && pf.IsHostConsoleActive() {
+		pf.noteHostConsoleQueries(p, data)
 		vtui.WritePassthrough(data)
 		pf.Parser.Process(data)
 		if pf.OverlayLines() > 0 && time.Since(pf.lastOverlayDraw) > 30*time.Millisecond {
@@ -2251,6 +2253,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	pf.updateConsoleOverlayModifiers(e)
+	if pf.consumeHostConsoleReply(e) {
+		return true
+	}
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0

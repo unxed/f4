@@ -466,6 +466,7 @@ func (pf *PanelsFrame) LeaveHostConsole() {
 		return
 	}
 	pf.HostConsoleActive = false
+	pf.resetHostConsoleReplyState()
 	pf.hostConsoleMu.Unlock()
 	pf.syncAutoCompleteSuppression()
 
