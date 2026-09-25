@@ -186,4 +186,4 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.20
 
 replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 
-replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.10
+replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11

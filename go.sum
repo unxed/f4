@@ -275,8 +275,8 @@ github.com/unxed/go2xp v0.0.0-20260918000857-00a22a520369 h1:cpsKXIHJVOroztdbIV7
 github.com/unxed/go2xp v0.0.0-20260918000857-00a22a520369/go.mod h1:6dS93Q8qeYH19qONyVGuBQis+1ng6cfqutqhks8fW68=
 github.com/unxed/goclip v0.1.2 h1:1O9K+iCxa8P43yxpjrk4HyakcFqcbHSi4qJD9IzLuZU=
 github.com/unxed/goclip v0.1.2/go.mod h1:YXy03ByNfbeu4lRrUL09VyJX9U4WD6h/0JiqMuu8vUE=
-github.com/unxed/goffi v0.1.10 h1:I6wtbby+EvaHn2iu7yY67PDi0K3P2U5oHDp8wo791sM=
-github.com/unxed/goffi v0.1.10/go.mod h1:5yfNuseCh+0XTe9cbg8lGtZtOA12DU+Nm9Vfp6IDnFo=
+github.com/unxed/goffi v0.1.11 h1:/2LiDXM4BPGxeG/DSEm8Q/1HIVDloWDx4OtIr6pYDjE=
+github.com/unxed/goffi v0.1.11/go.mod h1:5yfNuseCh+0XTe9cbg8lGtZtOA12DU+Nm9Vfp6IDnFo=
 github.com/unxed/id3-go v0.1.2 h1:PiJ93frR640drDpBvGQpQDEXc4DKslAq+bIdj9Q2gLg=
 github.com/unxed/id3-go v0.1.2/go.mod h1:K1wLboZdka4B5A9w+uWOY+FfCgzogcpI4FIDL7fYNG0=
 github.com/unxed/keytrans v0.1.33 h1:tW+nWhd6GKLc0xEKDhtqb2Cehu/RA2JPZ+6EkBb/fvA=
