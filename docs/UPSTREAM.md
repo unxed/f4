@@ -231,6 +231,19 @@ branches of unxed/rardecode and are offered upstream.
 | --- | --- | --- |
 | [#1242](https://github.com/alecthomas/chroma/pull/1242) | f4 added to "Projects using Chroma" | Merged 2026-05-01 |
 
+## Test fixes found while checking every dependency's CI
+
+Checking every unxed dependency's own CI on all three OSes (not only Linux,
+which is all most of their workflows run) found four flaky or Windows/macOS-only
+failures, unrelated to upstreaming. Fixed and merged:
+
+| Repo | PR | What was wrong |
+| --- | --- | --- |
+| [unxed/tar](https://github.com/unxed/tar) | [#8](https://github.com/unxed/tar/pull/8) | `TestZstdDecoderPooling` assumed `sync.Pool` always hands back what was put; it doesn't. Test-only. |
+| [unxed/goclip](https://github.com/unxed/goclip) | [#2](https://github.com/unxed/goclip/pull/2) | A test path meant to fail (`/proc/...`) resolves to a real, writable `C:\proc\...` on Windows. Test-only. |
+| [unxed/winescape](https://github.com/unxed/libwinescape) | [#2](https://github.com/unxed/winescape/pull/2) | `probe/` didn't build on darwin/arm64 (amd64-only assembly); syscall-number tests didn't know darwin is out of scope. Tagged v0.2.2 (f4 still pins v0.2.1; bumping is optional, nothing in f4 uses `probe/`). |
+| [unxed/colorer4go](https://github.com/unxed/colorer4go) | [#2](https://github.com/unxed/colorer4go/pull/2) | Host paths in error messages went through `%q`, which doubles Windows backslashes, so the message never contained the literal path. Tagged v0.1.24. |
+
 ## korli/go (Go for Haiku)
 
 | PR | What | State |
