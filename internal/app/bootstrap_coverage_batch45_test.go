@@ -92,9 +92,11 @@ func TestSaveSessionFileWritesFindOptionsCoverageBatch45(t *testing.T) {
 
 func TestSaveSessionFileWritesPanelStateCoverageBatch45(t *testing.T) {
 	prepareSessionSaveCoverageBatch45(t)
-	old := []any{panel.LastActivePanel, panel.LastWidePanel, panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight}
+	oldActive, oldWide := panel.LastActivePanel, panel.LastWidePanel
+	oldPanels, oldLeft, oldRight := panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight
 	t.Cleanup(func() {
-		panel.LastActivePanel, panel.LastWidePanel, panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight = old[0].(int), old[1].(bool), old[2].(bool), old[3].(bool), old[4].(bool)
+		panel.LastActivePanel, panel.LastWidePanel = oldActive, oldWide
+		panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight = oldPanels, oldLeft, oldRight
 	})
 	panel.LastActivePanel, panel.LastWidePanel = 1, true
 	panel.LastShowPanels, panel.LastShowLeft, panel.LastShowRight = true, false, true
