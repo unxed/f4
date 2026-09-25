@@ -2006,6 +2006,9 @@ Queue.ColProgress=Progress
 Queue.ColSpeed=Speed
 
 Session.Title= Select Session
+Session.DeleteAll=Delete All Sessions
+Session.DeleteAllTitle= Delete All Sessions
+Session.DeleteAllConfirm= Stop all %d running session(s)? Attached f4 windows will be closed and unsaved changes will be lost.
 
 AI.Title= AI Panel
 AI.ErrorTitle= AI Panel Error
