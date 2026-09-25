@@ -26,7 +26,7 @@ func TestArchiveFormatSizeBytesCoverageBatch44(t *testing.T) {
 func TestArchiveFormatSizeScaledCoverageBatch44(t *testing.T) {
 	for _, tc := range []struct {
 		bytes int64
-		want  string
+		want string
 	}{
 		{bytes: 1024, want: "1.0 KB"},
 		{bytes: 1024 * 1024, want: "1.0 MB"},
@@ -64,7 +64,7 @@ func TestJoinArchiveCloseErrorJoinsBothErrorsCoverageBatch44(t *testing.T) {
 func TestArchiveProgressPercentBoundsCoverageBatch44(t *testing.T) {
 	for _, tc := range []struct {
 		copied, total int64
-		want          int
+		want int
 	}{
 		{copied: 0, total: 10, want: 0},
 		{copied: 5, total: 10, want: 50},
@@ -79,12 +79,12 @@ func TestArchiveProgressPercentBoundsCoverageBatch44(t *testing.T) {
 
 type archiveCoverageFileInfo struct{ sys any }
 
-func (i archiveCoverageFileInfo) Name() string       { return "member" }
-func (i archiveCoverageFileInfo) Size() int64        { return 0 }
-func (i archiveCoverageFileInfo) Mode() fs.FileMode  { return 0 }
+func (i archiveCoverageFileInfo) Name() string { return "member" }
+func (i archiveCoverageFileInfo) Size() int64 { return 0 }
+func (i archiveCoverageFileInfo) Mode() fs.FileMode { return 0 }
 func (i archiveCoverageFileInfo) ModTime() time.Time { return time.Time{} }
-func (i archiveCoverageFileInfo) IsDir() bool        { return false }
-func (i archiveCoverageFileInfo) Sys() any           { return i.sys }
+func (i archiveCoverageFileInfo) IsDir() bool { return false }
+func (i archiveCoverageFileInfo) Sys() any { return i.sys }
 
 func TestArchiveFileCRCNilAndUnknownCoverageBatch44(t *testing.T) {
 	if got, ok := archiveFileCRC(nil); ok || got != 0 {
@@ -108,11 +108,11 @@ func TestArchiveFileCRCReadsSevenZipHeadersCoverageBatch44(t *testing.T) {
 type archiveCoverageSeekFile struct{ *bytes.Reader }
 
 func (f archiveCoverageSeekFile) Stat() (fs.FileInfo, error) { return nil, nil }
-func (f archiveCoverageSeekFile) Close() error                { return nil }
+func (f archiveCoverageSeekFile) Close() error { return nil }
 
 type archiveCoverageReadFile struct {
 	data []byte
-	pos  int
+	pos int
 }
 
 func (f *archiveCoverageReadFile) Read(p []byte) (int, error) {
@@ -125,7 +125,7 @@ func (f *archiveCoverageReadFile) Read(p []byte) (int, error) {
 }
 
 func (f *archiveCoverageReadFile) Stat() (fs.FileInfo, error) { return nil, nil }
-func (f *archiveCoverageReadFile) Close() error                { return nil }
+func (f *archiveCoverageReadFile) Close() error { return nil }
 
 func TestSeekArchiveFileUsesSeekAndReadFallbackCoverageBatch44(t *testing.T) {
 	seekFile := archiveCoverageSeekFile{bytes.NewReader([]byte("abcdef"))}
