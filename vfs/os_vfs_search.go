@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/charlievieth/strcase"
 	"github.com/coregx/coregex"
+	"github.com/unxed/f4/internal/filemask"
 	"github.com/unxed/f4/vfs/hostfs"
 	"github.com/unxed/f4/vfs/hostpath"
 )
@@ -91,7 +91,7 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 			}
 
 			if isDir {
-				if q.FindFolders && q.Text == "" && findMaskMatches(name, masks) {
+				if q.FindFolders && q.Text == "" && findMaskMatches(name, masks, q.IgnoreCase) {
 					if item, statErr := v.Stat(ctx, child); statErr == nil {
 						found = append(found, FoundEntry{Path: child, Item: item})
 						report(child, true)
@@ -103,7 +103,7 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 				continue
 			}
 
-			if !findMaskMatches(name, masks) {
+			if !findMaskMatches(name, masks, q.IgnoreCase) {
 				continue
 			}
 			if matcher != nil {
@@ -129,12 +129,12 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 	return found, nil
 }
 
-func findMaskMatches(name string, masks []string) bool {
+func findMaskMatches(name string, masks []string, ignoreCase bool) bool {
 	for _, mask := range masks {
 		if mask == "" {
 			continue
 		}
-		if matched, _ := filepath.Match(mask, name); matched {
+		if filemask.Match(name, mask, ignoreCase) {
 			return true
 		}
 	}

@@ -105,6 +105,33 @@ func TestOSVFSFindFilesOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestOSVFSFindFilesMaskHonorsIgnoreCase(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Report.TXT"), []byte("report\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	v := NewOSVFS(root)
+	ctx := context.Background()
+
+	hits, err := v.FindFiles(ctx, root, FindQuery{Masks: []string{"*.txt"}, IgnoreCase: true})
+	if err != nil {
+		t.Fatalf("case-insensitive mask search: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Item.Name != "Report.TXT" {
+		t.Fatalf("case-insensitive mask search returned %+v, want Report.TXT", hits)
+	}
+
+	hits, err = v.FindFiles(ctx, root, FindQuery{Masks: []string{"*.txt"}})
+	if err != nil {
+		t.Fatalf("case-sensitive mask search: %v", err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("case-sensitive mask search returned %+v, want no hits", hits)
+	}
+}
+
 func TestFindQueryMatcherOptions(t *testing.T) {
 	cases := []struct {
 		name  string
