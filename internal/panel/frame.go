@@ -322,11 +322,11 @@ type PanelsFrame struct {
 	LastPtyVFS  vfs.VFS
 	Closed      bool
 
-	ShellMode         terminal.ShellMode
-	HostConsoleActive bool
-	hostConsoleMu     sync.Mutex
-	hostConsoleReplyState
-	lastOverlayDraw   time.Time
+	ShellMode             terminal.ShellMode
+	HostConsoleActive     bool
+	hostConsoleMu         sync.Mutex
+	hostConsoleReplyState hostConsoleReplyState
+	lastOverlayDraw       time.Time
 
 	// Terminal mouse-selection state. Kept in PanelsFrame because
 	// mouse routing lives here; the highlight and text extraction
