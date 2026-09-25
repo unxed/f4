@@ -31,14 +31,14 @@ require (
 	github.com/mholt/archives v0.1.5
 	github.com/pkg/sftp v1.13.6
 	github.com/tetratelabs/wazero v1.12.0
-	github.com/unxed/archives v0.1.1
+	github.com/unxed/archives v0.1.2
 	github.com/unxed/colorer4go v0.1.23
 	github.com/unxed/ffibridge v0.1.5
 	github.com/unxed/go2xp v0.0.0-20260918000857-00a22a520369
 	github.com/unxed/id3-go v0.1.2
 	github.com/unxed/libwinescape v0.2.1
 	github.com/unxed/localecp v0.1.6
-	github.com/unxed/sevenzip v0.1.4
+	github.com/unxed/sevenzip v0.1.6
 	github.com/unxed/tar v0.1.133
 	github.com/unxed/vtinput v0.1.8
 	github.com/unxed/vtui v0.1.360
@@ -159,7 +159,7 @@ require (
 	github.com/unxed/par2 v0.1.3 // indirect
 	github.com/unxed/winkeys v0.1.1
 	github.com/unxed/xkb-go v0.1.8 // indirect
-	github.com/unxed/xz v0.1.45 // indirect
+	github.com/unxed/xz v0.1.46 // indirect
 	github.com/unxed/zipcharset v0.1.5 // indirect
 	github.com/unxed/zlib4go v0.1.16 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
@@ -186,4 +186,4 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.20
 
 replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 
-replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.9
+replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.10
