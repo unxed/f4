@@ -30,6 +30,11 @@ func fillPlatformTimes(item *VFSItem, info os.FileInfo) {
 		item.ATime = time.Unix(0, stat.LastAccessTime.Nanoseconds())
 		item.CTime = time.Unix(0, stat.CreationTime.Nanoseconds())
 		item.WinAttrs = stat.FileAttributes
+		// Win32FileAttributeData carries no link count. Most files have
+		// exactly one; report that rather than leaving MetadataNlink unset
+		// and the LN column blank for every ordinary file (f4#1400).
+		item.KnownMetadata |= MetadataNlink
+		item.Nlink = 1
 	}
 }
 

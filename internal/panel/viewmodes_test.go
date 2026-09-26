@@ -219,7 +219,7 @@ func TestPanelLinkCountColumnEndToEnd(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "a.txt")
-	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	fs := vfs.NewOSVFS(dir)
