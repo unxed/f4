@@ -323,6 +323,9 @@ func materializeUserHRDPath(configsDir, userHRDPath string) string {
 		return userHRDPath
 	}
 	topPath := filepath.Join(cacheDir, "top-"+filepath.Base(userHRDPath))
+	// #nosec G703 -- cacheDir is fixed (configsDir/base/.f4-user-hrd-cache) and
+	// filepath.Base strips any ".."/separator the setting could carry, so this
+	// cannot write outside cacheDir.
 	if err := os.WriteFile(topPath, newContent, 0600); err != nil {
 		return userHRDPath
 	}
@@ -366,6 +369,8 @@ func rewriteUserHRDLocationLinks(content []byte, origDir, cacheDir string) ([]by
 		if mkErr := os.MkdirAll(cacheDir, 0700); mkErr != nil {
 			return tag
 		}
+		// #nosec G703 -- cacheName is generated here from n and a fixed
+		// extension, not from link, so it cannot carry a traversal segment.
 		if writeErr := os.WriteFile(filepath.Join(cacheDir, cacheName), data, 0600); writeErr != nil {
 			return tag
 		}
