@@ -70,15 +70,14 @@ func TestIssue1186WinRARAesSFXPassword(t *testing.T) {
 		t.Fatalf("got %d entries, want 11", len(zr.File))
 	}
 
-	// The panel's own directory listing goes through the same materialization
-	// and, like any other password-protected archive, prompts for the
-	// password through archivePasswordPrompt (see password_test.go).
-	prompts := 0
+	// The panel's own directory listing goes through the same materialization.
+	// A zip's central directory names its members in the clear, so listing it
+	// does not by itself need the password (see password_test.go for the case
+	// where the archive backend does need it up front, e.g. .7z); the mock
+	// below is only a safety net against this ever changing and the panel
+	// prompting interactively in a non-interactive test run.
 	previousPrompt := archivePasswordPrompt
-	archivePasswordPrompt = func(context.Context, string) (string, error) {
-		prompts++
-		return password, nil
-	}
+	archivePasswordPrompt = func(context.Context, string) (string, error) { return password, nil }
 	defer func() { archivePasswordPrompt = previousPrompt }()
 
 	archiveVFS, err := NewArchiveVFS(vfs.NewOSVFS(root), path)
@@ -92,9 +91,6 @@ func TestIssue1186WinRARAesSFXPassword(t *testing.T) {
 	}
 	if len(items) != 11 {
 		t.Fatalf("listed %d entries, want 11", len(items))
-	}
-	if prompts == 0 {
-		t.Fatal("password prompt was never called")
 	}
 
 	dest := t.TempDir()
