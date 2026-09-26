@@ -16,6 +16,7 @@ const (
 	MetadataMTime
 	MetadataATime
 	MetadataCTime
+	MetadataNlink
 	MetadataExplicit MetadataFields = 1 << 31
 )
 
@@ -48,6 +49,8 @@ func (item VFSItem) HasMetadata(field MetadataFields) bool {
 		return !item.ATime.IsZero()
 	case MetadataCTime:
 		return !item.CTime.IsZero()
+	case MetadataNlink:
+		return item.Nlink > 0
 	}
 	return false
 }

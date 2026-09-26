@@ -17,9 +17,10 @@ import (
 
 func fillPlatformTimes(item *VFSItem, info os.FileInfo) {
 	if stat, ok := info.Sys().(*winescape.Stat_t); ok {
-		item.KnownMetadata |= MetadataATime | MetadataCTime | MetadataUID | MetadataGID | MetadataPermissions
+		item.KnownMetadata |= MetadataATime | MetadataCTime | MetadataUID | MetadataGID | MetadataPermissions | MetadataNlink
 		item.UnixMode = stat.Mode & 07777
 		item.Uid, item.Gid = int(stat.Uid), int(stat.Gid)
+		item.Nlink = stat.Nlink
 		item.ATime = time.Unix(stat.Atim.Sec, stat.Atim.Nsec)
 		item.CTime = time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec)
 	}

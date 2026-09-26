@@ -85,6 +85,7 @@ Panel.Column.Changed=Changed
 Panel.Column.Attributes=Attributes
 Panel.Column.Owner=Owner
 Panel.Column.Group=Group
+Panel.Column.LinkCount=Links
 Panel.Modes.Title=File panel modes
 Panel.Modes.Mode1=Brief
 Panel.Modes.Mode2=Medium
