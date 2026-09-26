@@ -12,11 +12,13 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	colorer "github.com/unxed/colorer4go"
 	colorerdata "github.com/unxed/f4/internal/colorer"
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/toast"
 	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
@@ -778,6 +780,7 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		}
 		if hErr := session.SetHRD("rgb", activeScheme); hErr != nil {
 			vtui.DebugLog("COLORER: Colour style %q failed for %q, using the fallback highlighter: %v", activeScheme, filename, hErr)
+			notifyColorerSchemeFailure(fmt.Sprintf("Colorer: colour style %q failed for %s: %v", activeScheme, filename, hErr))
 			session.Close()
 			if !ch.closed {
 				ch.useFallback(ev)
@@ -790,6 +793,13 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 		settings := readColorerTypeSettings(session)
 		vtui.DebugLog("COLORER: SelectType(%q, len=%d) -> selected=%v, err=%v", filename, len(firstLine), selected, sErr)
 		if sErr != nil || !selected {
+			// selected==false with a nil error just means the catalog has no
+			// scheme for this file (a plain .txt file, say): expected, and
+			// not worth a toast. A non-nil error is Colorer actually failing
+			// to select a type it should have been able to.
+			if sErr != nil {
+				notifyColorerSchemeFailure(fmt.Sprintf("Colorer: could not select a syntax scheme for %s: %v", filename, sErr))
+			}
 			session.Close()
 			if !ch.closed {
 				ch.useFallback(ev)
@@ -827,6 +837,22 @@ func newColorerHighlighter(ev *EditorView, filename, firstLine string, fallback 
 	}()
 
 	return ch
+}
+
+// colorerSchemeFailureToastDuration is how long the toast raised by
+// notifyColorerSchemeFailure stays up. A var, like other toast durations in
+// this codebase (e.g. processEnvironmentFailureToastDuration), so a test can
+// shorten it.
+var colorerSchemeFailureToastDuration = 4 * time.Second
+
+// notifyColorerSchemeFailure surfaces a Colorer scheme-selection or
+// colour-style failure to the user. debug.log already has the same failure,
+// logged right before this is called with more detail (including, for a
+// SelectType failure, the C++ exception's throw site); without this, an
+// editor quietly falling back to another highlighter was the only visible
+// sign anything had gone wrong (f4#306).
+func notifyColorerSchemeFailure(message string) {
+	toast.Show(message, colorerSchemeFailureToastDuration)
 }
 
 func (ch *ColorerHighlighter) useFallback(ev *EditorView) {
