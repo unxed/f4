@@ -1593,6 +1593,7 @@ Attributes.SelectedFiles=files: %d
 Attributes.SelectedSymlinks=symlinks: %d
 Attributes.MultipleValues=(multiple values)
 Attributes.OctalMixedError=Invalid octal value.\nUse the digits 0-7, or - where each object keeps its own bits.
+Attributes.MTimeInvalidError=Invalid date/time.\nUse the format %s.
 Attributes.Target=T&arget:
 Attributes.MTime=M-Time:
 Attributes.LastWrite=Last write:

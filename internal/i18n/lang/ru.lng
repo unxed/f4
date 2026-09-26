@@ -1593,6 +1593,7 @@ Attributes.SelectedFiles=файлов: %d
 Attributes.SelectedSymlinks=симлинков: %d
 Attributes.MultipleValues=(несколько значений)
 Attributes.OctalMixedError=Неверное восьмеричное значение.\nИспользуйте цифры 0-7 или - там, где каждый объект сохраняет свои биты.
+Attributes.MTimeInvalidError=Неверная дата/время.\nИспользуйте формат %s.
 Attributes.Target=&Цель:
 Attributes.MTime=Время изм.:
 Attributes.LastWrite=Изменён:
