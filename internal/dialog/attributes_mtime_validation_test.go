@@ -66,7 +66,7 @@ func TestAttributesDialog_UnixInvalidMTimeIsRejected(t *testing.T) {
 	if dlg.(vtui.Frame).IsDone() {
 		t.Error("the dialog closed on an invalid date instead of reporting the error")
 	}
-	if top := fm.GetTopFrame(); top == dlg {
+	if top := fm.GetTopFrame(); any(top) == any(dlg) {
 		t.Error("no error dialog appeared over the attributes dialog")
 	}
 }
