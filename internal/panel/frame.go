@@ -5681,11 +5681,20 @@ func (pf *PanelsFrame) clearBookmarkSlot(slot int, menu *vtui.VMenu, reopen func
 // VFS call would; only the menu-close/reopen and the failure dialog post
 // back to it.
 func (pf *PanelsFrame) unmountDriveMenuEntry(drv sysinfo.DriveEntry, menu *vtui.VMenu, reopen func()) {
+	// vtui.FrameManager is read here, on the goroutine that starts the
+	// background work, and only that captured value is used inside it: the
+	// global itself is process-wide and tests swap it out between cases, so
+	// a background reader that outlives its test would otherwise read the
+	// next test's value (see frame_manager_capture_test.go).
+	manager := vtui.FrameManager
+	if manager == nil {
+		return
+	}
 	device, mountPoint := drv.UnmountDevice, drv.InfoPath
 	menu.Close()
 	go func() {
 		err := vfs.UnmountDevice(context.Background(), device, mountPoint)
-		vtui.FrameManager.PostTask(func() {
+		manager.PostTask(func() {
 			if err == nil {
 				reopen()
 				return
