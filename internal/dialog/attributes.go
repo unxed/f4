@@ -670,9 +670,14 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 			edit.gid, edit.setGid = lookupUnixGid(text)
 		}
 		if text := editMTime.GetText(); text != initialMTime {
-			if t, err := time.ParseInLocation(attributesTimeFormat, text, time.Local); err == nil {
-				edit.mtime, edit.setMTime = t, true
+			t, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+			if err != nil {
+				// f4 #1404: a garbled date used to be silently dropped —
+				// nothing applied, nothing said why.
+				vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), attributesTimeFormat), []string{"&Ok"})
+				return
 			}
+			edit.mtime, edit.setMTime = t, true
 		}
 		edit.mode, edit.keepMode = unixModeEdit(editOctal.GetText(), allChecks)
 		vtui.RunAsync(func(ctx *vtui.TaskContext) {
@@ -867,9 +872,14 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	btnSet.OnClick = func() {
 		var edit windowsAttributesEdit
 		if text := editMTime.GetText(); text != initialMTime {
-			if nt, err := time.ParseInLocation(attributesTimeFormat, text, time.Local); err == nil {
-				edit.mtime, edit.setMTime = nt, true
+			nt, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+			if err != nil {
+				// f4 #1404: a garbled date used to be silently dropped —
+				// nothing applied, nothing said why.
+				vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), attributesTimeFormat), []string{"&Ok"})
+				return
 			}
+			edit.mtime, edit.setMTime = nt, true
 		}
 
 		// Real POSIX semantics apply on a genuine Unix build (runtime.GOOS
