@@ -1047,7 +1047,17 @@ func (ev *EditorView) ensureEngineWidth() {
 	if width < 1 {
 		width = 1
 	}
-	ev.Engine.SetWidth(width)
+	wrapWidth := width
+	if ev.WordWrap && wrapWidth > 1 {
+		// Reserve the row's last column for the wrap-continuation mark
+		// (f4#1415): without this, a wrapped fragment whose own text
+		// happens to fill every column leaves shouldDrawWrapMark nowhere
+		// to put the glyph, so whether a given wrapped row shows the mark
+		// ends up depending on incidental word-break math instead of
+		// always appearing the way far2l's does.
+		wrapWidth--
+	}
+	ev.Engine.SetWidth(wrapWidth)
 	ev.Engine.ToggleWrap(ev.WordWrap)
 }
 
