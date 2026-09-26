@@ -261,6 +261,45 @@ func sharedAttributeText(targets []AttributesTarget, value func(vfs.VFSItem) int
 	return name(first)
 }
 
+// sharedAttributeTimeText is sharedAttributeText's counterpart for a
+// time.Time field that is only sometimes known (Created/Accessed/Changed):
+// ok is false when any object in the selection lacks the field at all, so
+// the caller omits the row entirely rather than showing a wrong zero time
+// for part of the selection. When every object has it, the text is the
+// common value, or "(multiple values)" the way owner/group show one.
+func sharedAttributeTimeText(targets []AttributesTarget, value func(vfs.VFSItem) time.Time, known func(vfs.VFSItem) bool) (text string, ok bool) {
+	for _, target := range targets {
+		if !known(target.Item) {
+			return "", false
+		}
+	}
+	first := value(targets[0].Item)
+	for _, target := range targets[1:] {
+		if !value(target.Item).Equal(first) {
+			return i18n.Msg("Attributes.MultipleValues"), true
+		}
+	}
+	return first.Format(attributesTimeFormat), true
+}
+
+// attributesReadOnlyTimeRow builds a label+value row for a time field the
+// dialog only displays (Created/Accessed/Changed): no Edit, no Set-time
+// validation, matching the reporter's explicit read-only ask (f4#1404).
+// leftMargin mirrors whatever margin the dialog's own M-Time/Last-write row
+// uses, so the new rows line up with it (the Unix and Windows-shaped dialogs
+// use different values).
+func attributesReadOnlyTimeRow(dlg *vtui.Window, mainVBox *vtui.VBoxLayout, width, leftMargin int, label, text string) *vtui.HBoxLayout {
+	lbl := vtui.NewText(0, 0, PadLabel(label), vtui.Palette[vtui.ColDialogText])
+	val := vtui.NewText(0, 0, text, vtui.Palette[vtui.ColDialogText])
+	row := vtui.NewHBoxLayout(0, 0, width, 1)
+	row.Add(lbl, vtui.Margins{Left: leftMargin, Right: 1}, vtui.AlignLeft)
+	row.Add(val, vtui.Margins{}, vtui.AlignLeft)
+	dlg.AddItem(lbl)
+	dlg.AddItem(val)
+	mainVBox.Add(row, vtui.Margins{Top: 0}, vtui.AlignFill)
+	return row
+}
+
 func unixOwnerName(uid int) string {
 	name := strconv.Itoa(uid)
 	if u, err := user.LookupId(name); err == nil {
@@ -450,6 +489,25 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		height = 26
 	}
 
+	// Read-only Created/Accessed/Changed rows (f4#1404 follow-up): computed
+	// up front so the dialog's height can grow by exactly the rows that will
+	// actually be shown. A row is omitted entirely, not shown with a zero
+	// time, when any object in the selection lacks that field.
+	createdText, showCreated := sharedAttributeTimeText(targets,
+		func(item vfs.VFSItem) time.Time { return item.BTime },
+		func(item vfs.VFSItem) bool { return item.HasMetadata(vfs.MetadataBTime) })
+	accessedText, showAccessed := sharedAttributeTimeText(targets,
+		func(item vfs.VFSItem) time.Time { return item.ATime },
+		func(item vfs.VFSItem) bool { return item.HasMetadata(vfs.MetadataATime) })
+	changedText, showChanged := sharedAttributeTimeText(targets,
+		func(item vfs.VFSItem) time.Time { return item.CTime },
+		func(item vfs.VFSItem) bool { return item.HasMetadata(vfs.MetadataCTime) })
+	for _, shown := range []bool{showCreated, showAccessed, showChanged} {
+		if shown {
+			height++
+		}
+	}
+
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("Attributes.Title"))
 	dlg.ShowClose = true
 
@@ -513,6 +571,21 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 	dlg.AddItem(editMTime)
 	mainVBox.Add(rowTime, vtui.Margins{Top: 0}, vtui.AlignFill)
 
+	// Read-only Created/Accessed/Changed rows, in that order (f4#1404).
+	// Unlike M-Time these are never editable: Unix has no portable way to
+	// set birth/change time at all, and they exist purely so the reporter's
+	// "creation date, read-only" ask has somewhere to show.
+	var rowCreated, rowAccessed, rowChanged *vtui.HBoxLayout
+	if showCreated {
+		rowCreated = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Created"), createdText)
+	}
+	if showAccessed {
+		rowAccessed = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Accessed"), accessedText)
+	}
+	if showChanged {
+		rowChanged = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Changed"), changedText)
+	}
+
 	// Buttons
 	btnSet := vtui.NewButton(0, 0, i18n.Msg("Attributes.BtnSet"))
 	btnSet.IsDefault = true
@@ -529,6 +602,15 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 	// --- ПЕРВЫЙ ПРОХОД: Позиционируем контейнеры в диалоге ---
 	mainVBox.Apply()
 	rowTime.Apply()
+	if rowCreated != nil {
+		rowCreated.Apply()
+	}
+	if rowAccessed != nil {
+		rowAccessed.Apply()
+	}
+	if rowChanged != nil {
+		rowChanged.Apply()
+	}
 	rowBtns.Apply()
 
 	// --- ВТОРОЙ ПРОХОД: Наполняем уже спозиционированные GroupBox ---
@@ -762,6 +844,26 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	item := targets[0].Item
 	multiple := len(targets) > 1
 	width, height := 60, 22
+
+	// Read-only Created/Accessed rows (f4#1404 follow-up). No "Changed" row
+	// here: Windows has no ctime-shaped "metadata changed" timestamp to show,
+	// unlike Unix. Computed up front so height grows by exactly the rows
+	// that will actually be shown; a row is omitted, not shown with a zero
+	// time, when any object in the selection lacks the field (e.g. Wine
+	// posix mode, whose Ctim is a real Linux ctime with no creation-time
+	// meaning at all, never sets MetadataBTime — see os_vfs_windows.go).
+	createdText, showCreated := sharedAttributeTimeText(targets,
+		func(item vfs.VFSItem) time.Time { return item.BTime },
+		func(item vfs.VFSItem) bool { return item.HasMetadata(vfs.MetadataBTime) })
+	accessedText, showAccessed := sharedAttributeTimeText(targets,
+		func(item vfs.VFSItem) time.Time { return item.ATime },
+		func(item vfs.VFSItem) bool { return item.HasMetadata(vfs.MetadataATime) })
+	for _, shown := range []bool{showCreated, showAccessed} {
+		if shown {
+			height++
+		}
+	}
+
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("Attributes.Title"))
 	dlg.ShowClose = true
 	x, y := dlg.X1, dlg.Y1
@@ -796,6 +898,14 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	dlg.AddItem(lblTime)
 	dlg.AddItem(editMTime)
 	mainVBox.Add(rowTime, vtui.Margins{Top: 1}, vtui.AlignFill)
+
+	var rowCreated, rowAccessed *vtui.HBoxLayout
+	if showCreated {
+		rowCreated = attributesReadOnlyTimeRow(dlg, mainVBox, 54, 0, i18n.Msg("Attributes.Created"), createdText)
+	}
+	if showAccessed {
+		rowAccessed = attributesReadOnlyTimeRow(dlg, mainVBox, 54, 0, i18n.Msg("Attributes.Accessed"), accessedText)
+	}
 
 	btnSet := vtui.NewButton(0, 0, i18n.Msg("Attributes.BtnSet"))
 	btnSet.IsDefault = true
@@ -845,6 +955,12 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	// Apply first pass
 	mainVBox.Apply()
 	rowTime.Apply()
+	if rowCreated != nil {
+		rowCreated.Apply()
+	}
+	if rowAccessed != nil {
+		rowAccessed.Apply()
+	}
 	rowBtns.Apply()
 
 	// Apply second pass for GroupBox
