@@ -133,7 +133,19 @@ jobs:
           # f4 does not exit after --dump-screen-after (it keeps running
           # the UI loop); the runner killing it via `timeout` is the
           # expected way this step ends, not a failure.
-          "$@" || true
+          #
+          # This must run under a real pseudo-terminal, not GitHub Actions'
+          # plain stdin/stdout pipes: on those pipes Wine's console layer
+          # exposes no console at all (GetStdHandle/GetConsoleMode come
+          # back "Invalid handle" -- the same term.GetSize warnings the
+          # --wine-probe steps above print, harmlessly there since
+          # --wine-probe never touches raw mode). Here it is not harmless:
+          # vtinput's term.MakeRaw(stdin) fails on that invalid handle,
+          # vtui.PrepareTerminal() returns the error, and f4 exits within
+          # a second of starting -- long before --dump-screen-after's timer
+          # or this function's own timeout, so vtui.screen.log never gets
+          # written. `script` allocates that pty.
+          script -qec "$*" /dev/null || true
           if [ ! -s vtui.screen.log ]; then
             echo "::error::$label: no vtui.screen.log (screen dump never ran, or f4 never started)"
             exit 1
