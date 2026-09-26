@@ -5790,13 +5790,13 @@ func TestEditorView_WordWrapDrawsWrapMark(t *testing.T) {
 	)
 	wrapMark := vtui.Palette[theme.ColEditorWrapMark]
 	row0 := scr.GetCell(lastTextCol, firstTextRow)
-	if rune(row0.Char) != '»' || row0.Attributes != wrapMark {
-		t.Errorf("wrapped row 0 last cell = %q attr %x, want '»' in ColEditorWrapMark (%x)", rune(row0.Char), row0.Attributes, wrapMark)
+	if rune(row0.Char) != '»' || row0.Attributes != wrapMark { // #nosec G115 -- Char holds a rendered rune, well within int32 range.
+		t.Errorf("wrapped row 0 last cell = %q attr %x, want '»' in ColEditorWrapMark (%x)", rune(row0.Char), row0.Attributes, wrapMark) // #nosec G115 -- same as above.
 	}
 
 	lastFragRow := firstTextRow + len(frags) - 1
 	lastCell := scr.GetCell(lastTextCol, lastFragRow)
-	if rune(lastCell.Char) == '»' {
+	if rune(lastCell.Char) == '»' { // #nosec G115 -- Char holds a rendered rune, well within int32 range.
 		t.Errorf("the line's actual last row must not carry the wrap mark, got %q", rune(lastCell.Char))
 	}
 }
