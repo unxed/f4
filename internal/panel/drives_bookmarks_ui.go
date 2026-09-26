@@ -57,11 +57,38 @@ type driveBookmarkEditDialog struct {
 	onFinish   func(bool, DriveBookmark)
 }
 
+// driveBookmarkDialogMinWidth is the floor for the dialog's computed width:
+// half the program window would otherwise squeeze the fields on a narrow
+// terminal.
+const driveBookmarkDialogMinWidth = 64
+
+// driveBookmarkDialogWidth returns the add/edit link dialog's width for the
+// given screen width: half the program window, the same proportion the file
+// dialogs use (see FileDialogWidth, #891), clamped to a sane minimum and to
+// the screen itself. The dialog's fields are laid out once at construction
+// time and never reflow afterwards, so f4#1148 asked to size it from the
+// screen instead of letting the user stretch it and leave the fields behind.
+func driveBookmarkDialogWidth(screenWidth int) int {
+	if screenWidth <= 0 {
+		return driveBookmarkDialogMinWidth
+	}
+	w := screenWidth / 2
+	if w < driveBookmarkDialogMinWidth {
+		w = driveBookmarkDialogMinWidth
+	}
+	if w > screenWidth {
+		w = screenWidth
+	}
+	return w
+}
+
 func NewDriveBookmarkEditDialog(initial DriveBookmark, defaultPath string, onFinish func(bool, DriveBookmark)) *driveBookmarkEditDialog {
-	const (
-		width  = 64
-		height = 14
-	)
+	const height = 14
+	screenW := 0
+	if vtui.FrameManager != nil {
+		screenW = vtui.FrameManager.GetScreenSize()
+	}
+	width := driveBookmarkDialogWidth(screenW)
 	titleKey := "DriveLink.CreateTitle"
 	if initial.Name != "" || initial.Path != "" {
 		titleKey = "DriveLink.EditTitle"
@@ -159,6 +186,19 @@ func (d *driveBookmarkEditDialog) submit() {
 		return
 	}
 	d.finish(true, bookmark)
+}
+
+// ProcessMouse blocks the corner-drag resize gesture vtui.Window otherwise
+// offers on every modal dialog. The dialog's width already tracks half the
+// program window (f4#1148); the fields and buttons are laid out once at
+// construction and never reflow on resize, so letting the user stretch the
+// dialog further just left them behind, off to one side.
+func (d *driveBookmarkEditDialog) ProcessMouse(e *vtinput.InputEvent) bool {
+	if e != nil && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown &&
+		int(e.MouseX) == d.X2 && int(e.MouseY) == d.Y2 {
+		return true
+	}
+	return d.Window.ProcessMouse(e)
 }
 
 func (d *driveBookmarkEditDialog) ProcessKey(e *vtinput.InputEvent) bool {
