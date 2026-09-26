@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/unxed/vtinput"
+	"github.com/unxed/vtui"
 )
 
 // f4 #378 (follow-up): a long help line is broken at spaces to fit the
@@ -43,5 +44,29 @@ func TestHelpRewrapsAfterF5ZoomToggle(t *testing.T) {
 	rowsAfter := len(view.CurrentTopic().Lines)
 	if rowsAfter >= rowsBefore {
 		t.Fatalf("after F5 zoomed Help wider, the topic still lays out in %d rows (was %d before zoom): the long line was not re-wrapped to the new width", rowsAfter, rowsBefore)
+	}
+}
+
+// f4 #378 (follow-up): the other resize path a real user hits is the terminal
+// window itself being resized (SIGWINCH), which vtui's FrameManager.Resize
+// forwards to every open frame's ResizeConsole. This exercises that exact
+// path -- not vtui.HelpView.SetPosition, which help_search_test.go already
+// covers -- to see whether it, like F5, correctly re-wraps.
+func TestHelpRewrapsAfterLiveTerminalResize(t *testing.T) {
+	long := "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron"
+	view, scr := newSearchableHelpForTestAtSize(t, 100, 25, []string{"first", long, "last"})
+
+	view.Show(scr)
+	rowsBefore := len(view.CurrentTopic().Lines)
+	if rowsBefore <= 3 {
+		t.Fatalf("the narrow window laid the topic out in %d rows, want the long line broken into more than one row", rowsBefore)
+	}
+
+	vtui.FrameManager.Resize(220, 25)
+
+	view.Show(scr)
+	rowsAfter := len(view.CurrentTopic().Lines)
+	if rowsAfter >= rowsBefore {
+		t.Fatalf("after the terminal resized wider, the topic still lays out in %d rows (was %d before): the long line was not re-wrapped to the new width", rowsAfter, rowsBefore)
 	}
 }
