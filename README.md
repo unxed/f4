@@ -69,19 +69,6 @@ The ReactOS build is tested on **ReactOS 0.4.16 (x86)**. Download
 unpack it, and run `f4-legacy.exe` from a command prompt. `f4-legacy.exe --gui win32`
 opens f4 in a window of its own instead of the console.
 
-### 🛜 Lite build
-
-The lite build targets routers and other embedded/old-weak-hardware devices:
-console/terminal only, no Colorer (Chroma-based syntax highlighting only), no
-Wine-specific code or `libwinescape` dependency, no MP3 player, no
-FUSE-based VFS mounting, and no cloud/archive/FTP/SFTP/SCP VFS providers
-(archive and network access via wrappers around CLI tools is planned as a
-separate, later addition — f4#1178, part 2). Everything else — panels,
-editor, viewer, plugins that do not need the above — works the same as the
-regular build. Built with `go build -tags lite`; see `internal/plughost`,
-`internal/gui`, `internal/editor`, `vfs/hostmode`, `internal/media` and
-`internal/fusefs` for where each exclusion is implemented.
-
 It is a 32-bit Windows build with its imports patched by
 [go2xp](https://github.com/unxed/go2xp): every Go release since 1.21 imports
 kernel32 functions that ReactOS, like any Windows before 10, does not have, and
@@ -95,6 +82,25 @@ programs cannot be given input there — run those from the console mode.
 
 Not tested on ReactOS: self-update (`f4 --update`). Not claimed for Windows XP:
 XP lacks a few functions ReactOS has.
+
+### 🛜 Lite build
+
+The lite build targets routers and other embedded/old-weak-hardware devices:
+console/terminal only, no Colorer (Chroma-based syntax highlighting only), no
+Wine-specific code or `libwinescape` dependency, no MP3 player, no
+FUSE-based VFS mounting, and no cloud or FTP/SFTP/SCP VFS provider. Archives
+come back through `plugins/multiarc`, which wraps whichever of `tar`,
+`unzip`, `7z`/`7za`/`7zr` and `gzip` the host already has on `PATH` instead of
+linking the regular build's native archive libraries (list and extract only,
+matching far2l's own multiarc plugin's scope); network access stays out for
+now — the natural fit, FISH+, turned out to share its package and its SSH
+client library with the SFTP/FTP backends this build is dropping, so
+including it as-is would have quietly linked them back in (f4#1178, part 2).
+Everything else — panels, editor, viewer, plugins that do not need the above
+— works the same as the regular build. Built with `go build -tags lite`; see
+`internal/plughost`, `internal/gui`, `internal/editor`, `vfs/hostmode`,
+`internal/media` and `internal/fusefs` for where each exclusion is
+implemented.
 
 **The Core:** Creating an experimental, cross-platform TUI (Terminal User Interface) file manager that aims to fully replicate the features, UX, data structures, and rendering logic of `far2l` and Far Manager, but implemented entirely in Go.
 
