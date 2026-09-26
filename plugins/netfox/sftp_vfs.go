@@ -1,3 +1,10 @@
+//go:build !lite
+
+// SFTP support statically links github.com/pkg/sftp and
+// golang.org/x/crypto/ssh, which a lite build (f4#1178) exists to shed --
+// see internal/plughost/plugins_lite.go for the accounting of what a lite
+// build carries instead.
+
 package netfox
 
 import (

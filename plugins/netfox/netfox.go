@@ -172,9 +172,13 @@ func (p *NetFoxPlugin) Init(api vfs.HostAPI) error {
 	}
 
 	// sftp:// as a string, for every caller that has no stored connection
-	// to point at: the mount command line, an fstab line, a script.
-	if err := api.RegisterURIProvider(&sftpURIProvider{}); err != nil {
-		return rollback(fmt.Errorf("NetFox: register sftp URI provider: %w", err))
+	// to point at: the mount command line, an fstab line, a script. Not
+	// available at all in a lite build (registerOptionalURIProviders is a
+	// no-op there, see netfox_uri_lite.go): SFTP itself does not build
+	// under -tags lite (sftp_vfs.go), and there is no fish+:// URI form to
+	// register instead yet.
+	if err := registerOptionalURIProviders(api); err != nil {
+		return rollback(err)
 	}
 	api.RegisterDrive("NetFox", func() vfs.VFS {
 		cfgDir := vfs.CustomConfigDir

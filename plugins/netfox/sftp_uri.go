@@ -1,3 +1,8 @@
+//go:build !lite
+
+// Calls NewSFTPVFS (sftp_vfs.go), which is what pulls this file under that
+// file's own -tags lite exclusion -- see its comment for why.
+
 package netfox
 
 import (

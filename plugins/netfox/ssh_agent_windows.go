@@ -1,4 +1,9 @@
-//go:build windows
+//go:build windows && !lite
+
+// Pageant support statically links github.com/kbolino/pageant, which a lite
+// build (f4#1178) exists to shed; see ssh_dial.go's own comment for why the
+// golang.org/x/crypto/ssh-backed dialer this feeds does not build under
+// -tags lite either.
 
 package netfox
 

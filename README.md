@@ -88,19 +88,25 @@ XP lacks a few functions ReactOS has.
 The lite build targets routers and other embedded/old-weak-hardware devices:
 console/terminal only, no Colorer (Chroma-based syntax highlighting only), no
 Wine-specific code or `libwinescape` dependency, no MP3 player, no
-FUSE-based VFS mounting, and no cloud or FTP/SFTP/SCP VFS provider. Archives
-come back through `plugins/multiarc`, which wraps whichever of `tar`,
-`unzip`, `7z`/`7za`/`7zr` and `gzip` the host already has on `PATH` instead of
-linking the regular build's native archive libraries (list and extract only,
-matching far2l's own multiarc plugin's scope); network access stays out for
-now — the natural fit, FISH+, turned out to share its package and its SSH
-client library with the SFTP/FTP backends this build is dropping, so
-including it as-is would have quietly linked them back in (f4#1178, part 2).
-Everything else — panels, editor, viewer, plugins that do not need the above
-— works the same as the regular build. Built with `go build -tags lite`; see
-`internal/plughost`, `internal/gui`, `internal/editor`, `vfs/hostmode`,
-`internal/media` and `internal/fusefs` for where each exclusion is
-implemented.
+FUSE-based VFS mounting, and no cloud VFS provider. Archives come back
+through `plugins/multiarc`, which wraps whichever of `tar`, `unzip`,
+`7z`/`7za`/`7zr` and `gzip` the host already has on `PATH` instead of linking
+the regular build's native archive libraries (list and extract only,
+matching far2l's own multiarc plugin's scope) (f4#1178, part 2). Network
+access comes back too, but only as FISH+: `plugins/netfox` keeps its
+connection storage and its "Add/Edit connection" dialog, wired to a dialer
+that shells out to the console `ssh` binary instead of linking
+`golang.org/x/crypto/ssh` — the same "wrap the console tool" story as
+`multiarc` — while `pkg/sftp`, `jlaffaye/ftp` and `kbolino/pageant` (and
+their own FTP/SFTP backends) stay out entirely (f4#1178, part 3). That
+subprocess dialer covers key- and ssh-agent-based auth; password auth, an
+explicit HTTP/SOCKS5 proxy and this build's own host-key handling are not
+supported (its own comment in `plugins/netfox/fish_dialer_lite.go` has the
+detail on why). Everything else — panels, editor, viewer, plugins that do
+not need the above — works the same as the regular build. Built with
+`go build -tags lite`; see `internal/plughost`, `internal/gui`,
+`internal/editor`, `vfs/hostmode`, `internal/media` and `internal/fusefs`
+for where each exclusion is implemented.
 
 **The Core:** Creating an experimental, cross-platform TUI (Terminal User Interface) file manager that aims to fully replicate the features, UX, data structures, and rendering logic of `far2l` and Far Manager, but implemented entirely in Go.
 
