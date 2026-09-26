@@ -3135,6 +3135,23 @@ func actionDeletePermanent(pf *panel.PanelsFrame) {
 	actionDeleteWithDisposition(pf, vfs.DeletePermanently, true)
 }
 
+// deleteRefreshCallback is ExecuteDeleteOpWithDispositionAt's onComplete: stay
+// on the first requested name still there afterward (delete failed on it —
+// e.g. no permission, or the file is in use) instead of always jumping to the
+// successor the caller already put in fsp.PendingSelection for when every
+// name was actually removed (f4 #1430).
+func deleteRefreshCallback(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, activeVfs vfs.VFS, basePath string, names []string) func() {
+	return func() {
+		for _, name := range names {
+			if _, err := activeVfs.Stat(context.Background(), activeVfs.Join(basePath, name)); err == nil {
+				fsp.PendingSelection = name
+				break
+			}
+		}
+		pf.RefreshAll()
+	}
+}
+
 func actionDeleteWithDisposition(pf *panel.PanelsFrame, disposition vfs.DeleteDisposition, explicitPermanent bool) {
 	fsp := pf.GetActivePanel()
 	if fsp == nil {
@@ -3166,7 +3183,7 @@ func actionDeleteWithDisposition(pf *panel.PanelsFrame, disposition vfs.DeleteDi
 	if !config.App.ConfirmDelete {
 		fsp.PendingSelection = fsp.GetSuccessorName()
 		stopPlayerForDelete(pf, activeVfs, basePath, names)
-		go fileops.ExecuteDeleteOpWithDispositionAt(activeVfs, basePath, names, config.App.DefaultFileOpMode, disposition, pf.RefreshAll)
+		go fileops.ExecuteDeleteOpWithDispositionAt(activeVfs, basePath, names, config.App.DefaultFileOpMode, disposition, deleteRefreshCallback(pf, fsp, activeVfs, basePath, names))
 		return
 	}
 
@@ -3232,7 +3249,7 @@ func actionDeleteWithDisposition(pf *panel.PanelsFrame, disposition vfs.DeleteDi
 		fsp.PendingSelection = fsp.GetSuccessorName()
 		dlg.Close()
 		stopPlayerForDelete(pf, activeVfs, basePath, names)
-		go fileops.ExecuteDeleteOpWithDispositionAt(activeVfs, basePath, names, mode, disposition, pf.RefreshAll)
+		go fileops.ExecuteDeleteOpWithDispositionAt(activeVfs, basePath, names, mode, disposition, deleteRefreshCallback(pf, fsp, activeVfs, basePath, names))
 	}
 
 	if config.App.DeleteCancelFocused {
