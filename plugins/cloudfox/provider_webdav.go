@@ -1744,6 +1744,9 @@ func (r *webDAVRangeReader) readRange(ctx context.Context, p []byte, start, requ
 	if err != nil {
 		return 0, err
 	}
+	if err := requestCtx.Err(); err != nil {
+		return 0, err
+	}
 	defer func() { _ = resp.Body.Close() }() // Response-body cleanup is best effort.
 	if resp.StatusCode == http.StatusPreconditionFailed {
 		return 0, ErrRemoteObjectChanged
