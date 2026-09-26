@@ -103,6 +103,51 @@ func inheritedRights(ctx context.Context, state *FileOpState, dstVfs vfs.VFS, de
 	return parentMode & 0o666
 }
 
+// parentOwnerInfo is what parentOwner caches per folder: the folder's owner,
+// and whether the destination VFS reported one at all.
+type parentOwnerInfo struct {
+	uid, gid int
+	known    bool
+}
+
+// inheritedOwner returns the uid/gid a copy under "Inherit" should take: the
+// owner of the same folder inheritedRights reads its permission bits from
+// (f4#1503 -- "Inherit" restored only the folder's mode, never its owner).
+// known is false wherever there is no Unix owner to inherit -- a destination
+// VFS that never reports one -- and the caller then leaves ownership alone
+// (uid/gid -1) exactly as Far's other two Access rights choices always do.
+// Applying the result is left to SetAttributes, which already falls back to
+// the sudo dispatcher on a permission error the same way it does for the
+// mode bits, so an unprivileged copy quietly keeps today's owner instead of
+// a jarring new prompt, and an elevated one actually takes it.
+func inheritedOwner(ctx context.Context, state *FileOpState, dstVfs vfs.VFS, destPath string) (uid, gid int, known bool) {
+	return parentOwner(ctx, state, dstVfs, dstVfs.Dir(destPath))
+}
+
+// parentOwner reads the folder's owner once per folder. One operation copies
+// sequentially in a single goroutine, so the cache needs no lock; it exists
+// because a remote destination would otherwise be asked for the same folder
+// again for every file that goes into it. A folder that cannot be stat'ed, or
+// whose VFS never reports an owner, is cached as unknown.
+func parentOwner(ctx context.Context, state *FileOpState, dstVfs vfs.VFS, parent string) (uid, gid int, known bool) {
+	if state != nil {
+		if info, ok := state.parentOwners[parent]; ok {
+			return info.uid, info.gid, info.known
+		}
+	}
+	uid, gid = -1, -1
+	if st, err := dstVfs.Stat(ctx, parent); err == nil && st.HasMetadata(vfs.MetadataUID) && st.HasMetadata(vfs.MetadataGID) {
+		uid, gid, known = st.Uid, st.Gid, true
+	}
+	if state != nil {
+		if state.parentOwners == nil {
+			state.parentOwners = make(map[string]parentOwnerInfo)
+		}
+		state.parentOwners[parent] = parentOwnerInfo{uid, gid, known}
+	}
+	return uid, gid, known
+}
+
 // parentRights reads the folder's permissions once per folder. One operation
 // copies sequentially in a single goroutine, so the cache needs no lock; it
 // exists because a remote destination would otherwise be asked for the same

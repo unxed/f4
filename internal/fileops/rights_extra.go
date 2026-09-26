@@ -16,10 +16,14 @@ func rightsAfterExternalCopy(ctx context.Context, state *FileOpState, dstVfs vfs
 	if mode == 0 {
 		mode = existingRights
 	}
-	if mode == 0 {
+	uid, gid := -1, -1
+	if state != nil && state.AccessRights == AccessRightsInherit {
+		uid, gid, _ = inheritedOwner(ctx, state, dstVfs, destPath)
+	}
+	if mode == 0 && uid == -1 && gid == -1 {
 		return
 	}
-	_ = dstVfs.SetAttributes(ctx, destPath, vfs.VFSItem{UnixMode: mode, Uid: -1, Gid: -1})
+	_ = dstVfs.SetAttributes(ctx, destPath, vfs.VFSItem{UnixMode: mode, Uid: uid, Gid: gid})
 }
 
 // inheritMovedTree gives a renamed object the rights of the folder it now sits
@@ -52,8 +56,10 @@ func inheritMovedTree(ctx context.Context, state *FileOpState, dstVfs vfs.VFS, p
 	if err != nil || item.IsSymlink {
 		return
 	}
-	if mode := inheritedRights(ctx, state, dstVfs, path, item.IsDir); mode != 0 {
-		_ = dstVfs.SetAttributes(ctx, path, vfs.VFSItem{UnixMode: mode, Uid: -1, Gid: -1})
+	mode := inheritedRights(ctx, state, dstVfs, path, item.IsDir)
+	uid, gid, _ := inheritedOwner(ctx, state, dstVfs, path)
+	if mode != 0 || uid != -1 || gid != -1 {
+		_ = dstVfs.SetAttributes(ctx, path, vfs.VFSItem{UnixMode: mode, Uid: uid, Gid: gid})
 	}
 	if !item.IsDir {
 		return

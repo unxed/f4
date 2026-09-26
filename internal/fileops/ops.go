@@ -248,6 +248,9 @@ type FileOpState struct {
 	// parentRights caches destination folder permissions for the inherit
 	// mode. See parentRights() for why it needs no lock.
 	parentRights map[string]uint32
+	// parentOwners caches destination folder ownership for the inherit
+	// mode (f4#1503), the same way parentRights caches its permission bits.
+	parentOwners map[string]parentOwnerInfo
 
 	// The other choices of the F5/F6 dialog (#722); FileOpOptions says what
 	// each of them means.
@@ -1313,8 +1316,11 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			// its own inherited permissions before they are copied into it.
 			// The other two modes keep applying the source's permissions
 			// after the walk, where a read-only source folder cannot stop
-			// the walk from writing into the copy.
-			_ = dstVfs.SetAttributes(ctx, destPath, vfs.VFSItem{UnixMode: dirRights, Uid: -1, Gid: -1})
+			// the walk from writing into the copy. The owner rides along the
+			// same way (f4#1503): "Inherit" promises the destination's
+			// owner, not just its mode.
+			dirUid, dirGid, _ := inheritedOwner(ctx, state, dstVfs, destPath)
+			_ = dstVfs.SetAttributes(ctx, destPath, vfs.VFSItem{UnixMode: dirRights, Uid: dirUid, Gid: dirGid})
 		}
 		if state.AccessRights == AccessRightsInherit {
 			applyPlatformRights(ctx, state, srcVfs, srcPath, dstVfs, destPath)
@@ -1338,9 +1344,11 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 			}
 		}
 		itemToSet := stat
-		itemToSet.Uid = -1
-		itemToSet.Gid = -1
+		itemToSet.Uid, itemToSet.Gid = -1, -1
 		itemToSet.UnixMode = dirRights
+		if state.AccessRights == AccessRightsInherit {
+			itemToSet.Uid, itemToSet.Gid, _ = inheritedOwner(ctx, state, dstVfs, destPath)
+		}
 		_ = dstVfs.SetAttributes(ctx, destPath, itemToSet)
 		if state.AccessRights == AccessRightsCopy {
 			applyPlatformRights(ctx, state, srcVfs, srcPath, dstVfs, destPath)
@@ -1717,9 +1725,11 @@ func recursiveCopy(ctx context.Context, srcVfs vfs.VFS, srcPath string, dstVfs v
 
 	if copySuccess {
 		itemToSet := stat
-		itemToSet.Uid = -1
-		itemToSet.Gid = -1
+		itemToSet.Uid, itemToSet.Gid = -1, -1
 		itemToSet.UnixMode = destinationRights(ctx, state, dstVfs, destPathForFile, stat.UnixMode, false, destinationExisted)
+		if state.AccessRights == AccessRightsInherit {
+			itemToSet.Uid, itemToSet.Gid, _ = inheritedOwner(ctx, state, dstVfs, destPathForFile)
+		}
 		_ = dstVfs.SetAttributes(ctx, destPathForFile, itemToSet)
 		applyPlatformRights(ctx, state, srcVfs, srcPath, dstVfs, destPathForFile)
 		state.fileCopied(srcPath, destPathForFile)
