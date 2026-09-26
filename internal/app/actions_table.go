@@ -999,9 +999,16 @@ func init() {
 		Description: "Show viewer and editor history",
 		DescKey:     "Action.Panel.ViewerEditorHistory.Desc",
 		DefaultKeys: []string{"AltF11"},
-		MenuPath:    "Commands",
-		MenuSubPath: "History",
-		Handler:     withPF(func(pf *panel.PanelsFrame) { actionViewerEditorHistory(pf) }),
+		// Reachable from inside the editor/viewer too (#408): same key, same
+		// dialog, resolved through withPF's FindPanelsFrameAnyScreen the way
+		// the editor/viewer already reach their owning panel for other
+		// purposes (e.g. switching back to it). Ctrl+F10/Enter inside the
+		// dialog keep acting on that panel exactly as they do when the
+		// dialog is opened from a panel.
+		DefaultAreas: []string{"Editor", "Viewer"},
+		MenuPath:     "Commands",
+		MenuSubPath:  "History",
+		Handler:      withPF(func(pf *panel.PanelsFrame) { actionViewerEditorHistory(pf) }),
 	})
 	registerAction(action.Action{
 		Name:        "History.ImportFar2l",
