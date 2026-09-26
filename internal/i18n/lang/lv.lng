@@ -2022,6 +2022,7 @@ SettingsCenter.Text.4a8bb929ad96374dc45759fedbfb0d8677e8a33051ea220032c2af71ee18
 SettingsCenter.Text.b54d5f151044cd7ccaa1e6dff537e38abed8dbba0c5c126d0cf4aadb86615698=Izmantojiet Colorer sintaksu shēmu un stilu. Atbalsta savus konfigurējamus shēmas datus, taču tam ir vajadzīgas uzstādītās shēmas, un tās var atkāpties, ja tās nav pieejamas.
 SettingsCenter.Text.66913610bfd33055181edb7d0e4fa367507f0a49a3861c1d3d55a82f90408cff=Atcelties sintaksu izšķirošanu jaunajā atvērtajā redakcijā. Izvairās no sintaksas krāsošanas darbu un attēlo tekstu ar vienkāršo redaktoru paliku.
 SettingsCenter.Text.f75db9fdf1854fbe9bce5bf34233636b3b3726189f6e0e1d0266f9e4d93cb10f=Izmantot īpatnējo Colorer shēmu, nevis nominātu uzstādītu HRD shēmu.
+SettingsCenter.Text.8008c99689b343ec6bdc6ca1e458ed6879e95daf3c634d6a2ce1f72c478e2709=Izmantot iebūvēto noklusējuma krāsu stilu, nevis nosauktu instalēto stilu.
 SettingsCenter.Text.7763567cecd6d64bd32c6ca495d30ed5f61244e3c37f9b0ae0096d4651dadaf7=Atbalsta Mac stilā redakcijas akordus macOS un ordināro redakcijas akordus citur. Atbalsta atbalstu vēl ir nepieciešams komandoklējas tulkojumam.
 SettingsCenter.Text.60f4ce4d7f6bfc3167ed215bc7411978ddbb765a79f2c39ed7af8ce4acb504d0=Pieļaut Mac stilā redakciju akordus atbalstītajos redaktoros un dialogu laukos. Navigācijas paneli saglabājas "Far-style"; komandas tulkojums ir atkarīgs no aizmugures.
 SettingsCenter.Text.4e3f8b832d02f866212c38194f541012bd3e92adbb9e501b6fb554df370866da=Izmantojiet parastais redigēšanas akordus pat macOS. Nav mainīts navigācijas modeļa paneli.
