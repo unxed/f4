@@ -55,6 +55,20 @@ const (
 	ColEditorScrollbar
 	ColEditorWrapMark
 
+	// Chroma (plugins/chroma) syntax-highlighting token colors. f4#1470:
+	// these used to be a hardcoded palette independent of the active theme;
+	// they are now theme slots like everything else here, with defaults
+	// below matching that old hardcoded palette so a theme that does not
+	// override them (Classic) still looks the way it always did.
+	ColEditorSyntaxComment
+	ColEditorSyntaxKeyword
+	ColEditorSyntaxString
+	ColEditorSyntaxNumber
+	ColEditorSyntaxOperator
+	ColEditorSyntaxFunction
+	ColEditorSyntaxVariable
+	ColEditorSyntaxHeading
+
 	ColDialogSettingsBackground
 
 	// Only the foreground half is used: the caret travels across panels,
@@ -141,6 +155,20 @@ func SetDefaultF4Palette() {
 	// far2l marks a wrapped (not a real newline) row end with a small
 	// arrow-like glyph; reuse the viewer's own continuation-arrow colour.
 	vtui.Palette[ColEditorWrapMark] = vtui.Palette[ColViewerArrows]
+
+	// Chroma syntax colors (f4#1470): only the foreground half is ever read
+	// (plugins/chroma.GetSyntaxAttr paints it over the editor's own base
+	// attribute), but both halves are set for FormatFarColor/ExportColors.
+	// These values are exactly the old hardcoded plugins/chroma.SyntaxMap
+	// palette, so a theme that leaves them unset (Classic) is unchanged.
+	vtui.Palette[ColEditorSyntaxComment] = vtui.SetRGBBoth(0, 0x555753, black) // Gray
+	vtui.Palette[ColEditorSyntaxKeyword] = vtui.SetRGBBoth(0, 0x729FCF, black) // Light Blue
+	vtui.Palette[ColEditorSyntaxString] = vtui.SetRGBBoth(0, 0x8AE234, black)  // Green
+	vtui.Palette[ColEditorSyntaxNumber] = vtui.SetRGBBoth(0, 0xAD7FA8, black)  // Purple
+	vtui.Palette[ColEditorSyntaxOperator] = vtui.SetRGBBoth(0, 0xFFFFFF, black)
+	vtui.Palette[ColEditorSyntaxFunction] = vtui.SetRGBBoth(0, 0xFCE94F, black) // Yellow
+	vtui.Palette[ColEditorSyntaxVariable] = vtui.SetRGBBoth(0, 0xEEEEEC, black) // Near White
+	vtui.Palette[ColEditorSyntaxHeading] = vtui.SetRGBBoth(0, 0x729FCF, black)
 
 	// White reads over every background the far palette puts under the caret.
 	vtui.Palette[ColTerminalCursor] = vtui.SetRGBBoth(0, 0xFFFFFF, 0)
@@ -304,6 +332,17 @@ var ColorSlots = []ColorSlot{
 	{Canonical: "Editor.Scrollbar", Index: ColEditorScrollbar, Group: "Editor", ConstantName: "ColEditorScrollbar", InheritsBackgroundFrom: "Editor.Text"},
 	{Canonical: "Editor.Status", Index: ColEditorStatus, Group: "Editor", ConstantName: "ColEditorStatus"},
 	{Canonical: "Editor.WrapMark", Index: ColEditorWrapMark, Group: "Editor", ConstantName: "ColEditorWrapMark"},
+
+	// Editor.Syntax.* feed plugins/chroma's syntax highlighter (f4#1470),
+	// one slot per Chroma token category it distinguishes.
+	{Canonical: "Editor.Syntax.Comment", Index: ColEditorSyntaxComment, Group: "Editor", ConstantName: "ColEditorSyntaxComment"},
+	{Canonical: "Editor.Syntax.Keyword", Index: ColEditorSyntaxKeyword, Group: "Editor", ConstantName: "ColEditorSyntaxKeyword"},
+	{Canonical: "Editor.Syntax.String", Index: ColEditorSyntaxString, Group: "Editor", ConstantName: "ColEditorSyntaxString"},
+	{Canonical: "Editor.Syntax.Number", Index: ColEditorSyntaxNumber, Group: "Editor", ConstantName: "ColEditorSyntaxNumber"},
+	{Canonical: "Editor.Syntax.Operator", Index: ColEditorSyntaxOperator, Group: "Editor", ConstantName: "ColEditorSyntaxOperator"},
+	{Canonical: "Editor.Syntax.Function", Index: ColEditorSyntaxFunction, Group: "Editor", ConstantName: "ColEditorSyntaxFunction"},
+	{Canonical: "Editor.Syntax.Variable", Index: ColEditorSyntaxVariable, Group: "Editor", ConstantName: "ColEditorSyntaxVariable"},
+	{Canonical: "Editor.Syntax.Heading", Index: ColEditorSyntaxHeading, Group: "Editor", ConstantName: "ColEditorSyntaxHeading"},
 
 	// Help Group
 	{Canonical: "Help.Text", Index: vtui.ColHelpText, Group: "Help", ConstantName: "ColHelpText"},
@@ -585,6 +624,18 @@ func isFrameLineSlot(slot ColorSlot) bool {
 	return strings.HasSuffix(slot.Canonical, ".Box") || slot.Index == vtui.ColTableBox
 }
 
+// isSyntaxColorSlot reports whether a slot is one of the Editor.Syntax.*
+// colors plugins/chroma paints over the editor's real, per-line base
+// attribute (f4#1470). The slot's own "background" half is just filler kept
+// for FormatFarColor/ExportColors: GetSyntaxAttr always discards it in favor
+// of whatever background that line already has (selection, cursor row,
+// etc.), so pairing it with that filler for contrast correction would be
+// meaningless — much like Terminal.Cursor below, which has no background of
+// its own either.
+func isSyntaxColorSlot(slot ColorSlot) bool {
+	return strings.HasPrefix(slot.Canonical, "Editor.Syntax.")
+}
+
 func AdjustContrastLevels() {
 	if !config.App.EnforceColorCorrection {
 		return
@@ -599,7 +650,7 @@ func AdjustContrastLevels() {
 		if slot.Index == ColTerminalCursor || slot.Index == vtui.ColDialogIndicatorBackground || slot.Index == ColDialogSettingsBackground {
 			continue
 		}
-		if isFrameLineSlot(slot) || done[slot.Index] {
+		if isFrameLineSlot(slot) || isSyntaxColorSlot(slot) || done[slot.Index] {
 			continue
 		}
 		done[slot.Index] = true
