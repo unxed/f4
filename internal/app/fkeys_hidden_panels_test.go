@@ -4,6 +4,7 @@ import (
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
+	"github.com/unxed/f4/internal/terminal"
 	"testing"
 
 	"github.com/unxed/f4/internal/macro"
@@ -145,6 +146,51 @@ func TestHotkeys_ShellActions_TerminalArea_GatedByAltScreen_Issue354(t *testing.
 	}
 	if got := keymap.GlobalHotkeysMgr.GetAction("Terminal", "F10"); got != "App.Quit" {
 		t.Errorf("Terminal F10 without AltScreen: got %q, want term.App.Quit", got)
+	}
+}
+
+// TestHotkeys_TerminalQuiet_SimpleInline_IgnoresStrayAltScreen_Issue897 covers
+// f4#897 (item 3 of 3): F3/F4 (Terminal.ViewLog/EditLog) stopped opening the
+// captured terminal output under ShellModeSimpleInline (the legacy
+// Windows/ReactOS build with no usable ConPTY, CONSOLE_MODES.md §4.1).
+// pf.TermView is a leftover background object in that mode -- nothing feeds
+// it, so its UseAltScreen field does not track what's actually on screen --
+// and an earlier stray flip of that same field already broke Ctrl+O this
+// way once (f4#1376, see noaltscreenapp/TerminalOwnsKeyboard). The
+// terminalquiet condition read UseAltScreen directly without the same
+// short-circuit, so it silently went permanently false and F3/F4 stopped
+// resolving to Terminal.ViewLog/EditLog under SimpleInline.
+func TestHotkeys_TerminalQuiet_SimpleInline_IgnoresStrayAltScreen_Issue897(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	previousHotkeys := keymap.GlobalHotkeysMgr
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = previousHotkeys })
+
+	pf := paneltest.SetupMockPanelsFrame(t)
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pf.ShellMode = terminal.ShellModeSimpleInline
+	pf.ShowPanels = false
+	// The stray flip: nothing meaningful sets this in SimpleInline, but
+	// nothing prevents it either, and #1376 showed it happens in practice.
+	pf.TermView.UseAltScreen = true
+	vtui.FrameManager.Push(pf)
+
+	hm := keymap.GlobalHotkeysMgr
+	if got := keymap.ConfiguredHotkeyAction(hm, "Terminal", "F3"); got != "Terminal.ViewLog" {
+		t.Errorf("Terminal F3 under SimpleInline with a stray UseAltScreen flip = %q, want Terminal.ViewLog", got)
+	}
+	if got := keymap.ConfiguredHotkeyAction(hm, "Terminal", "F4"); got != "Terminal.EditLog" {
+		t.Errorf("Terminal F4 under SimpleInline with a stray UseAltScreen flip = %q, want Terminal.EditLog", got)
+	}
+
+	// A genuinely busy child (f4 itself running a command) still means the
+	// keyboard is not free -- but that state routes through IsPtyBusy/
+	// Executing, never through the background TermView, in this mode too.
+	pf.Executing = true
+	if got := keymap.ConfiguredHotkeyAction(hm, "Terminal", "F3"); got != "Terminal.ViewLog" {
+		t.Errorf("Terminal F3 under SimpleInline while f4.Executing = %q, want Terminal.ViewLog (unaffected)", got)
 	}
 }
 
