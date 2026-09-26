@@ -24,6 +24,7 @@ import (
 	"github.com/unxed/f4/internal/toast"
 	"github.com/unxed/f4/internal/viewer"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -1075,7 +1076,14 @@ func init() {
 		Handler: withPF(func(pf *panel.PanelsFrame) {
 			if fsp := pf.GetActivePanel(); fsp != nil {
 				rootPath := "/"
-				if runtime.GOOS == "windows" {
+				// WINE.md §18.6, "Ctrl+\\": posix personality means a real
+				// POSIX root, not a drive letter -- os.PathSeparator on
+				// GOOS=windows is '\\' regardless of personality, and
+				// filepath.VolumeName would answer the wineprefix's own
+				// notion of a drive even for a path that has none in
+				// posix mode. Leave rootPath at "/" there, exactly as on
+				// the Linux build.
+				if runtime.GOOS == "windows" && !hostmode.Posix() {
 					rootPath = string(os.PathSeparator)
 					if _, isOS := fsp.Vfs.(*vfs.OSVFS); isOS {
 						rootPath = filepath.VolumeName(fsp.Vfs.GetPath()) + string(os.PathSeparator)
