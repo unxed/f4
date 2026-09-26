@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -6978,7 +6977,11 @@ func (ev *EditorView) updateAutocomplete() {
 }
 
 func isAlternateDataStream(path string) bool {
-	if runtime.GOOS != "windows" {
+	// vfs.WindowsPersonality, not a raw GOOS check (WINE.md §18.6, "NTFS
+	// stream ':'"): in posix personality a colon is an ordinary, if
+	// unusual, POSIX filename byte -- valid on the real filesystem
+	// libwinescape reads -- never an NTFS alternate-stream separator.
+	if !vfs.WindowsPersonality() {
 		return false
 	}
 	// URI schemes contain a colon but can never denote an NTFS stream.
