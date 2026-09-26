@@ -75,3 +75,10 @@ func redirectDetachedStdout() {
 func detachedStdoutGoesToCrashLog(detached, stdoutIsTerminal bool) bool {
 	return detached && !stdoutIsTerminal
 }
+
+// redirectConsoleWineStderr and cleanupWineStderrLog exist only to fix a
+// Wine-specific descriptor mixup (WINE.md §18.4): on every other GOOS, Go's
+// own os.Stderr already is the terminal or whatever the shell redirected it
+// to, and there is no second, Wine-owned copy of descriptor 2 to repoint.
+func redirectConsoleWineStderr() {}
+func cleanupWineStderrLog()      {}
