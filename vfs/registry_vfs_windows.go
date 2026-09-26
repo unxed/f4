@@ -3,6 +3,7 @@
 package vfs
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf16"
@@ -38,10 +40,16 @@ var registryHives = []registryHive{
 	{name: "HKEY_CURRENT_CONFIG", key: registry.CURRENT_CONFIG},
 }
 
-// RegistryVFS exposes the Windows registry as a read-only virtual filesystem.
-// Registry keys are directories and registry values are virtual text files.
-// The VFS deliberately opens keys with registry.READ only: this first slice
-// must not change the user's registry, even when the process has write access.
+// RegistryVFS exposes the Windows registry as a virtual filesystem. Registry
+// keys are directories and registry values are virtual text files. Reads
+// always open keys with registry.READ only. Part 2 of f4#242 adds editing an
+// existing value's data through the standard EditorView's Save: Create
+// re-opens just the parent key with the narrower registry.SET_VALUE access
+// for that one write. Keys and values can still not be created, renamed or
+// removed — MkDir, Remove and Rename keep refusing every call, and Create
+// refuses a path whose value does not already exist. This keeps the
+// destructive surface to exactly what f4#242 asked for ("modifying registry
+// values"), not to registry structure changes.
 type RegistryVFS struct {
 	currentPath string
 }
@@ -291,7 +299,16 @@ func (v *RegistryVFS) Rename(ctx context.Context, _, _ string) error {
 func (v *RegistryVFS) GetCapabilities() VFSCapabilities {
 	return VFSCapabilities{
 		HasRandomAccess: true,
-		HasWrite:        false,
+		// HasWrite: Create can commit an edited value of a supported type
+		// (REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ, REG_DWORD, REG_QWORD or
+		// REG_BINARY) back to the registry. It cannot create a value or key
+		// that does not already exist, so this is narrower than most other
+		// HasWrite backends; callers still see a precise error for anything
+		// outside that scope.
+		HasWrite: true,
+		// Editing a value updates its data in place; the value's registry
+		// identity (its name under its parent key) never changes.
+		HasIdentityPreservingWrite: true,
 	}
 }
 
@@ -336,8 +353,46 @@ func (v *RegistryVFS) Open(ctx context.Context, p string) (ReadAtCloser, error) 
 	return &registryReader{data: formatRegistryValue(registryValueName(segments[len(segments)-1]), valueType, data)}, nil
 }
 
-func (v *RegistryVFS) Create(ctx context.Context, _ string) (io.WriteCloser, error) {
-	return nil, registryVFSReadOnlyError(ctx)
+// Create opens an existing registry value for editing. It never creates a
+// new value or a new key: the standard EditorView's Save is the only caller
+// this needs to satisfy, and that always targets a value the panel already
+// listed. The actual registry write happens in registryValueWriter.Close,
+// once the full edited text is known.
+func (v *RegistryVFS) Create(ctx context.Context, p string) (io.WriteCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	segments, err := registryPathSegments(p)
+	if err != nil {
+		return nil, err
+	}
+	if len(segments) < 2 {
+		return nil, registryVFSReadOnlyError(ctx)
+	}
+
+	// A key by this name takes precedence, matching Open and ReadDir: Create
+	// never overwrites a key with a value.
+	if key, owned, keyErr := openRegistryKey(segments); keyErr == nil {
+		if owned {
+			key.Close()
+		}
+		return nil, registryVFSReadOnlyError(ctx)
+	} else if !errors.Is(keyErr, os.ErrNotExist) {
+		return nil, keyErr
+	}
+
+	parent, owned, err := openRegistryKey(segments[:len(segments)-1])
+	if err != nil {
+		return nil, err
+	}
+	if owned {
+		defer parent.Close()
+	}
+	name := registryValueName(segments[len(segments)-1])
+	if _, _, err := readRegistryValue(parent, name); err != nil {
+		return nil, registryVFSMapError(err)
+	}
+	return &registryValueWriter{segments: append([]string(nil), segments...)}, nil
 }
 
 func (v *RegistryVFS) SetAttributes(ctx context.Context, _ string, _ VFSItem) error {
@@ -401,7 +456,15 @@ func registryHiveByName(name string) (registryHive, bool) {
 	return registryHive{}, false
 }
 
+// openRegistryKey opens a key with the READ access every listing and value
+// read uses. Writing a value re-opens the same path through
+// openRegistryKeyAccess with the narrower access that write actually needs,
+// rather than widening what every read holds open.
 func openRegistryKey(segments []string) (registry.Key, bool, error) {
+	return openRegistryKeyAccess(segments, registry.READ)
+}
+
+func openRegistryKeyAccess(segments []string, access uint32) (registry.Key, bool, error) {
 	if len(segments) == 0 {
 		return 0, false, os.ErrInvalid
 	}
@@ -410,6 +473,8 @@ func openRegistryKey(segments []string) (registry.Key, bool, error) {
 		return 0, false, os.ErrNotExist
 	}
 	if len(segments) == 1 {
+		// Predefined hive handles are not opened through OpenKey and carry
+		// no access mask of their own to narrow.
 		return hive.key, false, nil
 	}
 	for _, segment := range segments[1:] {
@@ -417,7 +482,7 @@ func openRegistryKey(segments []string) (registry.Key, bool, error) {
 			return 0, false, os.ErrInvalid
 		}
 	}
-	key, err := registry.OpenKey(hive.key, strings.Join(segments[1:], `\`), registry.READ)
+	key, err := registry.OpenKey(hive.key, strings.Join(segments[1:], `\`), access)
 	if err != nil {
 		return 0, false, registryVFSMapError(err)
 	}
@@ -600,6 +665,45 @@ func registryValueTypeName(valueType uint32) string {
 	}
 }
 
+// registryValueTypeByName is the inverse of registryValueTypeName. It
+// accepts every name that function can produce, including the "REG_<n>"
+// fallback for a numeric type with no defined constant, so a value's own
+// unmodified "Type:" line always round-trips.
+func registryValueTypeByName(name string) (uint32, bool) {
+	switch name {
+	case "REG_NONE":
+		return registry.NONE, true
+	case "REG_SZ":
+		return registry.SZ, true
+	case "REG_EXPAND_SZ":
+		return registry.EXPAND_SZ, true
+	case "REG_BINARY":
+		return registry.BINARY, true
+	case "REG_DWORD":
+		return registry.DWORD, true
+	case "REG_DWORD_BIG_ENDIAN":
+		return registry.DWORD_BIG_ENDIAN, true
+	case "REG_LINK":
+		return registry.LINK, true
+	case "REG_MULTI_SZ":
+		return registry.MULTI_SZ, true
+	case "REG_RESOURCE_LIST":
+		return registry.RESOURCE_LIST, true
+	case "REG_FULL_RESOURCE_DESCRIPTOR":
+		return registry.FULL_RESOURCE_DESCRIPTOR, true
+	case "REG_RESOURCE_REQUIREMENTS_LIST":
+		return registry.RESOURCE_REQUIREMENTS_LIST, true
+	case "REG_QWORD":
+		return registry.QWORD, true
+	default:
+		var n uint32
+		if _, err := fmt.Sscanf(name, "REG_%d", &n); err == nil {
+			return n, true
+		}
+		return 0, false
+	}
+}
+
 type registryReader struct {
 	mu     sync.Mutex
 	data   []byte
@@ -656,4 +760,254 @@ func (r *registryReader) Close() error {
 	r.closed = true
 	r.mu.Unlock()
 	return nil
+}
+
+// registryValueWriter buffers the editor's full save of a value and commits
+// it to the registry only once Close has the complete text, mirroring how
+// other in-place VFS writers in this codebase (e.g. plugins/netfox's
+// netfoxWriter) stage a whole-file save before validating and applying it.
+type registryValueWriter struct {
+	segments []string // full path, including the value's own segment
+	buf      bytes.Buffer
+	closed   bool
+}
+
+func (w *registryValueWriter) Write(p []byte) (int, error) {
+	if w.closed {
+		return 0, os.ErrClosed
+	}
+	return w.buf.Write(p)
+}
+
+func (w *registryValueWriter) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	parentSegments := w.segments[:len(w.segments)-1]
+	name := registryValueName(w.segments[len(w.segments)-1])
+	parent, owned, err := openRegistryKeyAccess(parentSegments, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	if owned {
+		defer parent.Close()
+	}
+	return writeRegistryValue(parent, name, w.buf.Bytes())
+}
+
+// writeRegistryValue parses the text formatRegistryValue produces (or a
+// user's edit of it) and commits it with the one typed setter that matches
+// the value's own type. golang.org/x/sys/windows/registry exposes no generic
+// "set raw type+bytes" call, only SetStringValue, SetExpandStringValue,
+// SetStringsValue, SetDWordValue, SetQWordValue and SetBinaryValue, so only
+// REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ, REG_DWORD, REG_QWORD and REG_BINARY
+// can be edited this way; every other type (including REG_DWORD_BIG_ENDIAN,
+// which the read side already formats) is rejected with a specific error
+// rather than silently attempted.
+func writeRegistryValue(key registry.Key, name string, text []byte) error {
+	valueType, lines, err := parseRegistryValueHeader(text)
+	if err != nil {
+		return err
+	}
+	switch valueType {
+	case registry.SZ:
+		s, err := parseRegistryStringValue(lines)
+		if err != nil {
+			return err
+		}
+		return key.SetStringValue(name, s)
+	case registry.EXPAND_SZ:
+		s, err := parseRegistryStringValue(lines)
+		if err != nil {
+			return err
+		}
+		return key.SetExpandStringValue(name, s)
+	case registry.MULTI_SZ:
+		values, err := parseRegistryMultiStringValue(lines)
+		if err != nil {
+			return err
+		}
+		return key.SetStringsValue(name, values)
+	case registry.DWORD:
+		n, err := parseRegistryIntValue(lines, 32)
+		if err != nil {
+			return err
+		}
+		return key.SetDWordValue(name, uint32(n))
+	case registry.QWORD:
+		n, err := parseRegistryIntValue(lines, 64)
+		if err != nil {
+			return err
+		}
+		return key.SetQWordValue(name, n)
+	case registry.BINARY:
+		data, err := parseRegistryBinaryValue(lines)
+		if err != nil {
+			return err
+		}
+		return key.SetBinaryValue(name, data)
+	default:
+		return fmt.Errorf("registry: editing %s values is not supported", registryValueTypeName(valueType))
+	}
+}
+
+// parseRegistryValueHeader finds the "Type:" line formatRegistryValue always
+// writes and returns the type it names together with every line of text, so
+// each type-specific parser below can scan for the field it needs.
+func parseRegistryValueHeader(text []byte) (uint32, []string, error) {
+	normalized := strings.ReplaceAll(string(text), "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	for _, line := range lines {
+		rest, ok := strings.CutPrefix(line, "Type: ")
+		if !ok {
+			continue
+		}
+		valueType, ok := registryValueTypeByName(strings.TrimSpace(rest))
+		if !ok {
+			return 0, nil, fmt.Errorf("registry: unrecognized type %q", rest)
+		}
+		return valueType, lines, nil
+	}
+	return 0, nil, errors.New("registry: missing Type: line")
+}
+
+// parseRegistryStringValue reads back a REG_SZ/REG_EXPAND_SZ value written
+// by formatRegistryValue: the quoted "Value:" line it emits for a decodable
+// UTF-16 string, or the hex "Data:" fallback it emits otherwise.
+func parseRegistryStringValue(lines []string) (string, error) {
+	for _, line := range lines {
+		if rest, ok := strings.CutPrefix(line, "Value: "); ok {
+			s, err := strconv.Unquote(rest)
+			if err != nil {
+				return "", fmt.Errorf("registry: invalid Value line: %w", err)
+			}
+			return s, nil
+		}
+		if rest, ok := strings.CutPrefix(line, "Data: "); ok {
+			data, err := hex.DecodeString(strings.TrimSpace(rest))
+			if err != nil {
+				return "", fmt.Errorf("registry: invalid Data line: %w", err)
+			}
+			s, ok := registryUTF16String(data)
+			if !ok {
+				return "", errors.New("registry: Data is not a valid UTF-16 string")
+			}
+			return s, nil
+		}
+	}
+	return "", errors.New("registry: missing Value/Data line")
+}
+
+// parseRegistryMultiStringValue reads back a REG_MULTI_SZ value: the
+// "Value[i]:" lines formatRegistryValue emits in order for a non-empty list,
+// the single "Value: \"\"" line it emits for an empty one, or the hex
+// "Data:" fallback.
+func parseRegistryMultiStringValue(lines []string) ([]string, error) {
+	type indexedValue struct {
+		index int
+		value string
+	}
+	var indexed []indexedValue
+	for _, line := range lines {
+		if rest, ok := strings.CutPrefix(line, "Value["); ok {
+			closeIdx := strings.Index(rest, "]: ")
+			if closeIdx < 0 {
+				continue
+			}
+			idx, err := strconv.Atoi(rest[:closeIdx])
+			if err != nil {
+				continue
+			}
+			s, err := strconv.Unquote(rest[closeIdx+len("]: "):])
+			if err != nil {
+				return nil, fmt.Errorf("registry: invalid Value[%d] line: %w", idx, err)
+			}
+			indexed = append(indexed, indexedValue{idx, s})
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "Value: "); ok && len(indexed) == 0 {
+			s, err := strconv.Unquote(rest)
+			if err != nil {
+				return nil, fmt.Errorf("registry: invalid Value line: %w", err)
+			}
+			if s == "" {
+				return []string{}, nil
+			}
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "Data: "); ok {
+			data, err := hex.DecodeString(strings.TrimSpace(rest))
+			if err != nil {
+				return nil, fmt.Errorf("registry: invalid Data line: %w", err)
+			}
+			values, ok := registryUTF16Strings(data)
+			if !ok {
+				return nil, errors.New("registry: Data is not a valid UTF-16 multi-string")
+			}
+			return values, nil
+		}
+	}
+	if len(indexed) == 0 {
+		return nil, errors.New("registry: missing Value[]/Value/Data line")
+	}
+	sort.Slice(indexed, func(i, j int) bool { return indexed[i].index < indexed[j].index })
+	result := make([]string, len(indexed))
+	for i, entry := range indexed {
+		result[i] = entry.value
+	}
+	return result, nil
+}
+
+// parseRegistryIntValue reads back a REG_DWORD/REG_QWORD value: the decimal
+// count before the " (0x...)" annotation formatRegistryValue emits, or the
+// little-endian hex "Data:" fallback for a value of the wrong byte width.
+func parseRegistryIntValue(lines []string, bitSize int) (uint64, error) {
+	for _, line := range lines {
+		if rest, ok := strings.CutPrefix(line, "Value: "); ok {
+			decimal := rest
+			if sp := strings.IndexByte(rest, ' '); sp >= 0 {
+				decimal = rest[:sp]
+			}
+			n, err := strconv.ParseUint(decimal, 10, bitSize)
+			if err != nil {
+				return 0, fmt.Errorf("registry: invalid Value line: %w", err)
+			}
+			return n, nil
+		}
+		if rest, ok := strings.CutPrefix(line, "Data: "); ok {
+			data, err := hex.DecodeString(strings.TrimSpace(rest))
+			if err != nil {
+				return 0, fmt.Errorf("registry: invalid Data line: %w", err)
+			}
+			switch bitSize {
+			case 32:
+				if len(data) != 4 {
+					return 0, errors.New("registry: Data must be 4 bytes for a DWORD")
+				}
+				return uint64(binary.LittleEndian.Uint32(data)), nil
+			case 64:
+				if len(data) != 8 {
+					return 0, errors.New("registry: Data must be 8 bytes for a QWORD")
+				}
+				return binary.LittleEndian.Uint64(data), nil
+			}
+		}
+	}
+	return 0, errors.New("registry: missing Value/Data line")
+}
+
+// parseRegistryBinaryValue reads back a REG_BINARY value: the hex "Data:"
+// line formatRegistryValue always emits for this type.
+func parseRegistryBinaryValue(lines []string) ([]byte, error) {
+	for _, line := range lines {
+		if rest, ok := strings.CutPrefix(line, "Data: "); ok {
+			data, err := hex.DecodeString(strings.TrimSpace(rest))
+			if err != nil {
+				return nil, fmt.Errorf("registry: invalid Data line: %w", err)
+			}
+			return data, nil
+		}
+	}
+	return nil, errors.New("registry: missing Data line")
 }
