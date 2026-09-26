@@ -23,7 +23,7 @@ func fakeEnv(t *testing.T, home string, env map[string]string, confirm bool) {
 func writeFakeExecutable(t *testing.T, dir, name string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("fake f4 binary"), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte("fake f4 binary"), 0o755); err != nil { // #nosec G306 -- test fixture executable, needs the exec bit
 		t.Fatal(err)
 	}
 	return path
@@ -72,8 +72,10 @@ func TestRunCLIPromptsAndAppendsOnConfirm(t *testing.T) {
 	if err != nil {
 		t.Fatalf(".zshrc not written: %v", err)
 	}
-	if !strings.Contains(string(data), PreferredDir(home)) {
-		t.Errorf(".zshrc = %q, want it to mention %q", data, PreferredDir(home))
+	profile, _ := DetectShellProfile(home, "/bin/zsh")
+	want := PathLine(profile, home, PreferredDir(home))
+	if !strings.Contains(string(data), want) {
+		t.Errorf(".zshrc = %q, want it to mention %q", data, want)
 	}
 }
 
@@ -117,8 +119,10 @@ func TestRunCLIAutoConfirmSkipsPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf(".bashrc not written: %v", err)
 	}
-	if !strings.Contains(string(data), PreferredDir(home)) {
-		t.Errorf(".bashrc = %q, want it to mention %q", data, PreferredDir(home))
+	profile, _ := DetectShellProfile(home, "/bin/bash")
+	want := PathLine(profile, home, PreferredDir(home))
+	if !strings.Contains(string(data), want) {
+		t.Errorf(".bashrc = %q, want it to mention %q", data, want)
 	}
 }
 
@@ -154,7 +158,9 @@ func TestRunCLIRerunIsIdempotent(t *testing.T) {
 	if string(first) != string(second) {
 		t.Errorf(".bashrc changed on re-run: first %q, second %q", first, second)
 	}
-	if n := strings.Count(string(second), PreferredDir(home)); n != 1 {
+	profile, _ := DetectShellProfile(home, "/bin/bash")
+	line := PathLine(profile, home, PreferredDir(home))
+	if n := strings.Count(string(second), line); n != 1 {
 		t.Errorf("PATH line appears %d times after two runs, want 1: %q", n, second)
 	}
 }
@@ -182,7 +188,7 @@ func TestRunCLIFallsBackWhenPreferredDirUnavailable(t *testing.T) {
 
 	// Make ~/.local a plain file, so ~/.local/bin can be neither statted as a
 	// directory nor created, and ~/bin must be used instead.
-	if err := os.WriteFile(filepath.Join(home, ".local"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".local"), []byte("x"), 0o644); err != nil { // #nosec G306 -- test fixture, not sensitive
 		t.Fatal(err)
 	}
 	fakeEnv(t, home, map[string]string{

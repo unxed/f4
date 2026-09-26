@@ -161,7 +161,7 @@ func TestEnsureDirCreatesAndDetectsExisting(t *testing.T) {
 func TestEnsureDirRejectsFileInThePlaceOfADir(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, "notadir")
-	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil { // #nosec G306 -- test fixture, not sensitive
 		t.Fatal(err)
 	}
 	if _, err := EnsureDir(path); err == nil {
