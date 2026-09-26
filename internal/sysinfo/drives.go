@@ -13,6 +13,18 @@ import (
 type DriveEntry struct {
 	Name    string
 	Factory func() vfs.VFS
+
+	// InfoPath, when set, is the real filesystem path the drive menu should
+	// use to look up free space and filesystem type (sysinfo.FS), instead of
+	// trying to derive one from Name the way it does for the built-in
+	// "/ Root" and "~ Home" rows. Live mount-point entries (f4#415) set this
+	// to their mount point.
+	InfoPath string
+
+	// UnmountDevice, when set, is the block device (e.g. "/dev/sdb1")
+	// backing this entry's mount point, and marks the row as one the drive
+	// menu's Del key can unmount (f4#415).
+	UnmountDevice string
 }
 
 var (

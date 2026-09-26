@@ -82,6 +82,18 @@ func driveMenuInfoPath(name string) string {
 	}
 }
 
+// driveMenuInfoPathFor is driveMenuInfoPath extended for entries that carry
+// their own path instead of one the menu has to derive from Name: a live
+// mount-point row (f4#415) sets DriveEntry.InfoPath to its mount point, so
+// its free space and filesystem type come from the same sysinfo.FS lookup
+// the built-in "/ Root" and "~ Home" rows already use.
+func driveMenuInfoPathFor(drv sysinfo.DriveEntry) string {
+	if drv.InfoPath != "" {
+		return drv.InfoPath
+	}
+	return driveMenuInfoPath(drv.Name)
+}
+
 func driveMenuKindFor(name, path string) driveMenuKind {
 	if strings.Contains(strings.ToLower(name), "physical disk") {
 		return driveMenuKindPhysical
@@ -143,7 +155,7 @@ type driveMenuPlatformColumn struct {
 // remote and may block while resolving their metadata.
 func driveMenuPlatformRowFor(drv sysinfo.DriveEntry, options uint32) DriveMenuPlatformRow {
 	row := DriveMenuPlatformRow{Base: driveMenuBaseName(drv.Name)}
-	path := driveMenuInfoPath(drv.Name)
+	path := driveMenuInfoPathFor(drv)
 	kind := driveMenuKindFor(drv.Name, path)
 
 	if driveMenuOptionEnabled(options, config.DriveMenuShowType) {
@@ -283,7 +295,7 @@ func DriveMenuOptionsDialogSize() (int, int) {
 }
 
 func driveMenuPlatformItemVisible(drv sysinfo.DriveEntry, options uint32) bool {
-	kind := driveMenuKindFor(drv.Name, driveMenuInfoPath(drv.Name))
+	kind := driveMenuKindFor(drv.Name, driveMenuInfoPathFor(drv))
 	switch kind {
 	case driveMenuKindRemovable:
 		return driveMenuOptionEnabled(options, config.DriveMenuShowRemovable)

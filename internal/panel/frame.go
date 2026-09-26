@@ -5365,6 +5365,11 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 		}
 		return rows
 	}(), driveMenuOptions)
+	// mountRows maps a menu row to its index in platformDrives, for the
+	// live mount-point rows (f4#415) whose DriveEntry.UnmountDevice is set:
+	// Del on one of those unmounts it. Populated in the same loop that adds
+	// the rows below, the same way bookmarkRows/driveBookmarkRows are.
+	mountRows := map[int]int{}
 	for i, drv := range platformDrives {
 		factory := drv.Factory
 		name := platformNames[i]
@@ -5389,6 +5394,9 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 			}
 		}
 
+		if drv.UnmountDevice != "" {
+			mountRows[menu.GetItemCount()] = i
+		}
 		menu.AddItem(vtui.MenuItem{Text: name, UserData: func(fsp *FileSystemPanel) {
 			pf.SwitchToVFS(fsp, factory())
 		}})
@@ -5506,14 +5514,16 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 		// far2l binds three keys on the bookmark rows of this menu
 		// (panels/panel.cpp:544-600): Ins opens the bookmarks dialog, F4
 		// opens it on the slot under the cursor, Del clears that slot.
-		// The menu comes back afterwards, as it does there. On other rows
-		// F4 and Del are left alone — far2l uses them for mount hotkeys
-		// and unmounting, neither of which f4 has.
+		// The menu comes back afterwards, as it does there. far2l also
+		// binds Del to unmounting on its own mount-point rows; f4#415 adds
+		// that here too, for the live mount-point rows GetPlatformDrives
+		// appends on Linux (drives_unix.go).
 		if e.KeyDown && e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|
 			vtinput.LeftAltPressed|vtinput.RightAltPressed|vtinput.ShiftPressed) == 0 {
 			pos := menu.SelectPos
 			driveBookmarkIndex, onDriveBookmark := driveBookmarkRows[pos]
 			slot, onBookmark := bookmarkRows[pos]
+			mountIndex, onMount := mountRows[pos]
 			reopen := func() { pf.showDriveMenuAt(panelIdx, pos) }
 
 			switch e.VirtualKeyCode {
@@ -5545,6 +5555,10 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 				}
 				if onBookmark {
 					pf.clearBookmarkSlot(slot, menu, reopen)
+					return true
+				}
+				if onMount {
+					pf.unmountDriveMenuEntry(platformDrives[mountIndex], menu, reopen)
 					return true
 				}
 			}
@@ -5657,6 +5671,32 @@ func (pf *PanelsFrame) clearBookmarkSlot(slot int, menu *vtui.VMenu, reopen func
 	}
 	menu.Close()
 	vtui.FrameManager.PostTask(reopen)
+}
+
+// unmountDriveMenuEntry runs Del on a live mount-point row (f4#415): it
+// detaches drv.UnmountDevice from drv.InfoPath via vfs.UnmountDevice, then
+// reopens the menu so the row is gone once /proc/mounts no longer lists it.
+// The unmount itself can block (udisksctl, or a round trip through the sudo
+// dispatcher), so it runs off the UI goroutine the way any other blocking
+// VFS call would; only the menu-close/reopen and the failure dialog post
+// back to it.
+func (pf *PanelsFrame) unmountDriveMenuEntry(drv sysinfo.DriveEntry, menu *vtui.VMenu, reopen func()) {
+	device, mountPoint := drv.UnmountDevice, drv.InfoPath
+	menu.Close()
+	go func() {
+		err := vfs.UnmountDevice(context.Background(), device, mountPoint)
+		vtui.FrameManager.PostTask(func() {
+			if err == nil {
+				reopen()
+				return
+			}
+			vtui.DebugLog("DRIVE MENU: unmount %s (%s) failed: %v", mountPoint, device, err)
+			dlg := vtui.ShowMessage(i18n.Msg("Drive.UnmountFailedTitle"),
+				fmt.Sprintf(i18n.Msg("Drive.UnmountFailed"), mountPoint, err), []string{i18n.Msg("vtui.Ok")})
+			dlg.IsWarning = true
+			dlg.OnResult = func(int) { reopen() }
+		})
+	}()
 }
 
 func (pf *PanelsFrame) SwitchToVFS(fsp *FileSystemPanel, newVFS vfs.VFS) {
