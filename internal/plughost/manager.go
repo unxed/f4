@@ -6,15 +6,12 @@ import (
 
 	"github.com/unxed/f4/internal/config"
 	androidfs "github.com/unxed/f4/plugins/android"
-	"github.com/unxed/f4/plugins/archive"
 	"github.com/unxed/f4/plugins/chroma"
-	"github.com/unxed/f4/plugins/cloudfox"
 	"github.com/unxed/f4/plugins/dummy_internal"
 	"github.com/unxed/f4/plugins/envman"
 	"github.com/unxed/f4/plugins/id3editor"
 	iosfs "github.com/unxed/f4/plugins/ios"
 	"github.com/unxed/f4/plugins/mediainfo"
-	"github.com/unxed/f4/plugins/netfox"
 	sqliteplugin "github.com/unxed/f4/plugins/sqlite"
 	"github.com/unxed/f4/plugins/visren"
 	"github.com/unxed/f4/vfs"
@@ -155,20 +152,20 @@ func (pm *PluginManager) loadInternal() {
 	plugins := []Plugin{
 		&chroma.Plugin{},
 		&dummy_internal.InternalDummyPlugin{},
-		&archive.ArchivePlugin{},
 		androidfs.NewPlugin(),
 		iosfs.NewPlugin(),
-		cloudfox.NewPlugin(cloudfox.Options{
-			ConfigDir: config.GetF4ConfigDir(),
-			Portable:  config.IsPortableProfile(),
-		}),
-		&netfox.NetFoxPlugin{},
 		&visren.Plugin{},
 		&id3editor.ID3EditorPlugin{},
 		envman.NewPlugin(config.GetF4ConfigDir()),
 		mediainfo.NewPlugin(config.GetF4ConfigDir()),
 		sqliteplugin.NewPlugin(),
 	}
+	// archive, cloudfox (cloud services) and netfox (ftp/sftp/scp) are the
+	// heavy VFS providers f4#1178 excludes from a lite build; see
+	// plugins_lite.go/plugins_full.go, the single point of truth for which
+	// build tag gets which set. A later slice replaces them with plugins
+	// that wrap CLI archivers and ssh/scp/sftp instead (f4#1178, part 2).
+	plugins = append(plugins, optionalVFSPlugins()...)
 
 	for _, p := range plugins {
 		if err := p.Init(pm.api); err == nil {

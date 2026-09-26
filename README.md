@@ -19,6 +19,7 @@
 | **NetBSD** | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-netbsd-amd64.tar.gz) / [arm64](https://github.com/unxed/f4/releases/download/nightly/f4-netbsd-arm64.tar.gz) |
 | **Illumos** (experimental) | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-illumos-amd64.tar.gz) |
 | **Solaris** (experimental) | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-solaris-amd64.tar.gz) |
+| **Linux (lite)** ([details](#-lite-build)) | .tar.gz | [amd64](https://github.com/unxed/f4/releases/download/nightly/f4-lite-linux-amd64.tar.gz) / [armv7l](https://github.com/unxed/f4/releases/download/nightly/f4-lite-linux-arm.tar.gz) / [mipsle](https://github.com/unxed/f4/releases/download/nightly/f4-lite-linux-mipsle.tar.gz) |
 
 *These builds are automated and represent the current state of the `main` branch.*
 
@@ -67,6 +68,19 @@ The ReactOS build is tested on **ReactOS 0.4.16 (x86)**. Download
 [`f4-legacy-windows-386.zip`](https://github.com/unxed/f4/releases/download/nightly/f4-legacy-windows-386.zip),
 unpack it, and run `f4-legacy.exe` from a command prompt. `f4-legacy.exe --gui win32`
 opens f4 in a window of its own instead of the console.
+
+### 🛜 Lite build
+
+The lite build targets routers and other embedded/old-weak-hardware devices:
+console/terminal only, no Colorer (Chroma-based syntax highlighting only), no
+Wine-specific code or `libwinescape` dependency, no MP3 player, no
+FUSE-based VFS mounting, and no cloud/archive/FTP/SFTP/SCP VFS providers
+(archive and network access via wrappers around CLI tools is planned as a
+separate, later addition — f4#1178, part 2). Everything else — panels,
+editor, viewer, plugins that do not need the above — works the same as the
+regular build. Built with `go build -tags lite`; see `internal/plughost`,
+`internal/gui`, `internal/editor`, `vfs/hostmode`, `internal/media` and
+`internal/fusefs` for where each exclusion is implemented.
 
 It is a 32-bit Windows build with its imports patched by
 [go2xp](https://github.com/unxed/go2xp): every Go release since 1.21 imports

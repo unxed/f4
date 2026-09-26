@@ -1,8 +1,16 @@
+//go:build !lite
+
 // Package hostmode holds the single, once-decided answer to "which
 // personality does the file layer run in" (WINE.md §13, Part E): posix
 // (real POSIX paths and syscalls via libwinescape) or windows (today's
 // Win32/os.* behavior, unchanged). vfs/hostfs and vfs/hostpath both consult
 // it so the decision is made in exactly one place, not duplicated.
+//
+// A lite build never links libwinescape at all (see hostmode_lite.go): Wine
+// support is out of scope for a lite build ("no separate Wine-specific code
+// or the winescape dependency" per f4#1178), and this package is the single
+// point of truth for that dependency, exactly as its own doc comment above
+// already says for the posix/windows decision.
 package hostmode
 
 import (

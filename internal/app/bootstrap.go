@@ -844,6 +844,12 @@ func runGuiBackend(backend string, fromConfig bool) error {
 }
 
 func shouldTryGui() bool {
+	if liteBuild {
+		// A lite build has no GUI backend to try (internal/gui/run_lite.go
+		// makes gui.RunGui always fail); go straight to console mode instead
+		// of attempting one and hard-failing when a display happens to be set.
+		return false
+	}
 	if runtime.GOOS == "windows" {
 		// Windows ships separate binaries for console (f4.exe) and GUI
 		// (f4-gui.exe). GUI mode is not auto-detected; it must be requested
