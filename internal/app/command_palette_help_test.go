@@ -179,10 +179,11 @@ func TestCommandPaletteHelpProviderExecutesLiveStateExactly(t *testing.T) {
 	if !executeCommandPaletteEntry(byID["Help.Zoom"]) {
 		t.Fatal("Help.Zoom failed")
 	}
-	// ToggleHelpZoom leaves one extra row below the maximized window so the
-	// Help controls stay inside the visible frame, hence height-4 and not
-	// height-3. internal/dialog/help_search_test.go checks the same bound.
-	if got := [4]int{help.X1, help.Y1, help.X2, help.Y2}; got != [4]int{0, 0, vtui.FrameManager.GetScreenSize() - 1, vtui.FrameManager.GetScreenHeight() - 4} {
+	// f4#904: ToggleHelpZoom leaves one extra row below the maximized window
+	// so its own top border stays inside the visible frame instead of being
+	// scrolled out from under the tab bar, hence height-5 and not height-4.
+	// internal/dialog/help_search_test.go checks the same bound.
+	if got := [4]int{help.X1, help.Y1, help.X2, help.Y2}; got != [4]int{0, 0, vtui.FrameManager.GetScreenSize() - 1, vtui.FrameManager.GetScreenHeight() - 5} {
 		t.Fatalf("zoomed Help bounds = %v", got)
 	}
 	if !executeCommandPaletteEntry(byID["Help.Zoom"]) {
