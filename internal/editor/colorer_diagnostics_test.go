@@ -247,7 +247,7 @@ func TestColorer_SchemeFailureAlsoShowsAToast(t *testing.T) {
 
 	stub := &stubHighlighter{}
 	ch := newColorerHighlighter(nil, "broken.txt", "", stub)
-	t.Cleanup(func() { ch.Close() })
+	t.Cleanup(func() { _ = ch.Close() })
 
 	// The goroutine's own failure handling has already run its toast.Show
 	// and useFallback calls by the time this returns; both only queued
