@@ -119,6 +119,10 @@ func TestCommandPaletteModalWhitelistConsumesUnknownAndAllowsSupportedFrames(t *
 
 func TestCommandPaletteHelpProviderExecutesLiveStateExactly(t *testing.T) {
 	initFrameworkActionTestScreen(t)
+	// f4#904: match the reporter's setup (Workspaces & saving = Always) so
+	// WorkspaceTopInset() reserves the tab strip's row above every frame,
+	// the exact case that the earlier height-only fixes never exercised.
+	vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabsAlways, vtui.WorkspaceCtrlTabDirect)
 	previousHelp := vtui.GlobalHelpEngine
 	t.Cleanup(func() {
 		vtui.GlobalHelpEngine = previousHelp
@@ -179,12 +183,14 @@ func TestCommandPaletteHelpProviderExecutesLiveStateExactly(t *testing.T) {
 	if !executeCommandPaletteEntry(byID["Help.Zoom"]) {
 		t.Fatal("Help.Zoom failed")
 	}
-	// f4#904: ToggleHelpZoom leaves one extra row below the maximized window
-	// so its own top border stays inside the visible frame instead of being
-	// scrolled out from under the tab bar, hence height-5 and not height-4.
-	// internal/dialog/help_search_test.go checks the same bound.
-	if got := [4]int{help.X1, help.Y1, help.X2, help.Y2}; got != [4]int{0, 0, vtui.FrameManager.GetScreenSize() - 1, vtui.FrameManager.GetScreenHeight() - 5} {
-		t.Fatalf("zoomed Help bounds = %v", got)
+	// f4#904: the maximized Help window starts below WorkspaceTopInset()'s
+	// tab-strip row(s) and ends one row above the key bar (height-2),
+	// matching vtui's BaseWindow.ToggleZoom and f4's
+	// settingsCenter.ResizeConsole (both fixed for the identical symptom in
+	// issue #1144). internal/dialog/help_search_test.go checks the same bound.
+	top := vtui.FrameManager.WorkspaceTopInset()
+	if got := [4]int{help.X1, help.Y1, help.X2, help.Y2}; got != [4]int{0, top, vtui.FrameManager.GetScreenSize() - 1, vtui.FrameManager.GetScreenHeight() - 2} {
+		t.Fatalf("zoomed Help bounds = %v, want (0,%d)-(%d,%d)", got, top, vtui.FrameManager.GetScreenSize()-1, vtui.FrameManager.GetScreenHeight()-2)
 	}
 	if !executeCommandPaletteEntry(byID["Help.Zoom"]) {
 		t.Fatal("Help.Zoom restore failed")

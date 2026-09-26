@@ -367,11 +367,17 @@ func ToggleHelpZoom(frame vtui.Frame) bool {
 	} else {
 		currentHelpZoom = &helpZoomState{frame: frame, saved: helpWindowBounds{x1, y1, x2, y2}}
 		width, height := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
-		// f4#904: the maximized help window still rendered its top border
-		// one row too low, under the tab bar, until it collapsed back down.
-		// Leaving one more row free below the window keeps the whole frame,
-		// top border included, inside the visible area.
-		target = helpWindowBounds{0, 0, width - 1, height - 5}
+		// f4#904: three earlier rounds only shrank the target height by a
+		// guessed constant (GetScreenHeight()-2, then -3, -4, -5), which
+		// never moved the top of the window down, so the maximized window's
+		// own top border still rendered under the workspace tab strip. Match
+		// vtui's BaseWindow.ToggleZoom and f4's settingsCenter.ResizeConsole
+		// (both fixed for the identical symptom in issue #1144): the tab
+		// strip owns WorkspaceTopInset() row(s) above and the key bar owns
+		// the bottom row, both painted after frames, so a maximized window
+		// must start below the strip, not just be a row or two shorter.
+		top := vtui.FrameManager.WorkspaceTopInset()
+		target = helpWindowBounds{0, top, width - 1, max(top, height-2)}
 	}
 	lastW, okW := nestedHelpInt(reflect.ValueOf(frame), "lastW")
 	lastH, okH := nestedHelpInt(reflect.ValueOf(frame), "lastH")

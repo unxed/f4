@@ -270,6 +270,16 @@ func TestHelpSearchReadsScrollPositionFromEmbeddedHelpView(t *testing.T) {
 
 func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 	view, scr := newSearchableHelpForTestAtSize(t, 80, 40, []string{"Help text"})
+	// f4#904: reproduce the reporter's setup (Workspaces & saving = Always),
+	// which reserves one row above every frame for the tab strip. Three
+	// earlier rounds pinned this test's expectations while the harness left
+	// WorkspaceTopInset() at its default 0, so it never exercised the exact
+	// case the bug report was about.
+	vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabsAlways, vtui.WorkspaceCtrlTabDirect)
+	top := vtui.FrameManager.WorkspaceTopInset()
+	if top != 1 {
+		t.Fatalf("WorkspaceTopInset() = %d, want 1 with WorkspaceTabsAlways", top)
+	}
 	view.Show(scr)
 	RenderHelpFrame(scr, view)
 	if !view.ShowZoom {
@@ -285,9 +295,14 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 	}) {
 		t.Fatal("zoom button click was not handled")
 	}
+	// The maximized window starts below the tab strip's row(s) (top) and
+	// ends one row above the key bar (height-2), matching vtui's
+	// BaseWindow.ToggleZoom and f4's settingsCenter.ResizeConsole, both of
+	// which were fixed for the identical symptom in issue #1144.
+	wantMaxY1, wantMaxY2 := top, 40-2
 	maxX1, maxY1, maxX2, maxY2 := view.GetPosition()
-	if maxX1 != 0 || maxY1 != 0 || maxX2 != 79 || maxY2 != 35 || currentHelpZoom == nil {
-		t.Fatalf("zoomed Help bounds=(%d,%d)-(%d,%d), zoom state=%v, want (0,0)-(79,35)", maxX1, maxY1, maxX2, maxY2, currentHelpZoom)
+	if maxX1 != 0 || maxY1 != wantMaxY1 || maxX2 != 79 || maxY2 != wantMaxY2 || currentHelpZoom == nil {
+		t.Fatalf("zoomed Help bounds=(%d,%d)-(%d,%d), zoom state=%v, want (0,%d)-(79,%d)", maxX1, maxY1, maxX2, maxY2, currentHelpZoom, wantMaxY1, wantMaxY2)
 	}
 	// f4#904: the maximized window's own top border, with its zoom/collapse
 	// button, must stay inside the visible screen rather than being scrolled
@@ -296,10 +311,10 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 	if got := testutil.Rune(scr.GetCell(maxX2-6, maxY1).Char); got != vtui.UIStrings.ZoomSymbol {
 		t.Fatalf("maximized top border zoom symbol = %q, want %q", got, vtui.UIStrings.ZoomSymbol)
 	}
-	_, _, zoomedX2, _ := view.GetPosition()
+	_, zoomedY1, zoomedX2, _ := view.GetPosition()
 	if !HandleHelpSearchHotkey(&vtinput.InputEvent{
 		Type: vtinput.MouseEventType, KeyDown: true,
-		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: testutil.Int16(zoomedX2 - 6), MouseY: 0,
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: testutil.Int16(zoomedX2 - 6), MouseY: testutil.Int16(zoomedY1),
 	}) {
 		t.Fatal("restore button click was not handled")
 	}
