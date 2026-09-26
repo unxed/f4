@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -170,9 +171,12 @@ func TestEnsureDirRejectsFileInThePlaceOfADir(t *testing.T) {
 }
 
 func TestCopyExecutablePreservesExecutableBit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix-style executable permission bit to preserve")
+	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "f4-src")
-	if err := os.WriteFile(src, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil {
+	if err := os.WriteFile(src, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil { // #nosec G306 -- test fixture, not sensitive
 		t.Fatal(err)
 	}
 	dst := filepath.Join(dir, "out", "f4")
@@ -200,9 +204,12 @@ func TestCopyExecutablePreservesExecutableBit(t *testing.T) {
 }
 
 func TestCopyExecutableSetsExecBitEvenWhenSourceLacksIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix-style executable permission bit to set")
+	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "f4-src")
-	if err := os.WriteFile(src, []byte("binary"), 0o644); err != nil {
+	if err := os.WriteFile(src, []byte("binary"), 0o644); err != nil { // #nosec G306 -- test fixture, not sensitive
 		t.Fatal(err)
 	}
 	dst := filepath.Join(dir, "f4")
@@ -222,11 +229,11 @@ func TestCopyExecutableSetsExecBitEvenWhenSourceLacksIt(t *testing.T) {
 func TestCopyExecutableOverwritesExistingDestination(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "f4-src")
-	if err := os.WriteFile(src, []byte("new binary"), 0o755); err != nil {
+	if err := os.WriteFile(src, []byte("new binary"), 0o755); err != nil { // #nosec G306 -- test fixture, not sensitive
 		t.Fatal(err)
 	}
 	dst := filepath.Join(dir, "f4")
-	if err := os.WriteFile(dst, []byte("old binary, longer content"), 0o755); err != nil {
+	if err := os.WriteFile(dst, []byte("old binary, longer content"), 0o755); err != nil { // #nosec G306 -- test fixture, not sensitive
 		t.Fatal(err)
 	}
 
