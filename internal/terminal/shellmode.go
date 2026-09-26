@@ -98,12 +98,26 @@ func ConsoleViewStyleOf(cfg ShellModeConfig) string {
 	return ConsoleViewOwn
 }
 
-// consoleViewStyle returns the console view configured for this instance.
+// consoleViewStyle returns the console view effective for this instance.
+//
+// config.Defaults hard-codes ConsoleMode to "own" for every platform (a plain
+// struct literal cannot vary per-OS), so "own" sitting in a config is
+// indistinguishable from a user who never touched the setting. Where no PTY
+// is usable (ProbePTYUsable false: pre-ConPTY Windows, or a broken ConPTY
+// under Wine) that untouched "own" cannot be honoured — same as the existing
+// per-call degrade in ConsoleViewStyleFor for Ctrl+O — so it resolves to the
+// Far overlay here too, without rewriting the stored config. An explicit
+// "far" or "mc" choice always passes through unchanged: only the bare "own"
+// value is ever second-guessed, and only because it is not actually a choice.
 func consoleViewStyle() string {
-	return ConsoleViewStyleOf(ShellModeConfig{
+	style := ConsoleViewStyleOf(ShellModeConfig{
 		ConsoleMode:      config.App.ConsoleMode,
 		ConsoleOverlayUI: config.App.ConsoleOverlayUI,
 	})
+	if style == ConsoleViewOwn && !ProbePTYUsable() {
+		return ConsoleViewFar
+	}
+	return style
 }
 
 // ConsoleViewStyleFor adapts the configured style to an already resolved shell

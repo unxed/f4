@@ -163,6 +163,62 @@ func TestConsoleViewStyleFor_OwnDegradesWithoutPTY(t *testing.T) {
 		t.Errorf("ConsoleViewStyleFor(Own) = %q, want %q", got, ConsoleViewOwn)
 	}
 }
+
+// config.Defaults hard-codes ConsoleMode to "own" for every platform (f4#1488):
+// a plain struct literal cannot vary per-OS, so a stored "own" the user never
+// touched is indistinguishable from one they chose deliberately. Where no PTY
+// is usable that value cannot be honoured, so consoleViewStyle() (and
+// everything that goes through it, i.e. every ConsoleViewStyleFor caller, not
+// only the Ctrl+O SimpleInline/SimpleCaptured degrade already covered above)
+// must resolve it to the Far overlay -- without touching the stored config.
+func TestConsoleViewStyleFor_DefaultOwnResolvesByPTYAvailability(t *testing.T) {
+	oldCfg := config.App
+	oldProbePTY := ProbePTYUsable
+	defer func() {
+		config.App = oldCfg
+		ProbePTYUsable = oldProbePTY
+	}()
+
+	config.App.ConsoleMode = ConsoleViewOwn
+	config.App.ConsoleOverlayUI = false
+
+	ProbePTYUsable = func() bool { return false }
+	if got := ConsoleViewStyleFor(ShellModeOwn); got != ConsoleViewFar {
+		t.Errorf("stored own + PTY unusable: ConsoleViewStyleFor(Own) = %q, want %q", got, ConsoleViewFar)
+	}
+
+	ProbePTYUsable = func() bool { return true }
+	if got := ConsoleViewStyleFor(ShellModeOwn); got != ConsoleViewOwn {
+		t.Errorf("stored own + PTY usable: ConsoleViewStyleFor(Own) = %q, want %q", got, ConsoleViewOwn)
+	}
+}
+
+// An explicit "far" or "mc" choice is a real, unambiguous user preference --
+// unlike bare "own", it is never second-guessed by PTY availability.
+func TestConsoleViewStyleFor_ExplicitFarAndMcNeverOverridden(t *testing.T) {
+	oldCfg := config.App
+	oldProbePTY := ProbePTYUsable
+	defer func() {
+		config.App = oldCfg
+		ProbePTYUsable = oldProbePTY
+	}()
+
+	for _, ptyUsable := range []bool{true, false} {
+		ProbePTYUsable = func() bool { return ptyUsable }
+
+		config.App.ConsoleMode = ConsoleViewFar
+		config.App.ConsoleOverlayUI = false
+		if got := ConsoleViewStyleFor(ShellModeHost); got != ConsoleViewFar {
+			t.Errorf("ptyUsable=%v: stored far = %q, want %q", ptyUsable, got, ConsoleViewFar)
+		}
+
+		config.App.ConsoleMode = ConsoleViewMc
+		if got := ConsoleViewStyleFor(ShellModeHost); got != ConsoleViewMc {
+			t.Errorf("ptyUsable=%v: stored mc = %q, want %q", ptyUsable, got, ConsoleViewMc)
+		}
+	}
+}
+
 func TestResolveShellMode_LegacyWindowsDegradesToSimpleInlineAndFarOverlay(t *testing.T) {
 	oldProbeGUI := ProbeGUIBackend
 	oldProbeTTY := ProbeHostTTY
