@@ -27,13 +27,15 @@ func prepareWindowCaptureCoverageBatch46(t *testing.T, backend string, renderer 
 	oldFrameManager := vtui.FrameManager
 	oldBackend := vtui.ActiveBackend()
 	oldApp := config.App
+	vtui.FrameManager = vtui.NewFrameManager()
+	managedFrameManager := vtui.FrameManager
 	t.Cleanup(func() {
+		managedFrameManager.Shutdown()
 		vtui.FrameManager = oldFrameManager
 		vtui.SetActiveBackend(oldBackend)
 		config.App = oldApp
 	})
 
-	vtui.FrameManager = vtui.NewFrameManager()
 	scr := vtui.NewSilentScreenBuf()
 	scr.Renderer = renderer
 	vtui.FrameManager.Init(scr)
