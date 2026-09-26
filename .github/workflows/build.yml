@@ -856,6 +856,31 @@ jobs:
       if: steps.affected.outputs.build == 'yes'
       run: mv go2xp-src "$RUNNER_TEMP/go2xp-src"
 
+    - name: Generate the windows/386 icon resource
+      if: steps.affected.outputs.build == 'yes'
+      run: |
+        set -euo pipefail
+        # tools/icons (see its go:generate directive in cmd/f4/main.go) only
+        # calls go-winres for --arch amd64,arm64, because those are the only
+        # GOARCH values the regular Windows build matrix uses, so no
+        # rsrc_windows_386.syso is checked in and this job's go build linked
+        # no icon at all (f4#897, item 1 of 3). A .syso is picked up by the
+        # linker automatically as long as it sits next to main.go, exactly
+        # like the checked-in amd64/arm64 ones, so generate it here instead
+        # of checking in another binary asset; same tool, pinned version and
+        # icon file as tools/icons/main.go's makeWindowsResources.
+        # GOOS/GOARCH are job-level env for cross-compiling f4.exe itself;
+        # go-winres has to run on the runner, not on the (386) target.
+        (cd cmd/f4 && env -u GOOS -u GOARCH go run github.com/tc-hib/go-winres@v0.3.3 simply \
+          --arch 386 \
+          --out rsrc \
+          --manifest gui \
+          --product-name f4 \
+          --file-description "f4 file manager" \
+          --original-filename f4.exe \
+          --icon ../../internal/gui/assets/icon/generated/f4.ico)
+        ls -l cmd/f4/rsrc_windows_386.syso
+
     - name: Build binaries
       if: steps.affected.outputs.build == 'yes'
       run: |
