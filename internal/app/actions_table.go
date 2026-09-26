@@ -1687,6 +1687,7 @@ func init() {
 		Name:        "Panel.Toggle",
 		Area:        "Shell",
 		Label:       "Toggle Panels",
+		LabelKey:    "Action.Panel.Toggle",
 		Description: "Show or hide panels",
 		DescKey:     "Action.Panel.Toggle.Desc",
 		// Ctrl+O belongs to the program running in the terminal, as in far2l:
@@ -1767,6 +1768,7 @@ func init() {
 		Name:         "Panel.TogglePassivePanel",
 		Area:         "Shell",
 		Label:        "Toggle Passive Panel",
+		LabelKey:     "Action.Panel.TogglePassivePanel",
 		Description:  "Show or hide the passive panel",
 		DescKey:      "Action.Panel.TogglePassivePanel.Desc",
 		DefaultKeys:  []string{"CtrlP:NoTerminalApp"},
