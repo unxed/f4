@@ -41,7 +41,22 @@ var pluginCommandRegistry = struct {
 	sync.RWMutex
 	byID  map[string]registeredPluginCommand
 	order []string
+	// generation counts registrations and unregistrations, so a caller that
+	// caches something built from PluginCommandsSnapshot (a generated menu,
+	// say) can notice a plugin command coming or going without re-snapshotting
+	// the registry on every call just to compare it against what it had. It
+	// does not change when a command's own Visible(app) predicate would answer
+	// differently on the same registered set — that is beyond what a counter
+	// over the registry can see.
+	generation uint64
 }{byID: make(map[string]registeredPluginCommand)}
+
+// PluginCommandRegistryGeneration reports pluginCommandRegistry's generation.
+func PluginCommandRegistryGeneration() uint64 {
+	pluginCommandRegistry.RLock()
+	defer pluginCommandRegistry.RUnlock()
+	return pluginCommandRegistry.generation
+}
 
 func validatePluginCommand(command vfs.PluginCommand) error {
 	command.ID = strings.TrimSpace(command.ID)
@@ -188,6 +203,7 @@ func RegisterPluginCommand(command vfs.PluginCommand) (vfs.Registration, error) 
 	}
 	pluginCommandRegistry.byID[registryID] = registeredPluginCommand{command: command, token: token}
 	pluginCommandRegistry.order = append(pluginCommandRegistry.order, registryID)
+	pluginCommandRegistry.generation++
 	pluginCommandRegistry.Unlock()
 
 	return &UnregisterFunc{fn: func() {
@@ -200,6 +216,7 @@ func RegisterPluginCommand(command vfs.PluginCommand) (vfs.Registration, error) 
 					break
 				}
 			}
+			pluginCommandRegistry.generation++
 		}
 		pluginCommandRegistry.Unlock()
 	}}, nil

@@ -45,6 +45,24 @@ type HotkeyManager struct {
 	Bindings map[string]map[string]string // Area -> Key -> ActionName
 	Defaults map[string]map[string]string // Area -> Key -> ActionName
 	IniPath  string
+
+	// generation counts changes to the active bindings (Bind, Unbind, Load,
+	// ReplaceBindingsFrom). It lets a caller that derives something from
+	// GetKeyForAction/MenuShortcutsForAction — a generated menu's shortcut
+	// column, say — cache that work and cheaply notice when a rebind (issue
+	// #651, the Options > Keys dialog) invalidates it, without recomputing it
+	// on every call just to compare it against what it already had.
+	generation uint64
+}
+
+// Generation reports how many times this manager's active bindings have
+// changed. A nil manager (no HotkeyManager configured yet) never changes, so
+// it reports 0.
+func (hm *HotkeyManager) Generation() uint64 {
+	if hm == nil {
+		return 0
+	}
+	return hm.generation
 }
 
 // GetConditions returns the user-friendly names of all registered conditions.
@@ -107,6 +125,7 @@ func (hm *HotkeyManager) ReplaceBindingsFrom(src *HotkeyManager) {
 		return
 	}
 	hm.Bindings = cloneHotkeyBindings(src.Bindings)
+	hm.generation++
 }
 
 // GetActiveBindings returns a map of Area -> Key -> ActionName containing all active bindings.
@@ -343,6 +362,7 @@ func (hm *HotkeyManager) InitDefaults() {
 
 // Load reads bindings from the INI file, overlaying them onto the defaults.
 func (hm *HotkeyManager) Load() {
+	hm.generation++
 	hm.Bindings = make(map[string]map[string]string)
 
 	// Copy defaults
@@ -561,6 +581,7 @@ func (hm *HotkeyManager) Bind(area, key, action string) {
 		hm.Bindings[area] = make(map[string]string)
 	}
 	hm.Bindings[area][key] = action
+	hm.generation++
 }
 
 // Unbind removes a hotkey binding.
@@ -568,6 +589,7 @@ func (hm *HotkeyManager) Unbind(area, key string) {
 	if binds, ok := hm.Bindings[area]; ok {
 		delete(binds, key)
 	}
+	hm.generation++
 }
 
 // KeyBarLabelsForArea resolves F1-F12 keybar labels for the given area

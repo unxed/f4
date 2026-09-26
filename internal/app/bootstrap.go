@@ -1099,6 +1099,12 @@ func setupUI(firstRunStyle func() (string, bool)) {
 	panel.RunAction = RunAction
 	panel.BuildMenuBarItems = BuildMenuBarItems
 	panel.SaveSession = SaveSession
+	panel.GetMenuContentSignal = func() panel.MenuContentSignalValue {
+		return panel.MenuContentSignalValue{
+			PluginCommandGeneration: plughost.PluginCommandRegistryGeneration(),
+			AIPatchPresent:          aiSession().LastPatch() != nil,
+		}
+	}
 	panel.OpenEditor = actionOpenEditor
 	panel.OpenViewer = actionOpenViewer
 	panel.OpenViewerInternal = openViewerInternal
