@@ -555,6 +555,13 @@ type FileSystemPanel struct {
 	// UseSortGroups clusters the panel by the Group-bearing highlight.ini
 	// rules before the sort mode is applied (far's Shift+F11).
 	UseSortGroups bool
+	// SortNumeric makes name comparisons treat runs of digits inside a file
+	// name as numbers instead of plain text (far3's "numeric sort" checkbox
+	// next to sort-by-name, f4#1471): "2.Track_2" then sorts before
+	// "10.Track_10" instead of after it. It modifies how names compare
+	// everywhere a name is the sort key or its tie-break, the same way
+	// UseSortGroups modifies clustering regardless of SortMode.
+	SortNumeric bool
 
 	lastDirMTime time.Time
 	DirCache     map[dirCacheKey]DirCacheEntry
@@ -853,6 +860,28 @@ func (fp *FileSystemPanel) ToggleSortGroups() {
 	fp.SetUseSortGroups(!fp.UseSortGroups)
 }
 
+// SetSortNumeric switches whether name comparisons treat digit runs as
+// numbers. Like a sort mode change it goes through ReadDirectory, so the
+// cursor is kept on the same file while the rows move under it.
+func (fp *FileSystemPanel) SetSortNumeric(numeric bool) {
+	if fp == nil || fp.SortNumeric == numeric {
+		return
+	}
+	fp.SortNumeric = numeric
+	if fp.GroupBy != GroupNone {
+		fp.SetGrouping(fp.GroupBy, fp.GroupReverse, fp.GroupFoldersSeparately)
+		return
+	}
+	fp.ReadDirectory()
+}
+
+func (fp *FileSystemPanel) ToggleSortNumeric() {
+	if fp == nil {
+		return
+	}
+	fp.SetSortNumeric(!fp.SortNumeric)
+}
+
 // sortGroupsActive reports whether this panel's entries have to be clustered:
 // the panel asked for it and there is at least one configured group.
 func (fp *FileSystemPanel) sortGroupsActive() bool {
@@ -885,6 +914,9 @@ func (fp *FileSystemPanel) sortEntriesAt(now time.Time) {
 	// is not safe for concurrent use.
 	nameCollator := collate.New(language.Und, collate.IgnoreCase, collate.Force)
 	compareName := func(left, right string) int {
+		if fp.SortNumeric {
+			return naturalCompare(left, right, nameCollator.CompareString)
+		}
 		return nameCollator.CompareString(left, right)
 	}
 

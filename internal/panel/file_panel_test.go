@@ -3409,6 +3409,57 @@ func TestFileSystemPanel_Sorting(t *testing.T) {
 	}
 }
 
+// TestFileSystemPanel_SortNumeric covers f4#1471: with SortNumeric on, name
+// sort must treat the leading track number as a number ("2" before "10")
+// instead of comparing it as plain text ("10" before "2").
+func TestFileSystemPanel_SortNumeric(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	v := vfs.NewOSVFS(t.TempDir())
+	fp := NewFileSystemPanel(0, 0, 80, 24, v)
+	waitForLoad(t, fp)
+
+	fp.Entries = []*FileEntry{
+		{VFSItem: vfs.VFSItem{Name: ".."}},
+		{VFSItem: vfs.VFSItem{Name: "10.Track_10"}},
+		{VFSItem: vfs.VFSItem{Name: "1.Track_1"}},
+		{VFSItem: vfs.VFSItem{Name: "2.Track_2"}},
+	}
+
+	fp.SortMode = SortName
+	fp.SortReverse = false
+	fp.SortNumeric = false
+	fp.SortEntries()
+	// Plain text order does not know "10" is bigger than "2" — that is
+	// precisely the bug reported in f4#1471.
+	gotPlain := []string{fp.Entries[1].Name, fp.Entries[2].Name, fp.Entries[3].Name}
+	wantNumeric := []string{"1.Track_1", "2.Track_2", "10.Track_10"}
+	if reflect.DeepEqual(gotPlain, wantNumeric) {
+		t.Fatalf("plain name sort = %v already numeric; test no longer reproduces the bug", gotPlain)
+	}
+
+	fp.SortNumeric = true
+	fp.SortEntries()
+	gotNumeric := []string{fp.Entries[1].Name, fp.Entries[2].Name, fp.Entries[3].Name}
+	if !reflect.DeepEqual(gotNumeric, wantNumeric) {
+		t.Fatalf("numeric name sort = %v, want %v", gotNumeric, wantNumeric)
+	}
+
+	// SetSortNumeric/ToggleSortNumeric flip the flag the same way the
+	// UseSortGroups setters do, and are a no-op on a nil panel.
+	var nilPanel *FileSystemPanel
+	nilPanel.SetSortNumeric(true)
+	nilPanel.ToggleSortNumeric()
+
+	fp.SetSortNumeric(false)
+	if fp.SortNumeric {
+		t.Error("SetSortNumeric(false) left SortNumeric set")
+	}
+	fp.ToggleSortNumeric()
+	if !fp.SortNumeric {
+		t.Error("ToggleSortNumeric did not turn numeric sort on")
+	}
+}
+
 func TestFileSystemPanel_SetSortModeUsesModeDefaultDirection(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewNullVFS(0))

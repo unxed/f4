@@ -1316,12 +1316,16 @@ func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 	if !ok {
 		t.Fatalf("Ctrl+F12 top frame = %T, want *vtui.VMenu", vtui.FrameManager.GetTopFrame())
 	}
-	// Five sort modes, the legacy sort-group toggle and the grouping menu.
-	if len(menu.Items) != 7 {
-		t.Fatalf("sort menu has %d items, want 7", len(menu.Items))
+	// Five sort modes, the legacy sort-group toggle, the numeric-sort toggle
+	// (f4#1471) and the grouping menu.
+	if len(menu.Items) != 8 {
+		t.Fatalf("sort menu has %d items, want 8", len(menu.Items))
 	}
 	if !strings.Contains(menu.Items[5].Text, i18n.Msg("Menu.SortUseGroups")) {
-		t.Fatalf("last sort menu row = %q, want the sort-group toggle", menu.Items[5].Text)
+		t.Fatalf("sort-group toggle row = %q, want the sort-group toggle", menu.Items[5].Text)
+	}
+	if !strings.Contains(menu.Items[6].Text, i18n.Msg("Menu.SortNumeric")) {
+		t.Fatalf("numeric-sort toggle row = %q, want the numeric-sort toggle", menu.Items[6].Text)
 	}
 	panelX1, panelY1, panelX2, panelY2 := fsp.GetPosition()
 	menuX1, menuY1, menuX2, menuY2 := menu.GetPosition()

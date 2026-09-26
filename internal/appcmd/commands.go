@@ -99,4 +99,9 @@ const (
 	CmWorkspaceNewTerminal
 	CmLeftGroupMenu
 	CmRightGroupMenu
+	// Appended for the same reason: numeric ("natural") name sort is new
+	// (f4#1471) and the commands above keep the numbers they had.
+	CmSortNumeric
+	CmLeftSortNumeric
+	CmRightSortNumeric
 )
