@@ -40,7 +40,7 @@ func TestIssue1186WinRARAesSFXPassword(t *testing.T) {
 
 	root := t.TempDir()
 	path := filepath.Join(root, "setup.exe")
-	if err := os.WriteFile(path, fixture, 0o600); err != nil { // #nosec G703 -- path is inside the per-test directory created by testing.T.TempDir.
+	if err := os.WriteFile(path, fixture, 0o600); err != nil { // #nosec G703 -- path is t.TempDir() joined with a literal name, not user input
 		t.Fatal(err)
 	}
 	ctx := context.Background()
