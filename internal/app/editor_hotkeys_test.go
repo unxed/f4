@@ -41,8 +41,12 @@ func TestEditorView_HexMode_KeyBarClickDispatchesConfiguredAction(t *testing.T) 
 		t.Fatal("failed to enter Hex mode")
 	}
 	keymap.GlobalHotkeysMgr.Bind("Editor", "F9", "Editor.HexMode")
-	if labels := ev.GetKeyLabels(); labels.Normal[8] != "Hex Mode" {
-		t.Fatalf("F9 key-bar label = %q, want Hex Mode", labels.Normal[8])
+	// "Hex", not "Hex Mode": f4#1218 added the "Action.Editor.HexMode" i18n
+	// key (mirroring Viewer.HexMode's own "&Hex"), so DisplayLabel() now
+	// resolves through it instead of silently falling back to the English
+	// Action.Label field this assertion used to pin down.
+	if labels := ev.GetKeyLabels(); labels.Normal[8] != "Hex" {
+		t.Fatalf("F9 key-bar label = %q, want Hex", labels.Normal[8])
 	}
 
 	// This is the exact key event synthesized for an F9 key-bar click.
