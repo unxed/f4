@@ -213,3 +213,86 @@ func TestPanelsFrame_LocalUnixCommandKeepsPersistentShellDirectory(t *testing.T)
 		t.Fatalf("alias command did not reach the persistent term.PTY shell: %q", written)
 	}
 }
+
+// TestPanelsFrame_LocalUnixCommandKeepsCdWhenPanelNeedsSudo is the regression
+// test for f4#1255's fifth report: a command typed into f4's command line ran
+// in the wrong directory whenever the active panel's folder needed sudo to
+// even be looked at, regardless of whether the typed command itself used
+// sudo.
+//
+// The persistent local Unix shell is optimized so a plain command does not
+// re-impose "cd '<panel path>' &&" once the panel and the shell are known to
+// agree (the test above, cd:home): syncPTYDirectory sends the cd once and the
+// caller then blanks the panel path out of every command that follows, on the
+// assumption that cd succeeded. That assumption does not hold for a folder
+// that needs sudo to list: the persistent shell is this same unprivileged
+// process's child, so its own plain cd is refused exactly where OSVFS.Stat
+// would have to fall back to the sudo helper, and there is no way to read the
+// shell's reply back to know that happened. Before the fix, the caller
+// trusted the refused cd anyway, blanked the path, and every command after
+// that ran wherever the shell's cd had *actually* left it -- typically the
+// previous directory -- with no visible error. The fix makes syncPTYDirectory
+// report the sync as unconfirmed for such a path (OSVFS.NeedsElevation, the
+// same fast permission probe #1261 already uses for panel navigation), so the
+// caller keeps sending the command with its own explicit cd every time
+// instead of silently trusting one that may not have landed.
+func TestPanelsFrame_LocalUnixCommandKeepsCdWhenPanelNeedsSudo(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix term.PTY command composition")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root is refused nothing, so the folder cannot be made to need sudo")
+	}
+
+	// NeedsElevation only asks whether the sudo helper is available, never
+	// whether it can actually do anything -- a bare non-nil SudoClient
+	// answers that without a real dispatcher process. Restore whatever was
+	// there (nothing, in a normal test run) so this does not leak into
+	// unrelated tests that run afterwards in the same binary.
+	prevSudo := vfs.GetSudoClient()
+	vfs.InitSudoClient("f4", "")
+	t.Cleanup(func() { vfs.SetSudoClientForTest(prevSudo) })
+
+	pf := paneltest.SetupMockPanelsFrame(t)
+	defer pf.Close()
+	pty := pf.Pty.(*paneltest.MockPty)
+
+	locked := filepath.Join(t.TempDir(), "locked")
+	if err := os.Mkdir(locked, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0700) })
+
+	fsp := pf.Panels[pf.ActiveIdx].(*panel.FileSystemPanel)
+	// Stands in for the panel having already navigated here: post-f4#1411,
+	// a real Enter keypress resolves and commits exactly this real absolute
+	// path via the sudo-aware OSVFS.ResolveElevated/CommitPath, so GetPath()
+	// is correct going in -- this bug is not about that path being wrong.
+	fsp.Vfs = vfs.NewOSVFS(locked)
+	// The persistent shell last agreed with the panel somewhere else, so the
+	// command about to run has to (re)sync first.
+	pf.LastPtyPath = filepath.Dir(locked)
+	pf.LastPtyVFS = fsp.Vfs
+
+	pf.CmdLine.Edit.SetText("pwd")
+	pressKey(pf, &vtinput.InputEvent{
+		Type:           vtinput.KeyEventType,
+		KeyDown:        true,
+		VirtualKeyCode: vtinput.VK_RETURN,
+	})
+
+	written := pty.String()
+	wantCd := "cd '" + strings.ReplaceAll(locked, "'", "'\\''") + "'"
+	if !strings.Contains(written, wantCd) {
+		t.Fatalf("command ran without an explicit cd into the sudo-only folder %q: %q", locked, written)
+	}
+	if !strings.Contains(written, "pwd") {
+		t.Fatalf("the typed command itself is missing from the wire text: %q", written)
+	}
+	if pf.LastPtyPath == locked {
+		t.Fatalf("panel recorded the persistent shell as having reached %q, but a plain cd there cannot be confirmed to have succeeded", locked)
+	}
+}

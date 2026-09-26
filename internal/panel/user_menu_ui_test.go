@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -179,6 +181,118 @@ func TestFindLocalFarMenu_PicksClosest(t *testing.T) {
 	midAbs, _ := filepath.EvalSymlinks(midMenu)
 	if gotAbs != midAbs {
 		t.Errorf("closest wins: got %q, want %q", gotAbs, midAbs)
+	}
+}
+
+// elevatingFarMenuVFS wraps a real OSVFS, answering Stat/Open on paths that
+// the plain host refuses exactly the way the sudo-elevated fallback #1261
+// gave OSVFS.Stat/Open would -- without starting a real dispatcher (which
+// would mean a real, interactive sudo prompt in a test). It exists to prove
+// FindLocalFarMenuVFS/LoadFarMenuFileVFS actually go through v's own
+// Stat/Open -- and so would go through that real fallback in production --
+// instead of a raw os.Stat/os.Open, which this refusal cannot be worked
+// around at all (f4#1255): that is the one thing a real chmod(0) directory
+// on its own cannot tell apart, since both a fixed and an unfixed lookup
+// fail to reach the file with no elevation route available.
+type elevatingFarMenuVFS struct {
+	*vfs.OSVFS
+	elevated map[string]vfs.VFSItem
+	content  map[string][]byte
+}
+
+func (v *elevatingFarMenuVFS) Stat(ctx context.Context, path string) (vfs.VFSItem, error) {
+	item, err := v.OSVFS.Stat(ctx, path)
+	if err == nil || !os.IsPermission(err) {
+		return item, err
+	}
+	if it, ok := v.elevated[path]; ok {
+		return it, nil
+	}
+	return item, err
+}
+
+func (v *elevatingFarMenuVFS) Open(ctx context.Context, path string) (vfs.ReadAtCloser, error) {
+	f, err := v.OSVFS.Open(ctx, path)
+	if err == nil || !os.IsPermission(err) {
+		return f, err
+	}
+	if data, ok := v.content[path]; ok {
+		return &memReadAtCloser{r: bytes.NewReader(data)}, nil
+	}
+	return f, err
+}
+
+type memReadAtCloser struct{ r *bytes.Reader }
+
+func (m *memReadAtCloser) ReadAt(_ context.Context, p []byte, off int64) (int, error) {
+	return m.r.ReadAt(p, off)
+}
+func (m *memReadAtCloser) Read(_ context.Context, p []byte) (int, error) { return m.r.Read(p) }
+func (m *memReadAtCloser) Close() error                                  { return nil }
+func (m *memReadAtCloser) Size() int64                                   { return m.r.Size() }
+
+// TestFindLocalFarMenuVFS_UsesVFSElevationForASudoOnlyFolder is the
+// regression test for f4#1255's fifth report: opening the user menu (F2) or
+// Settings Center while the active panel sits in a folder that needs sudo to
+// even be looked at silently missed that folder's own FarMenu.ini (or, from
+// Settings Center, surfaced the raw "open ...FarMenu.ini: permission denied"
+// instead of the menu). FindLocalFarMenu/LoadFarMenuFile used a raw os.Stat
+// and os.Open, which have no sudo fallback at all; FindLocalFarMenuVFS and
+// LoadFarMenuFileVFS go through the panel's own VFS instead, which already
+// has one (OSVFS.Stat/Open, #1261) for exactly this folder.
+func TestFindLocalFarMenuVFS_UsesVFSElevationForASudoOnlyFolder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sudo is not a Windows concept")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root is refused nothing, so the folder cannot be made to need sudo")
+	}
+
+	locked := filepath.Join(t.TempDir(), "locked")
+	if err := os.Mkdir(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	menuPath := filepath.Join(locked, FarMenuFileName)
+	menuBody := []byte("x:  X\r\n    echo hi\r\n")
+	if err := os.WriteFile(menuPath, menuBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Lock the folder itself only after writing into it: chmod(0) leaves
+	// this same unprivileged process unable to even open the directory
+	// afterwards, exactly the "sudo-only" folder #1261's own tests build.
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+
+	item, err := (&vfs.OSVFS{}).Stat(context.Background(), menuPath)
+	_ = item
+	if err == nil || !os.IsPermission(err) {
+		t.Fatalf("expected the plain, unprivileged Stat itself to be refused first, got %v", err)
+	}
+
+	v := &elevatingFarMenuVFS{
+		OSVFS: vfs.NewOSVFS(locked),
+		elevated: map[string]vfs.VFSItem{
+			menuPath: {Name: FarMenuFileName, Size: int64(len(menuBody)), SizeKnown: true},
+		},
+		content: map[string][]byte{menuPath: menuBody},
+	}
+
+	path, found := FindLocalFarMenuVFS(context.Background(), v, locked)
+	if !found {
+		t.Fatalf("FindLocalFarMenuVFS did not find %q through the elevated VFS", menuPath)
+	}
+	if path != menuPath {
+		t.Fatalf("FindLocalFarMenuVFS = %q, want %q", path, menuPath)
+	}
+
+	items, err := LoadFarMenuFileVFS(context.Background(), v, path)
+	if err != nil {
+		t.Fatalf("LoadFarMenuFileVFS = %v, want the elevated Open to serve the file", err)
+	}
+	if len(items) != 1 || items[0].HotKey != "x" || items[0].Label != "X" {
+		t.Fatalf("LoadFarMenuFileVFS returned %+v, want the one parsed item from menuBody", items)
 	}
 }
 

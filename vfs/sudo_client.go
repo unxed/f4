@@ -39,6 +39,18 @@ func GetSudoClient() *SudoClient {
 	return globalSudoClient
 }
 
+// SetSudoClientForTest replaces the global SudoClient and returns the
+// previous one, so a test outside this package can make IsAvailable()
+// report true (a bare &SudoClient{} answers it without a real dispatcher,
+// since IsAvailable only checks that the pointer is non-nil) and restore
+// whatever was there before in a t.Cleanup, the same way this package's own
+// tests swap globalSudoClient directly.
+func SetSudoClientForTest(c *SudoClient) *SudoClient {
+	old := globalSudoClient
+	globalSudoClient = c
+	return old
+}
+
 // IsAvailable checks if the SudoClient has been initialized.
 func (c *SudoClient) IsAvailable() bool {
 	res := c != nil && sudoClientSupported()

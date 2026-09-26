@@ -73,3 +73,27 @@ func refuseNotListable(dir string) error {
 	}
 	return &NotListableError{Path: dir, Err: err}
 }
+
+// NeedsElevationToEnter reports whether an ordinary, unprivileged open of dir
+// -- the access SetPath's own refuseNotListable checks, and the same one
+// ReadDir and a plain shell's own "cd" need -- would be refused, with the
+// sudo helper available to do it instead.
+//
+// This is not OSVFS.NeedsElevation: that one asks whether a bare Stat of a
+// path needs elevation, which is true for a path nested one level inside a
+// directory that already refuses listing, but false for the boundary
+// directory itself (a plain Stat of it only walks its parents, never checks
+// its own permission bits -- the same reason SetPath's own resolveAndStat
+// happily resolves a mode-0700 folder someone else owns). This instead does
+// the real access check, so it correctly reports "needs sudo" for that far
+// more common case: the folder the active panel is actually sitting in,
+// which is exactly what a caller deciding whether a plain unprivileged
+// shell's own "cd" can reach it needs to know (f4#1255).
+//
+// It costs one real open+close, exactly like checkOSDirListable itself; it
+// never calls into the sudo helper, so -- like NeedsElevation -- it is safe
+// to call from the UI goroutine.
+func (v *OSVFS) NeedsElevationToEnter(dir string) bool {
+	err := checkOSDirListable(dir)
+	return err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable()
+}

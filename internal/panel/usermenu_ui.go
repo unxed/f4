@@ -2,6 +2,7 @@ package panel
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -75,12 +76,34 @@ func MainMenuFilePath() string {
 	return filepath.Join(config.GetF4ConfigDir(), "settings", "user_menu.ini")
 }
 
-// FindLocalFarMenu walks startDir upward looking for FarMenu.ini.
+// FindLocalFarMenu walks startDir upward looking for FarMenu.ini. It goes
+// through a bare OSVFS's own Stat rather than a raw os.Stat, so a directory
+// that needs the sudo helper to even be looked at is still resolved through
+// the same elevation fallback #1261 already gave OSVFS.Stat/Open, instead of
+// the caller silently treating a permission refusal as "nothing here" (or,
+// worse, a later Open on the same path surfacing that refusal as a bare
+// "permission denied" once it stops being silent -- f4#1255). A plain
+// os.Getwd()-derived or near-binary startDir never needs elevation, so this
+// costs those callers nothing beyond the one extra permission check.
 func FindLocalFarMenu(startDir string) (path string, found bool) {
+	return FindLocalFarMenuVFS(context.Background(), farMenuLookupVFS, startDir)
+}
+
+// farMenuLookupVFS is a bare, pathless OSVFS: Stat and Open take an already
+// absolute path and never consult v's own current directory, so one shared,
+// stateless instance is fine for every FindLocalFarMenu/LoadFarMenuFile
+// caller that has no panel VFS of its own to pass to the *VFS variant below.
+var farMenuLookupVFS = vfs.NewOSVFS("")
+
+// FindLocalFarMenuVFS is FindLocalFarMenu resolved through v.Stat instead of
+// a raw os.Stat, for a caller that has the panel's own VFS on hand (the
+// MenuModeLocal lookup does, since the folder that needs sudo is exactly the
+// one the active panel is sitting in).
+func FindLocalFarMenuVFS(ctx context.Context, v vfs.VFS, startDir string) (path string, found bool) {
 	dir := startDir
 	for {
 		candidate := filepath.Join(dir, FarMenuFileName)
-		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+		if item, err := v.Stat(ctx, candidate); err == nil && !item.IsDir {
 			return candidate, true
 		}
 		parent := filepath.Dir(dir)
@@ -104,14 +127,22 @@ func findFarMenuNearBinary() (path string, found bool) {
 	return "", false
 }
 
-// LoadFarMenuFile reads a FarMenu.ini (text format) into a slice.
+// LoadFarMenuFile reads a FarMenu.ini (text format) into a slice. See
+// FindLocalFarMenu for why this goes through a bare OSVFS's Open rather than
+// a raw os.Open (f4#1255).
 func LoadFarMenuFile(path string) ([]UserMenuItem, error) {
-	f, err := os.Open(path)
+	return LoadFarMenuFileVFS(context.Background(), farMenuLookupVFS, path)
+}
+
+// LoadFarMenuFileVFS is LoadFarMenuFile resolved through v.Open instead of a
+// raw os.Open, for a caller that has the panel's own VFS on hand.
+func LoadFarMenuFileVFS(ctx context.Context, v vfs.VFS, path string) ([]UserMenuItem, error) {
+	f, err := v.Open(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	return ParseFarMenu(f)
+	defer func() { _ = f.Close() }()
+	return ParseFarMenu(contextReader{ctx: ctx, reader: f})
 }
 
 // saveFarMenuFile writes a FarMenu.ini text-format file atomically.
@@ -187,11 +218,14 @@ func LoadMenuForMode(pf *PanelsFrame, mode MenuMode) (items []UserMenuItem, titl
 		if fsp == nil {
 			return nil, i18n.Msg("UserMenu.LocalMenuTitle"), "", false
 		}
-		path, found := FindLocalFarMenu(fsp.Vfs.GetPath())
+		// Go through the panel's own VFS (not the bare one FindLocalFarMenu
+		// otherwise defaults to): it is the VFS that may need sudo to look
+		// at this exact directory (f4#1255).
+		path, found := FindLocalFarMenuVFS(context.Background(), fsp.Vfs, fsp.Vfs.GetPath())
 		if !found {
 			return nil, i18n.Msg("UserMenu.LocalMenuTitle"), "", false
 		}
-		loaded, err := LoadFarMenuFile(path)
+		loaded, err := LoadFarMenuFileVFS(context.Background(), fsp.Vfs, path)
 		if err != nil {
 			return nil, i18n.Msg("UserMenu.LocalMenuTitle"), path, false
 		}

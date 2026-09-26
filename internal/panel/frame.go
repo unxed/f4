@@ -2919,13 +2919,28 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				// this one-shot check only covers an Enter arriving before the
 				// next frame refresh.
 				if localShellVFS != nil && !isWindowsShell {
-					if path != pf.LastPtyPath || !fileops.SameVFSInstance(localShellVFS, pf.LastPtyVFS) {
+					synced := path == pf.LastPtyPath && fileops.SameVFSInstance(localShellVFS, pf.LastPtyVFS)
+					if !synced {
 						if pf.syncPTYDirectory(path, localShellVFS) {
 							pf.LastPtyPath = path
 							pf.LastPtyVFS = localShellVFS
+							synced = true
 						}
 					}
-					path = ""
+					// Only drop the panel path from the command about to be
+					// composed once the shell is confirmed to be there.
+					// syncPTYDirectory reports false when path needs sudo to
+					// even be looked at (f4#1255): the plain "cd" it just sent
+					// to this unprivileged shell may well have been refused,
+					// and blanking path here regardless is exactly what let
+					// the command that follows run in the shell's previous,
+					// unrelated directory instead. Keeping path non-empty
+					// makes the command below carry its own "cd '<path>' &&"
+					// again, so a refusal surfaces as the shell's own visible
+					// error rather than a silent wrong-directory run.
+					if synced {
+						path = ""
+					}
 				}
 
 				if integration != nil {
@@ -4663,8 +4678,23 @@ func (pf *PanelsFrame) menuItemsWithKeyLabels(title string, items []vtui.MenuIte
 func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 	isWindowsShell := terminal.WindowsShellSyntax()
 	sync := false
-	if _, isOS := v.(*vfs.OSVFS); isOS {
+	// uncertain is set for a local OSVFS path this same unprivileged process
+	// cannot itself open (OSVFS.NeedsElevationToEnter, the same real access
+	// check SetPath's own refuseNotListable makes -- not NeedsElevation,
+	// which answers a different question and stays false for exactly this,
+	// the common "boundary folder" case, e.g. mode 0700 owned by someone
+	// else): the persistent shell is this same process's child, so a plain
+	// "cd" sent below is refused right there too. Sending it anyway costs
+	// nothing on the chance the directory grants search without read, but
+	// the caller must not take a plain "yes" for an answer -- it cannot
+	// watch the shell's own reply, so it cannot otherwise tell a real cd
+	// from a refused one, and trusting a refused cd is exactly what let a
+	// typed command silently run in the shell's previous (wrong) directory
+	// instead of the one the panel shows (f4#1255).
+	uncertain := false
+	if osfs, isOS := v.(*vfs.OSVFS); isOS {
 		sync = true
+		uncertain = osfs.NeedsElevationToEnter(path)
 	} else if vfsHasRemotePTY(v) {
 		sync = true
 		isWindowsShell = false
@@ -4702,7 +4732,7 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 		// in every POSIX-ish shell including fish.
 		_, _ = pf.WritePTY(activePty, []byte(fmt.Sprintf(" cd '%s' && true f4_sync\r", sqPath)))
 	}
-	return true
+	return !uncertain
 }
 
 func vfsHasRemotePTY(v vfs.VFS) bool {
