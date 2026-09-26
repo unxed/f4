@@ -1,8 +1,16 @@
 # FISH+ Windows / PowerShell backend — design notes
 
-Working notes for the port. Not documentation for users. Discard when the
-port lands, or fold into the package doc if any of it turns out to have
-long-term value.
+Working notes written during the port, kept afterward as reference: the
+command-by-command mapping and the wire path convention below aren't
+duplicated anywhere else. Not documentation for users. The port itself has
+landed — `helper.ps1`, `script.go`'s `HelperSourcePwsh`/`HelperScriptPwsh`/
+`BootstrapBase64LinePwsh`, `session.go`'s `flavor:pwsh` banner tag and
+`Features.Flavor()`, and `fish_vfs.go`'s `NewFishVFS` trying the POSIX
+bootstrap first and falling back to the PowerShell one on a handshake
+failure — see `docs/FISH+.md` Step 17 for the summary and the flavor-choice
+rationale. The "Go-side changes needed" section below is what Phase 2 asked
+for, kept as a record of the plan against what was actually built (choice A,
+not B — see that section).
 
 ## Scope and non-goals
 
@@ -370,27 +378,25 @@ per token:
 
 Total estimate: ~1200 lines of PowerShell.
 
-## Go-side changes needed (Phase 2 of the port)
+## Go-side changes needed (Phase 2 of the port) — done, as choice A
 
-Minimal set to make an auto-probing client find and drive helper.ps1:
+Minimal set to make an auto-probing client find and drive helper.ps1. Landed
+as planned, except flavor selection: choice A (retry-on-fail) was built, not
+choice B (explicit probe) — `NewFishVFS`/`NewFishVFSOnDialers` in
+`fish_vfs.go` try the POSIX bootstrap first and fall back to the PowerShell
+one only on a handshake failure, with the working flavor promoted to
+primary for future reconnects. `ProbeFlavor` (choice B) was never written;
+nothing here needs it unless the reconnect-on-every-attempt cost of choice A
+proves painful in practice, per this doc's own original recommendation.
 
-- `script.go`: add `//go:embed helper.ps1` + `HelperSourcePwsh()` +
-  `HelperScriptPwsh(token)` + `BootstrapBase64LinePwsh(token)`.
-  `Compact` for PowerShell: strip CRs, keep comments (PS syntax has
-  hash-based comments, but stripping requires care — safer to just
-  strip CRs and blank lines).
-- `session.go`: add `flavor` field to `Session`; add `Flavor()` accessor
-  on `Features` reading the `flavor:` tag from the banner; extend
-  `HandshakeOptions` with a `Flavor` field or a new `BootstrapMethod`
-  constant `BootstrapBase64LinePwsh`; in `HandshakeWithOptions` branch
-  on flavor and select the right helper source.
-- Auto-probe (choice B): before the bootstrap, send one line
-  `echo __F4A__$([regex]::Match($PSVersionTable.PSVersion.ToString(),'^\d+').Value)__F4B__\n`,
-  read up to N lines looking for one that matches `__F4A__(\d*)__F4B__`,
-  branch on whether digits were captured. New function
-  `ProbeFlavor(ctx) (Flavor, error)` on `Session`.
-- Testing: `TestHelperAgainstLocalPwsh` gated on `pwsh` on PATH, using
-  the same shape as `TestHelperAgainstLocalShell` (`session_test.go:805-…`).
+- `script.go`: `//go:embed helper.ps1`, `HelperSourcePwsh()`,
+  `HelperScriptPwsh(token)`, `BootstrapBase64LinePwsh(token)`.
+- `session.go`: `flavor:` banner tag read back through `Features.Flavor()`;
+  `HandshakeOptions.Bootstrap` gained the `BootstrapBase64LinePwsh` method,
+  and `HandshakeWithOptions` branches on it to pick the helper source.
+- Testing: `session_pwsh_test.go` and `script_pwsh_test.go`, gated on `pwsh`
+  being on `PATH`, in the same shape as `TestHelperAgainstLocalShell` uses
+  for `/bin/sh`.
 
-The wire tests in `*_test.go` need no change — `mockPeer` is
+The wire tests in `*_test.go` needed no change — `mockPeer` is
 language-agnostic.
