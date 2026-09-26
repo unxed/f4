@@ -56,7 +56,26 @@ func preserveActionRegistry(t *testing.T) {
 // the test seams below are installed there: that process is the application.
 const runAsF4Env = "F4_TEST_RUN_AS_F4"
 
+// setProcessNameTestOutEnv makes this test binary call setProcessName and
+// report the comm it produced, instead of running the tests. It is checked
+// before anything else in TestMain for the same reason runAsF4Env's check
+// is: this runs on the process's leader OS thread the way Main's own call
+// does, which m.Run()'s test scheduling no longer guarantees once it starts
+// (f4 #1390 — see procname_linux.go).
+const setProcessNameTestOutEnv = "F4_TEST_SET_PROCESS_NAME_OUT"
+
 func TestMain(m *testing.M) {
+	if out := os.Getenv(setProcessNameTestOutEnv); out != "" {
+		setProcessName()
+		comm, err := os.ReadFile("/proc/self/comm")
+		if err != nil {
+			os.Exit(2)
+		}
+		if err := os.WriteFile(out, comm, 0600); err != nil { // #nosec G703 -- out is a t.TempDir() path the test itself built, not untrusted input.
+			os.Exit(3)
+		}
+		os.Exit(0)
+	}
 	if os.Getenv(runAsF4Env) != "" {
 		Main()
 		os.Exit(0)

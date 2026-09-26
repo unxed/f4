@@ -331,6 +331,7 @@ func sudoStartupMode(args []string, askpassParent bool) (dispatcher string, askp
 // deviation recorded for Task 36.
 func Main() {
 	vtui.AppName = "f4"
+	setProcessName()
 	// Before anything asks where the configuration lives: internal/config is a
 	// layer-0 leaf and cannot reach internal/update for the answer.
 	config.Executable = update.Executable
