@@ -51,13 +51,37 @@ type AudioEngine struct {
 	bufferState        int // -1 unknown, 0 empty, 1 non-empty while playing
 }
 
+// oto permits one Context per process and has no supported way to close it.
+// Player panels, however, are short-lived: opening the panel a second time
+// must reuse the device created by the first panel instead of calling
+// oto.NewContext again and receiving "context is already created".
+var sharedAudioContext struct {
+	sync.Mutex
+	ctx        *oto.Context
+	rate       int
+	creationErr error
+}
+
+var newOtoContext = oto.NewContext
+
 func NewAudioEngine() *AudioEngine {
 	a := &AudioEngine{volume: 0.8}
+	sharedAudioContext.Lock()
+	a.ctx = sharedAudioContext.ctx
+	a.ctxRate = sharedAudioContext.rate
+	a.ctxErr = sharedAudioContext.creationErr
+	sharedAudioContext.Unlock()
 	vtui.DebugLog("AUDIO: engine created")
 	return a
 }
 
 func (a *AudioEngine) ensureContext(rate int) error {
+	sharedAudioContext.Lock()
+	defer sharedAudioContext.Unlock()
+	if a.ctx == nil && sharedAudioContext.ctx != nil {
+		a.ctx = sharedAudioContext.ctx
+		a.ctxRate = sharedAudioContext.rate
+	}
 	if a.ctx != nil {
 		if err := a.contextErrLocked(); err != nil {
 			return err
@@ -69,25 +93,29 @@ func (a *AudioEngine) ensureContext(rate int) error {
 		return a.ctxErr
 	}
 	vtui.DebugLog("AUDIO: creating oto context goos=%s goarch=%s sample_rate=%d channels=2 format=signed-int16-le", runtime.GOOS, runtime.GOARCH, rate)
-	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
+	ctx, ready, err := newOtoContext(&oto.NewContextOptions{
 		SampleRate:   rate,
 		ChannelCount: 2,
 		Format:       oto.FormatSignedInt16LE,
 	})
 	if err != nil {
 		a.ctxErr = errors.Join(errAudioUnavailable, err)
+		sharedAudioContext.creationErr = a.ctxErr
 		vtui.DebugLog("AUDIO: oto.NewContext returned an error: %v", a.ctxErr)
 		return a.ctxErr
 	}
 	<-ready
 	if err := ctx.Err(); err != nil {
 		a.ctxErr = errors.Join(errAudioUnavailable, err)
+		sharedAudioContext.creationErr = a.ctxErr
 		a.contextErrorLogged = true
 		vtui.DebugLog("AUDIO: oto context failed during asynchronous initialization: %v", err)
 		return a.ctxErr
 	}
 	a.ctx = ctx
 	a.ctxRate = rate
+	sharedAudioContext.ctx = ctx
+	sharedAudioContext.rate = rate
 	vtui.DebugLog("AUDIO: oto context ready sample_rate=%d channels=2 format=signed-int16-le", rate)
 	return nil
 }

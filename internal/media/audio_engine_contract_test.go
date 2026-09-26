@@ -3,9 +3,12 @@
 package media
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/ebitengine/oto/v3"
 )
 
 func TestAudioEngineEmptyLifecycle(t *testing.T) {
@@ -58,5 +61,39 @@ func TestAudioEnginePositionLockedWithNoTap(t *testing.T) {
 	a := &AudioEngine{ctxRate: 48000, duration: 3 * time.Second}
 	if got := a.PositionLocked(); got != 0 {
 		t.Fatalf("position without PCM tap=%s", got)
+	}
+}
+
+func TestAudioEngineReusesSharedContextCreationError(t *testing.T) {
+	sentinel := errors.New("audio device unavailable")
+	sharedAudioContext.Lock()
+	oldContext := sharedAudioContext.ctx
+	oldRate := sharedAudioContext.rate
+	oldErr := sharedAudioContext.creationErr
+	sharedAudioContext.ctx = nil
+	sharedAudioContext.rate = 0
+	sharedAudioContext.creationErr = sentinel
+	sharedAudioContext.Unlock()
+	oldNewContext := newOtoContext
+	called := false
+	newOtoContext = func(*oto.NewContextOptions) (*oto.Context, chan struct{}, error) {
+		called = true
+		return nil, nil, errors.New("must not retry context creation")
+	}
+	t.Cleanup(func() {
+		newOtoContext = oldNewContext
+		sharedAudioContext.Lock()
+		sharedAudioContext.ctx = oldContext
+		sharedAudioContext.rate = oldRate
+		sharedAudioContext.creationErr = oldErr
+		sharedAudioContext.Unlock()
+	})
+
+	a := NewAudioEngine()
+	if err := a.ensureContext(48000); !errors.Is(err, sentinel) {
+		t.Fatalf("ensureContext error = %v, want shared creation error", err)
+	}
+	if called {
+		t.Fatal("ensureContext retried oto.NewContext after a failed shared creation")
 	}
 }
