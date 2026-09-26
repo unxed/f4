@@ -45,6 +45,7 @@ var winescapeImporters = map[string]string{
 	"vfs/os_vfs_physical_windows.go":                "branches on hostmode.Posix()",
 	"vfs/os_vfs_windows.go":                         "names the *winescape.Stat_t type in an assertion; makes no calls",
 	"vfs/rename_noreplace_windows.go":               "branches on hostmode.Posix()",
+	"vfs/trash_windows.go":                          "posix-personality trash; every winescape call sits behind hostmode.Posix()",
 }
 
 func TestLibwinescapeImportersAreAccountedFor(t *testing.T) {
