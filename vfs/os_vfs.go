@@ -248,15 +248,20 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 			entryPath := hostpath.Join(dirPath, e.Name())
 			item := VFSItem{
 				KnownMetadata: MetadataExplicit | MetadataHidden,
-				Name:          e.Name(),
-				Size:          size,
-				SizeKnown:     info != nil,
-				IsDir:         isDir,
-				IsSymlink:     isSymlink,
-				ReparseTag:    readReparseTag(entryPath, info),
-				MTime:         mtime,
-				IsExecutable:  isExec,
-				IsHidden:      isHidden(entryPath, e.Name(), info),
+				// e.Name() is the raw byte string the OS handed back, which
+				// on Unix is not guaranteed to be valid UTF-8. Mapping it
+				// here (see pua.go) keeps every byte while making Name safe
+				// to sort, persist as JSON and display; prepareOSPath maps
+				// it back before any syscall that needs the real name.
+				Name:         decodeUTF8OrMap([]byte(e.Name())),
+				Size:         size,
+				SizeKnown:    info != nil,
+				IsDir:        isDir,
+				IsSymlink:    isSymlink,
+				ReparseTag:   readReparseTag(entryPath, info),
+				MTime:        mtime,
+				IsExecutable: isExec,
+				IsHidden:     isHidden(entryPath, e.Name(), info),
 			}
 			if info != nil {
 				item.UnixMode = uint32(info.Mode().Perm())
@@ -326,16 +331,17 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 
 	item := VFSItem{
 		KnownMetadata: MetadataExplicit | MetadataPermissions | MetadataExecutable | MetadataHidden | MetadataMTime,
-		Name:          info.Name(),
-		Size:          info.Size(),
-		SizeKnown:     true,
-		IsDir:         info.IsDir(),
-		IsSymlink:     isSymlink,
-		ReparseTag:    readReparseTag(path, linkInfo),
-		MTime:         info.ModTime(),
-		UnixMode:      uint32(info.Mode().Perm()),
-		IsExecutable:  info.Mode().Perm()&0111 != 0,
-		IsHidden:      isHidden(path, info.Name(), info),
+		// See the comment on the same mapping in ReadDir.
+		Name:         decodeUTF8OrMap([]byte(info.Name())),
+		Size:         info.Size(),
+		SizeKnown:    true,
+		IsDir:        info.IsDir(),
+		IsSymlink:    isSymlink,
+		ReparseTag:   readReparseTag(path, linkInfo),
+		MTime:        info.ModTime(),
+		UnixMode:     uint32(info.Mode().Perm()),
+		IsExecutable: info.Mode().Perm()&0111 != 0,
+		IsHidden:     isHidden(path, info.Name(), info),
 	}
 
 	// Platform specific time extraction
@@ -376,16 +382,17 @@ func (v *OSVFS) Lstat(ctx context.Context, path string) (VFSItem, error) {
 
 	item := VFSItem{
 		KnownMetadata: MetadataExplicit | MetadataPermissions | MetadataExecutable | MetadataHidden | MetadataMTime,
-		Name:          info.Name(),
-		Size:          info.Size(),
-		SizeKnown:     true,
-		IsDir:         isDir,
-		IsSymlink:     isSymlink,
-		ReparseTag:    readReparseTag(absPath, info),
-		MTime:         info.ModTime(),
-		UnixMode:      uint32(info.Mode().Perm()),
-		IsExecutable:  info.Mode().Perm()&0111 != 0,
-		IsHidden:      isHidden(path, info.Name(), info),
+		// See the comment on the same mapping in ReadDir.
+		Name:         decodeUTF8OrMap([]byte(info.Name())),
+		Size:         info.Size(),
+		SizeKnown:    true,
+		IsDir:        isDir,
+		IsSymlink:    isSymlink,
+		ReparseTag:   readReparseTag(absPath, info),
+		MTime:        info.ModTime(),
+		UnixMode:     uint32(info.Mode().Perm()),
+		IsExecutable: info.Mode().Perm()&0111 != 0,
+		IsHidden:     isHidden(path, info.Name(), info),
 	}
 
 	fillPlatformTimes(&item, info)
@@ -816,6 +823,13 @@ func resolveReparseCandidates(abs string) []string {
 // prepareOSPath adds the \\?\ prefix on Windows to prevent the Win32 API
 // from automatically stripping trailing dots and spaces from file names.
 func prepareOSPath(p string) string {
+	// Reverse decodeUTF8OrMap's mapping (pua.go) on every path component
+	// before it reaches hostfs: this is the one choke point almost every
+	// OSVFS method already routes its path through, so it is where a
+	// PUA-mapped VFSItem.Name -- built back into a path via Join -- turns
+	// back into the original, possibly non-UTF-8, bytes the real syscall
+	// needs. A no-op on any path that was never mapped.
+	p = decodeMappedPathSegments(p)
 	if runtime.GOOS != "windows" {
 		return p
 	}
@@ -867,7 +881,15 @@ func (v *OSVFS) Readlink(ctx context.Context, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return hostfs.Readlink(prepareOSPath(abs))
+	raw, err := hostfs.Readlink(prepareOSPath(abs))
+	if err != nil {
+		return "", err
+	}
+	// The target came straight from the OS and, like a directory entry's
+	// name, is not guaranteed to be valid UTF-8; map it the same way so it
+	// survives whatever the caller does with it (display it, or hand it
+	// back to Symlink to recreate the link elsewhere).
+	return decodeUTF8OrMap([]byte(raw)), nil
 }
 
 func (v *OSVFS) Symlink(ctx context.Context, target, linkPath string) error {
@@ -878,6 +900,13 @@ func (v *OSVFS) Symlink(ctx context.Context, target, linkPath string) error {
 	if err != nil {
 		return err
 	}
+	// target is link content, not necessarily resolved through this VFS
+	// (it may be relative, or point outside any tree f4 has open), but it
+	// can still carry a mapped mark -- e.g. when it is the mapped name
+	// Readlink returned. decodeMappedPathSegments only touches path
+	// components that actually start with the mark, so it is a no-op on
+	// ordinary target text.
+	target = decodeMappedPathSegments(target)
 	err = hostfs.Symlink(target, prepareOSPath(abs))
 	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
 		vtui.DebugLog("VFS: Permission denied for Symlink(%q), attempting sudo...", linkPath)
@@ -931,5 +960,9 @@ func (v *OSVFS) Junction(ctx context.Context, target, linkPath string) error {
 	if err != nil {
 		return err
 	}
-	return hostfs.Symlink(absTarget, prepareOSPath(absLink))
+	// absTarget deliberately skips the rest of prepareOSPath here, same as
+	// it already did before this change: only the PUA-mapping reversal is
+	// wanted, not the Windows \\?\ prefixing that the rest of prepareOSPath
+	// would add and that junction targets are not known to need.
+	return hostfs.Symlink(decodeMappedPathSegments(absTarget), prepareOSPath(absLink))
 }
