@@ -10,6 +10,7 @@
 package hostfs
 
 import (
+	"io"
 	"io/fs"
 	"os"
 	"time"
@@ -92,6 +93,44 @@ func Readlink(name string) (string, error) {
 		return string(buf[:n]), nil
 	}
 	return os.Readlink(name)
+}
+
+// ReadFile reads the whole of name and returns its contents.
+//
+// In posix mode this reads in a loop rather than sizing a single Read from
+// Stat, as os.ReadFile does: a /proc or /sys attribute file commonly
+// reports a Stat_t.Size of 0 or of some fixed placeholder (a page size)
+// that has nothing to do with what it actually holds -- the kernel
+// generates the content on read, not in advance -- so a size-sized buffer
+// can come back empty or truncated. The growing-buffer loop tolerates
+// either.
+func ReadFile(name string) ([]byte, error) {
+	if hostmode.Posix() {
+		f, err := winescapeOpenFile(name, os.O_RDONLY, 0)
+		if err != nil {
+			return nil, hostErr(err)
+		}
+		defer func() { _ = f.Close() }()
+		var data []byte
+		buf := make([]byte, 4096)
+		for {
+			n, err := f.Read(buf)
+			if n > 0 {
+				data = append(data, buf[:n]...)
+			}
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return nil, hostErr(err)
+			}
+			if n == 0 {
+				break
+			}
+		}
+		return data, nil
+	}
+	return os.ReadFile(name)
 }
 
 func Symlink(oldname, newname string) error {

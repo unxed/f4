@@ -10,6 +10,7 @@ import (
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/fileops"
 	"github.com/unxed/f4/internal/viewer"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -326,12 +327,15 @@ func dumpScreenTo(path string) error {
 // %USERPROFILE%, or %HOMEDRIVE%+%HOMEPATH% — which resolve inside the
 // wineprefix (e.g. `C:\users\<name>`, i.e.
 // `<WINEPREFIX>/drive_c/users/<name>` on the Unix side), not the real Unix
-// $HOME the user is used to looking in. Nothing about that is broken, but
-// it is exactly where issue #536 testing tripped: the file was written
-// (or the write silently failed) somewhere other than where it was searched
-// for. The executable's own directory is added first because it is the one
-// location a Wine user unambiguously knows without having to think about
-// prefix layout — they just ran the .exe from there.
+// $HOME the user is used to looking in. That is exactly where issue #536
+// testing tripped: the file was written (or the write silently failed)
+// somewhere other than where it was searched for. hostmode.UserHomeDir
+// (WINE.md §18.2, "$HOME") answers with the host's real $HOME in posix
+// personality and falls back to the same os.UserHomeDir() as before
+// everywhere else, so native Windows keeps its previous candidate
+// unchanged. The executable's own directory is still added first because
+// it is the one location a Wine user unambiguously knows without having to
+// think about prefix layout — they just ran the .exe from there.
 func screenDumpCandidateDirs() []string {
 	var dirs []string
 	if exe, err := os.Executable(); err == nil {
@@ -340,7 +344,7 @@ func screenDumpCandidateDirs() []string {
 		}
 		dirs = append(dirs, filepath.Dir(exe))
 	}
-	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+	if home, err := hostmode.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
 		dirs = append(dirs, home)
 	}
 	dirs = append(dirs, os.TempDir())

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -203,7 +204,7 @@ func terminfoDirs() []string {
 	if v := os.Getenv("TERMINFO"); v != "" {
 		dirs = append(dirs, v)
 	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
+	if home, err := hostmode.UserHomeDir(); err == nil && home != "" {
 		dirs = append(dirs, filepath.Join(home, ".terminfo"))
 	}
 	for _, v := range filepath.SplitList(os.Getenv("TERMINFO_DIRS")) {

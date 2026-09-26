@@ -33,6 +33,7 @@ import (
 	"github.com/unxed/f4/internal/toast"
 	"github.com/unxed/f4/internal/viewer"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -4522,7 +4523,7 @@ type far2lHistoryLoader func(history.Far2lHistoryFile, string) ([]history.Histor
 type far2lHistoryMerger func(*history.F4HistoryProvider, []history.HistoryRecord) (int, error)
 
 func importFar2lHistoryFile(path, title, prompt, subject string, load far2lHistoryLoader, merge far2lHistoryMerger) {
-	home, err := os.UserHomeDir()
+	home, err := hostmode.UserHomeDir()
 	if err != nil {
 		vtui.ShowMessage(" Error ", "Cannot find user home directory.", []string{"&Ok"})
 		return
@@ -4660,7 +4661,7 @@ func importFar2lSettings(sourceDir string, files []far2lSettingFile) ([]string, 
 }
 
 func actionImportFar2lSettings(_ *panel.PanelsFrame) {
-	home, err := os.UserHomeDir()
+	home, err := hostmode.UserHomeDir()
 	if err != nil {
 		vtui.ShowMessage(" Error ", "Cannot find user home directory.", []string{"&Ok"})
 		return

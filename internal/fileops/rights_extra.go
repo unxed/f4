@@ -2,7 +2,6 @@ package fileops
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/unxed/f4/vfs"
 )
@@ -40,7 +39,13 @@ func inheritMovedTree(ctx context.Context, state *FileOpState, dstVfs vfs.VFS, p
 	if depth == 0 {
 		applyPlatformRights(ctx, state, nil, "", dstVfs, path)
 	}
-	if runtime.GOOS == "windows" && IsLocalOSVFS(dstVfs) {
+	// vfs.WindowsPersonality, not a raw GOOS check (WINE.md §18.2, "права"):
+	// under Wine's posix personality the destination is a real POSIX
+	// filesystem with real Unix permission bits, read and written through
+	// libwinescape/hostfs, so the tree walk below is exactly as meaningful
+	// there as it is on the Linux build -- only native Windows leaves the
+	// top-level reset as "all there is to do".
+	if vfs.WindowsPersonality() && IsLocalOSVFS(dstVfs) {
 		return
 	}
 	item, err := vfs.Lstat(ctx, dstVfs, path)

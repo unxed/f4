@@ -22,6 +22,7 @@ import (
 	"github.com/unxed/f4/internal/viewer"
 	"github.com/unxed/f4/internal/vtvibe"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -272,7 +273,7 @@ func aiTogglePanel(pf *panel.PanelsFrame) {
 				}
 				target := panel.AIPrevPath[i]
 				if target == "" {
-					target, _ = os.UserHomeDir()
+					target, _ = hostmode.UserHomeDir()
 				}
 				pf.SwitchToVFS(fsp, vfs.NewOSVFS(target))
 				pf.ActiveIdx = 1 - i

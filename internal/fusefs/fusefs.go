@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/vfs/hostmode"
 )
 
 // ErrUnsupported is returned on platforms without a FUSE implementation.
@@ -403,8 +404,15 @@ func findByPoint(point string) *Mount {
 	return nil
 }
 
+// pathsEqual compares two mount-point paths the way the underlying
+// filesystem would: case-insensitively on darwin and native Windows,
+// case-sensitively everywhere else. Wine's posix personality (WINE.md
+// §18.2, "регистр в сравнениях") counts as "everywhere else" here too --
+// FUSE mounting is not wired up for GOOS=windows regardless of personality
+// today (node_unsupported.go), but the comparison should not silently
+// assume Windows case-folding the day it is.
 func pathsEqual(a, b string) bool {
-	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+	if runtime.GOOS == "darwin" || (runtime.GOOS == "windows" && !hostmode.Posix()) {
 		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 	}
 	return filepath.Clean(a) == filepath.Clean(b)

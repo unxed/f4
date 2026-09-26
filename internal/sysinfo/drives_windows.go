@@ -3,8 +3,6 @@
 package sysinfo
 
 import (
-	"os"
-
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/vfs/hostmode"
 	"golang.org/x/sys/windows"
@@ -15,13 +13,28 @@ func GetPlatformDrives() []DriveEntry {
 		// No drive letters in posix mode -- the whole point of WINE.md
 		// Part E is that under Wine this looks like the Linux build, not
 		// like Windows-with-extra-steps. Mirrors drives_unix.go exactly.
-		home := os.Getenv("HOME")
+		//
+		// hostmode.HomeDir, not os.Getenv("HOME"): Wine's Win32 environment
+		// never carries HOME at all (dlls/ntdll/unix/env.c strips it as one
+		// of four Unix-only variables), so the plain os.Getenv read always
+		// came back empty here and this entry never appeared.
+		home, _ := hostmode.HomeDir()
 		drives := []DriveEntry{
 			{Name: "/ Root", Factory: func() vfs.VFS { return vfs.NewOSVFS("/") }},
 		}
 		if home != "" {
 			drives = append(drives, DriveEntry{Name: "~ Home", Factory: func() vfs.VFS { return vfs.NewOSVFS(home) }})
 		}
+		// WINE.md §18.2, "Список дисков... Провайдера «Physical Disks» в
+		// этом режиме нет": drives_unix.go always lists this entry; posix
+		// personality can list it too now that getPlatformBlockDevices has
+		// a /sys/class/block branch (vfs/disks_windows.go). No "Windows
+		// Registry" entry follows, unlike the non-posix branch below --
+		// posix personality has no registry to browse.
+		drives = append(drives, DriveEntry{
+			Name:    "Physical Disks (/dev)",
+			Factory: func() vfs.VFS { return vfs.NewDisksVFS() },
+		})
 		return drives
 	}
 	var drives []DriveEntry

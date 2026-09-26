@@ -35,7 +35,9 @@ import (
 	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/internal/viewer"
+	"github.com/unxed/f4/vfs/hostfs"
 	"github.com/unxed/f4/vfs/hostmode"
+	"github.com/unxed/f4/vfs/hostpath"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -2590,7 +2592,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 
 		if e.VirtualKeyCode == vtinput.VK_OEM_3 && isBookmarkGoto {
-			if home, _ := os.UserHomeDir(); home != "" {
+			if home, _ := hostmode.UserHomeDir(); home != "" {
 				if fsp := pf.GetActivePanel(); fsp != nil {
 					pf.NavigateToPath(fsp, home)
 				}
@@ -5366,7 +5368,12 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	for i, drv := range platformDrives {
 		factory := drv.Factory
 		name := platformNames[i]
-		if runtime.GOOS != "windows" {
+		// WINE.md §18.2, "список дисков, Alt+F1": posix personality has no
+		// drive letters -- its "/ Root" and "~ Home" rows need the same
+		// hotkey treatment as the Linux build's, matching
+		// driveMatchesPath's own runtime.GOOS != "windows" || hostmode.Posix()
+		// just above.
+		if runtime.GOOS != "windows" || hostmode.Posix() {
 			if strings.HasPrefix(driveMenuNameWithoutMarker(drv.Name), "/") {
 				name = "&" + name
 				usedHotkeys['/'] = true
@@ -5795,9 +5802,20 @@ func (pf *PanelsFrame) navigateToPath(fsp *FileSystemPanel, targetPath string, r
 	}
 
 	// 2. Handle absolute paths. It could be an OS path, or a path deep inside an archive.
-	if filepath.IsAbs(targetPath) || filepath.VolumeName(targetPath) != "" {
+	//
+	// hostpath.IsAbs/VolumeName and hostfs.Stat, not the raw filepath/os
+	// calls: in posix personality (WINE.md §18.6, "cd /tmp") a path like
+	// "/tmp" is exactly what filepath.IsAbs on GOOS=windows says it is
+	// not -- it requires a drive letter or UNC prefix -- so this whole
+	// branch was never reached for a real POSIX absolute path, and even a
+	// relaxed IsAbs alone would not have been enough: bare os.Stat still
+	// asks Win32 to resolve "/tmp" against the current drive, not the
+	// host's real root. hostpath/hostfs already carry that distinction
+	// for OSVFS.SetPath (vfs/os_vfs.go); reduce to the exact same
+	// filepath/os call as before in every other personality.
+	if hostpath.IsAbs(targetPath) || hostpath.VolumeName(targetPath) != "" {
 		// First, check if it's a regular OS directory
-		st, err := os.Stat(targetPath)
+		st, err := hostfs.Stat(targetPath)
 		if err == nil && st.IsDir() {
 			newVfs := vfs.NewOSVFS(targetPath)
 			if err := newVfs.SetPath(targetPath); err == nil {
@@ -5850,7 +5868,7 @@ func (pf *PanelsFrame) navigateToPath(fsp *FileSystemPanel, targetPath string, r
 			}
 			current = parentDir
 
-			st, err := os.Stat(current)
+			st, err := hostfs.Stat(current)
 			if err == nil {
 				if !st.IsDir() {
 					// We found a file, maybe it's an archive!
@@ -5949,7 +5967,10 @@ func SameFolderHistoryPath(a, b string) bool {
 	}
 	a = filepath.Clean(a)
 	b = filepath.Clean(b)
-	if runtime.GOOS == "windows" {
+	// WINE.md §18.2, "регистр в сравнениях": posix personality means a real
+	// POSIX filesystem underneath, read through hostfs/libwinescape, not
+	// Win32 -- case-sensitive like the Linux build, not like native Windows.
+	if runtime.GOOS == "windows" && !hostmode.Posix() {
 		return strings.EqualFold(a, b)
 	}
 	return a == b
@@ -6138,7 +6159,7 @@ func ExpandPathEnv(s string) string {
 	if s != "~" && (len(s) <= 1 || s[0] != '~' || (s[1] != '/' && s[1] != '\\')) {
 		return s
 	}
-	home, err := os.UserHomeDir()
+	home, err := hostmode.UserHomeDir()
 	if err != nil || home == "" {
 		return s
 	}

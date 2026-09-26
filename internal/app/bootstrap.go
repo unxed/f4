@@ -436,9 +436,11 @@ func Main() {
 				_, _ = fmt.Fprintf(os.Stdout, "[f4] Crash report saved to: %s\n", crashPath)
 			}
 			vtui.CleanupStderrLog()
+			cleanupWineStderrLog()
 			os.Exit(2)
 		}
 		vtui.CleanupStderrLog()
+		cleanupWineStderrLog()
 	}()
 	// Defer disk logging to prevent launcher processes from polluting rotation queue.
 	// Logging will be enabled in InitCore() for workers and standalone sessions.
@@ -788,6 +790,7 @@ see in vtinput project: https://github.com/unxed/vtinput
 	}
 
 	if ttyMode {
+		redirectConsoleWineStderr()
 		terminal.ManageSessions()
 		return
 	}
@@ -812,6 +815,7 @@ see in vtinput project: https://github.com/unxed/vtinput
 	}
 
 	vtui.DebugLog("MAIN: Falling back to console mode")
+	redirectConsoleWineStderr()
 	terminal.ManageSessions()
 }
 

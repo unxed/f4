@@ -1,0 +1,196 @@
+name: wine
+
+# f4 has had Wine-specific code (docs/WINE.md) since before this workflow
+# existed, verified only by unit tests of its "clean" parts and by manual
+# sessions under a real Wine on the author's machine. This is the missing
+# other half, modeled on unxed/libwinescape's own Wine job: build f4.exe and
+# actually run it under Wine on the runner.
+#
+# Two things this job is NOT: it does not replace the manual WINE.md
+# sessions (screen geometry, keyboard input quirks and the like still need a
+# human looking at a real window); and it does not attempt wineconsole (a
+# separate GUI console host binary) or the 16-color-console startup theme
+# that only shows up there (WINE.md §18.1). What it does check is real and
+# load-bearing: --wine-probe's ProbePTYUsable exercises libwinescape's
+# actual fork/openpty path (winescape.OpenPTY, pty_wine_windows.go), not a
+# mock of it, and the render smoke tests exercise the same win32
+# console/GUI startup path issue #474 broke (the GUI leg runs under Xvfb,
+# since Wine itself is not a display server).
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  wine:
+    name: End-to-end under Wine (linux/amd64 host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CGO_ENABLED: 0
+      GOOS: windows
+      GOARCH: amd64
+      # Set globally for the *host* wine64 invocations below. This has
+      # nothing to do with f4's own WINEDEBUG handling for its children
+      # (WINE.md §18.4): f4 never sets or reads WINEDEBUG itself, and this
+      # variable only quiets the wine64 process this job launches directly.
+      WINEDEBUG: "-all"
+      WINEARCH: win64
+      WINEDLLOVERRIDES: "mscoree,mshtml="
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.6'
+        cache-dependency-path: go.sum
+
+    - name: Install Wine
+      run: |
+        set -euo pipefail
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --no-install-recommends wine64 xvfb
+        # On Ubuntu the 64-bit loader lives under /usr/lib/wine and is not
+        # always on PATH under the name a script would guess.
+        W=$(command -v wine || command -v wine64 || echo /usr/lib/wine/wine64)
+        echo "WINE=$W" >> "$GITHUB_ENV"
+        "$W" --version
+
+    - name: Build f4.exe
+      run: |
+        set -euo pipefail
+        mkdir -p build
+        go build -trimpath -o build/f4.exe ./cmd/f4
+        cp -r internal/i18n/lang internal/dialog/help build/
+        cp f4.example.ini build/
+        # Portable profile (Far.exe.ini's UseSystemProfiles=0, config.go's
+        # ResolveProfileDir): isolates this run's settings.ini, logs/ and
+        # crashes/ under build/Profile instead of the runner's %APPDATA%,
+        # and keeps every path this job asserts on predictable. This does
+        # not touch $HOME/hostmode.HomeDir resolution (WINE.md §18.2): the
+        # profile location is Win32-resolved in both personalities.
+        printf '[General]\r\nUseSystemProfiles=0\r\n' > build/f4.exe.ini
+
+    - name: Initialise the Wine prefix
+      run: |
+        "$WINE" wineboot --init || true
+        sleep 5
+
+    - name: Probe under Wine (posix auto-detect)
+      working-directory: build
+      run: |
+        set -euo pipefail
+        "$WINE" f4.exe --wine-probe | tee probe-posix.txt
+        grep -q 'winescape.IsWine:.*true' probe-posix.txt
+        grep -q 'winescape.Available:.*true' probe-posix.txt
+        grep -q 'hostmode.Posix:.*true' probe-posix.txt
+        # The real thing, not a mock of it: winePTYUsable (pty_wine_windows.go)
+        # calls winescape.OpenPTY(), a genuine fork+openpty under this Wine.
+        grep -q 'ProbePTYUsable:.*true' probe-posix.txt
+
+    - name: Probe under Wine (UseWinescape=0 equivalent)
+      working-directory: build
+      run: |
+        set -euo pipefail
+        # F4_WINE_POSIX=0 forces the same decision UseWinescape=0 would
+        # (vfs/hostmode.Posix, "escape hatch ahead of the real config
+        # setting"), without needing a second settings.ini profile just to
+        # flip one checkbox. WINE.md §18.6 flagged this combination as
+        # never run under a live Wine; this is that run.
+        F4_WINE_POSIX=0 "$WINE" f4.exe --wine-probe | tee probe-nopx.txt
+        grep -q 'hostmode.Posix:.*false' probe-nopx.txt
+        # The native pty backend must not survive turning posix off
+        # (WINE.md §18.3, "нативный pty подчиняется общей галке").
+        grep -q 'ProbePTYUsable:.*false' probe-nopx.txt
+
+    - name: Render smoke test (console, winapi backend)
+      working-directory: build
+      run: |
+        set -euo pipefail
+        printf 'one\ntwo\nthree\n' > smoke.txt
+
+        run_smoke() {
+          local label="$1"; shift
+          rm -f vtui.screen.log Profile/logs/debug.log
+          # f4 does not exit after --dump-screen-after (it keeps running
+          # the UI loop); the runner killing it via `timeout` is the
+          # expected way this step ends, not a failure.
+          "$@" || true
+          if [ ! -s vtui.screen.log ]; then
+            echo "::error::$label: no vtui.screen.log (screen dump never ran, or f4 never started)"
+            exit 1
+          fi
+          if [ -f Profile/logs/debug.log ] && grep -q 'FATAL PANIC' Profile/logs/debug.log; then
+            echo "::error::$label: FATAL PANIC in debug.log"
+            cat Profile/logs/debug.log
+            exit 1
+          fi
+          mkdir -p "../wine-logs/$label"
+          cp vtui.screen.log "../wine-logs/$label/" || true
+          if [ -f Profile/logs/debug.log ]; then
+            cp Profile/logs/debug.log "../wine-logs/$label/" || true
+          fi
+        }
+
+        # Forces the Win32-console-API renderer (wineconsole/ReactOS/VT-less
+        # Windows) rather than whatever backend auto-detection would pick
+        # under plain `wine f4.exe`; the ANSI/VT path already has non-Wine
+        # coverage in the rest of CI, this backend has none.
+        run_smoke console-winapi \
+          timeout --preserve-status 25 "$WINE" f4.exe --debug -e smoke.txt --dump-screen-after 8 --tty=winapi
+
+    # GUI mode needs an actual display to draw its window onto -- Wine is
+    # not itself a display server -- so this leg alone gets Xvfb. It is the
+    # exact command issue #474 was reported with (`wine f4.exe --gui=win32`)
+    # and is marked informational rather than blocking: Wine's GUI path
+    # under a virtual framebuffer is inherently more fragile than the
+    # console path above, and this is the first time either has run in CI
+    # at all.
+    - name: Render smoke test (win32 GUI backend)
+      working-directory: build
+      continue-on-error: true
+      run: |
+        set -euo pipefail
+        printf 'one\ntwo\nthree\n' > smoke.txt
+        rm -f vtui.screen.log Profile/logs/debug.log
+        xvfb-run --auto-servernum -- \
+          timeout --preserve-status 25 "$WINE" f4.exe --debug -e smoke.txt --dump-screen-after 8 --gui=win32 || true
+        mkdir -p ../wine-logs/gui-win32
+        cp vtui.screen.log ../wine-logs/gui-win32/ 2>/dev/null || true
+        cp Profile/logs/debug.log ../wine-logs/gui-win32/ 2>/dev/null || true
+        if [ ! -s vtui.screen.log ]; then
+          echo "::warning::gui-win32: no vtui.screen.log (screen dump never ran, or f4 never started)"
+          exit 1
+        fi
+        if [ -f Profile/logs/debug.log ] && grep -q 'FATAL PANIC' Profile/logs/debug.log; then
+          echo "::warning::gui-win32: FATAL PANIC in debug.log"
+          cat Profile/logs/debug.log
+          exit 1
+        fi
+
+    - uses: actions/upload-artifact@v7
+      if: always()
+      with:
+        name: wine-logs
+        path: |
+          build/probe-*.txt
+          wine-logs/**
+        retention-days: 7

@@ -15,6 +15,21 @@ import (
 
 const hostWaitNoHang = 1
 
+// HostStderrFD is the file descriptor an inherited host command
+// (simple-inline: dir/pause-style commands that share f4's own stdio) should
+// use as its own descriptor 2. It defaults to 2, the process's own
+// descriptor unmodified.
+//
+// The console-mode Wine stderr redirect (bootstrap, WINE.md §18.4) points
+// f4's own descriptor 2 at a session log file instead of the terminal, so
+// that Wine's fixme/err chatter stops landing mid-frame on the screen f4 is
+// drawing. A command the user runs from the panels is not Wine's chatter,
+// though, and still belongs on the terminal it always went to; the redirect
+// stores a fresh descriptor onto the same terminal here before it repoints
+// descriptor 2, so runHostCommand can hand an inherited child the terminal
+// rather than f4's own diagnostics file.
+var HostStderrFD = 2
+
 // ErrLocalCommandUnavailable means that the requested host-shell transport
 // could not be created. In POSIX Wine mode this is deliberately an error, not
 // a reason to retry the command through cmd.exe.
@@ -88,7 +103,7 @@ func runHostCommand(ctx context.Context, dir, command string, emit func([]byte),
 		}
 	}
 
-	files := []int{nullFD, 1, 2}
+	files := []int{nullFD, 1, HostStderrFD}
 	if !inherited {
 		files[1], files[2] = writeFD, writeFD
 	}

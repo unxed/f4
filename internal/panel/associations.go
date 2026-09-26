@@ -11,6 +11,7 @@ import (
 
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/filemask"
+	"github.com/unxed/f4/vfs/hostmode"
 )
 
 // AssocKind numbers the six command slots per far2l's filetype.hpp
@@ -221,11 +222,17 @@ func MatchMask(name, mask string, ignoreCase bool) bool {
 // default; elsewhere it honours the case of the underlying filesystem
 // (best-effort: we default to case-sensitive on non-Windows too, as
 // far2l does).
+//
+// Under Wine's posix personality (WINE.md §18.2, "регистр в сравнениях")
+// "elsewhere" includes this build too: the mask is being matched against
+// names hostfs read straight off a real POSIX filesystem through
+// libwinescape, not through Win32, so the same case-sensitive default
+// applies as on the Linux build.
 func MatchingAssociations(list []FileAssoc, name string, kind AssocKind) []FileAssoc {
 	if name == "" || int(kind) < 0 || int(kind) >= AssocKindCount {
 		return nil
 	}
-	ignoreCase := runtime.GOOS == "windows"
+	ignoreCase := runtime.GOOS == "windows" && !hostmode.Posix()
 	var out []FileAssoc
 	for _, a := range list {
 		if !a.Enabled[kind] || a.Commands[kind] == "" {
