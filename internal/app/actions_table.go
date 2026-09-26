@@ -2535,6 +2535,23 @@ func init() {
 		}),
 	})
 	registerAction(action.Action{
+		Name:        "Editor.CalculateExpression",
+		Area:        "Editor",
+		Label:       "Calculate selection",
+		LabelKey:    "Action.Editor.CalculateExpression",
+		Description: "Evaluate the selected arithmetic expression and replace it with the result",
+		DescKey:     "Action.Editor.CalculateExpression.Desc",
+		MenuPath:    "Edit",
+		Handler: withEditor(func(ev *editor.EditorView) {
+			result, err := ev.CalculateSelection()
+			if err != nil {
+				vtui.ShowMessage(i18n.Msg("Editor.Calculator.Title"), err.Error(), []string{i18n.Msg("vtui.Ok")})
+				return
+			}
+			toast.Show(fmt.Sprintf(i18n.Msg("Editor.Calculator.Result"), result), 2*time.Second)
+		}),
+	})
+	registerAction(action.Action{
 		Name:                "Editor.SortLines",
 		Area:                "Editor",
 		Label:               "Sort lines",
