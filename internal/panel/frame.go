@@ -5134,7 +5134,16 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.ShowRightPanel = pf.ShowRightPanel
 	clone.WidePanel = pf.WidePanel
 	clone.Wide = pf.Wide
-	clone.ShellMode = pf.ShellMode
+	// clone.ShellMode was already set by NewPanelsFrame() above from the
+	// *current* config.App.ConsoleMode/ConsoleOverlayUI. Do not overwrite it
+	// with pf.ShellMode here: pf's value was resolved when pf itself was
+	// created (at startup, or by an earlier fork) and goes stale the moment
+	// the user changes the "Terminal presentation" setting afterwards. Since
+	// ResolveShellMode is a pure function of config and environment probes
+	// that do not vary within one process, recomputing it fresh for the new
+	// workspace is equivalent when nothing changed and correct when it did
+	// (f4 discussion #1409: a new workspace kept showing the pre-change
+	// display mode until a full restart).
 
 	if pf.TermView != nil && clone.TermView != nil {
 		clone.TermView.CloneStateFrom(pf.TermView)
