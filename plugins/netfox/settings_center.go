@@ -50,7 +50,21 @@ func (p *settingsProvider) Catalog() f4settings.Catalog {
 		case "Port", "ProxyPort":
 			f.InputWidth = 6
 		case "Type":
-			f.Choices = f4settings.Choices("ftp:FTP", "sftp:SFTP", "fish:FISH")
+			// Filtered by what registry.go actually has a handler for, not
+			// hardcoded: a lite build (f4#1178, part 3) registers fish+
+			// alone, and offering FTP or SFTP as a choice there would save
+			// a connection nothing can open.
+			var specs []string
+			if _, ok := handlers["ftp"]; ok {
+				specs = append(specs, "ftp:FTP")
+			}
+			if _, ok := handlers["sftp"]; ok {
+				specs = append(specs, "sftp:SFTP")
+			}
+			if _, ok := handlers["fish+"]; ok {
+				specs = append(specs, "fish:FISH")
+			}
+			f.Choices = f4settings.Choices(specs...)
 		case "ProxyMode":
 			f.Choices = f4settings.Choices("0:Inherit f4", "1:System", "2:Direct", "3:HTTP", "4:SOCKS5")
 		case "Codepage":

@@ -2,32 +2,34 @@
 
 package plughost
 
-import "github.com/unxed/f4/plugins/multiarc"
+import (
+	"github.com/unxed/f4/plugins/multiarc"
+	"github.com/unxed/f4/plugins/netfox"
+)
 
-// optionalVFSPlugins carries only multiarc in a lite build (f4#1178, part 2
-// of 2): a CLI-tool-wrapper archive provider (tar/unzip/7z/gzip, whichever
-// the host has) in place of the full build's native-library one, and no
-// cloud or ftp/sftp/scp VFS provider at all -- so none of the cloud SDKs
-// jlaffaye/ftp, pkg/sftp, kbolino/pageant or the archive libraries those
-// omit are even imported. See plugins_full.go for the full list and
+// optionalVFSPlugins carries multiarc and netfox in a lite build (f4#1178):
+// a CLI-tool-wrapper archive provider (tar/unzip/7z/gzip, whichever the host
+// has) in place of the full build's native-library one (part 2), and NetFox
+// cut down to FISH+ over a subprocess ssh dialer in place of the full
+// build's FTP/SFTP/FISH+ trio (part 3) -- no cloud VFS provider at all. None
+// of the cloud SDKs jlaffaye/ftp, pkg/sftp, kbolino/pageant or
+// golang.org/x/crypto/ssh, nor the archive libraries multiarc's tool-wrapper
+// replaces, are even imported; cmd/f4's TestLiteBuildExcludesHeavyNetworkDependencies
+// checks this mechanically, from `go list -deps`, rather than trusting this
+// comment to stay accurate. See plugins_full.go for the full list and
 // manager.go for where this is called.
 //
-// FISH+ (plugins/netfox's fish+ VFS) was investigated for inclusion here
-// too, since its own wire-protocol client (plugins/netfox/fishplus) has no
-// dependency beyond the standard library and already talks to any duplex
-// byte stream, not specifically an SSH library -- architecturally the
-// "wrap the console ssh binary, no libraries needed" story f4#609 asked
-// for. It did not make it into this build: fish_vfs.go lives in the same
-// "netfox" package as the FTP and SFTP backends, sharing their package-level
-// init() protocol registration and NetFoxVFS's single dispatcher, so
-// importing it at all statically links github.com/jlaffaye/ftp,
-// github.com/pkg/sftp, github.com/kbolino/pageant and
-// golang.org/x/crypto/ssh (+agent, +knownhosts) right back in -- the exact
-// weight this build tag exists to shed. Splitting fish_vfs.go (and its
-// dialer, and the tests exercising both) into a package of its own, with a
-// subprocess-ssh dialer instead of ssh_dial.go's x/crypto/ssh one, is real,
-// separately-scoped work for a later slice, not something to force into
-// this one blind and CI-only.
+// netfox.NetFoxPlugin (netfox.go) is the same plugin type the full build
+// registers: it stores connections and offers the same "Add/Edit
+// connection" dialog, but plugins/netfox's own files are individually
+// //go:build lite/!lite (ftp_vfs.go, sftp_vfs.go, sftp_uri.go, ssh_dial.go,
+// ssh_known_hosts.go, ssh_pty.go, ssh_agent_*.go and ssh_fish_dialer.go stay
+// out; fish_dialer_lite.go's console-ssh-subprocess dialer takes over for
+// FISH+), so a lite build's connection dialog only ever offers fish+ as a
+// protocol -- registry.go's handler map has nothing else registered to
+// offer. See fish_dialer_lite.go's own comment for what that dialer leaves
+// out (password auth, an explicit HTTP/SOCKS5 proxy, and any host-key
+// handling of its own beyond the system ssh's) and why.
 func optionalVFSPlugins() []Plugin {
-	return []Plugin{&multiarc.Plugin{}}
+	return []Plugin{&multiarc.Plugin{}, &netfox.NetFoxPlugin{}}
 }

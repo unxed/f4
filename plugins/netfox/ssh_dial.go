@@ -1,3 +1,11 @@
+//go:build !lite
+
+// This is the golang.org/x/crypto/ssh-backed SSH dialer used by the full
+// build's SFTP/FTP-adjacent code and by fish_dialer_ssh.go's full-build FISH+
+// dialer. The lite build's FISH+ dialer (fish_dialer_lite.go) shells out to
+// the console ssh binary instead and never reaches this file -- see
+// internal/plughost/plugins_lite.go for the accounting of why.
+
 package netfox
 
 import (

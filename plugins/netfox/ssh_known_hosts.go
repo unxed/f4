@@ -1,3 +1,10 @@
+//go:build !lite
+
+// Host-key storage for the golang.org/x/crypto/ssh-backed dialer
+// (ssh_dial.go). The lite build's FISH+ dialer (fish_dialer_lite.go) shells
+// out to the console ssh binary instead, which keeps its own known_hosts, so
+// this file never builds under -tags lite.
+
 package netfox
 
 import (

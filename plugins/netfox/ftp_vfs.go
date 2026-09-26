@@ -1,3 +1,9 @@
+//go:build !lite
+
+// FTP support statically links github.com/jlaffaye/ftp, which a lite build
+// (f4#1178) exists to shed -- see internal/plughost/plugins_lite.go for the
+// accounting of what a lite build carries instead.
+
 package netfox
 
 import (

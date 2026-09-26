@@ -1,4 +1,7 @@
-//go:build !windows
+//go:build !windows && !lite
+
+// Feeds the golang.org/x/crypto/ssh-backed dialer (ssh_dial.go); see that
+// file's own comment for why this does not build under -tags lite.
 
 package netfox
 

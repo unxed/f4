@@ -9,9 +9,12 @@ import (
 	"github.com/unxed/f4/plugins/netfox"
 )
 
-// optionalVFSPlugins are the VFS providers a lite build drops entirely
-// (f4#1178): archives, cloud storage, and ftp/sftp/scp. See plugins_lite.go
-// for the other half of this build tag's single point of truth.
+// optionalVFSPlugins are the VFS providers a lite build cuts down or drops
+// (f4#1178): the native-library archive plugin and cloud storage go
+// entirely, and netfox keeps only FISH+ (over a subprocess ssh dialer
+// instead of this build's golang.org/x/crypto/ssh one) in place of the
+// FTP/SFTP/FISH+ trio here. See plugins_lite.go for the other half of this
+// build tag's single point of truth.
 func optionalVFSPlugins() []Plugin {
 	return []Plugin{
 		&archive.ArchivePlugin{},
