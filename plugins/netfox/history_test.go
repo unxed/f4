@@ -27,7 +27,7 @@ func TestNetFoxVFSHistoryEntryDeclines(t *testing.T) {
 // takes the same live session back to that location.
 func TestFishVFSHistoryEntryIsNavigable(t *testing.T) {
 	v := newLocalFishVFS(t)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	startPath := v.GetPath()
 	display, ref, ok := v.HistoryEntry()
@@ -56,7 +56,7 @@ func TestFishVFSHistoryEntryIsNavigable(t *testing.T) {
 	// A reference recorded from one session must never be accepted by a
 	// different one, and doing so must not attempt to reconnect or crash.
 	other := newLocalFishVFSWithTitle(t, "a-different-session")
-	defer other.Close()
+	defer func() { _ = other.Close() }()
 	if other.NavigateHistoryEntry(ref) {
 		t.Fatal("a history entry from one session must not be accepted by a different one")
 	}
