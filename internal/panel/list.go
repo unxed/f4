@@ -113,6 +113,15 @@ func (f *FileEntry) displayName(name string) string {
 	if f.Name == ".." {
 		return ".."
 	}
+	// A name ReadDir/Stat mapped into the private-use range (vfs/pua.go,
+	// because it wasn't valid UTF-8 on disk) carries every original byte,
+	// but the private-use codepoints it uses have no glyph in any font.
+	// f.Name itself stays mapped for selection, sorting, path construction
+	// and persistence; only the copy painted to the screen is unmapped back
+	// to the original bytes here, so it renders exactly as an unmapped raw
+	// name already does (vtui substitutes "?" for whatever it still can't
+	// decode, same as before this mapping existed).
+	name = vfs.DisplayName(name)
 	marker := ""
 	if config.App.ShowHighlightMarks {
 		marker = theme.GlobalFileHighlighter.GetMarker(&f.VFSItem)
