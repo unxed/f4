@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/unxed/f4/vfs/hostfs"
 )
 
 func parseSysfsBlockSize(data []byte) (int64, bool) {
@@ -98,7 +100,13 @@ func getPlatformBlockDevices(ctx context.Context) []VFSItem {
 	return items
 }
 
-func getDeviceSize(devPath string, f *os.File) (int64, error) {
+// getDeviceSize's f parameter is hostfs.File (not *os.File) purely so its
+// signature stays identical to disks_windows.go's counterpart -- both are
+// called from the platform-neutral disks_vfs.go, whose Open/PatchInPlace
+// now hand it whatever hostfs.OpenFile/hostfs.Open returned (f4#1461, task
+// 3). On this GOOS hostfs is a direct forward to os.*, so the value here is
+// always a genuine *os.File in practice, same as before the type changed.
+func getDeviceSize(devPath string, f hostfs.File) (int64, error) {
 	if f != nil {
 		if size, found, err := probeSeekSize(f); err != nil {
 			return 0, err

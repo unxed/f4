@@ -5,7 +5,6 @@ package vfs
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -129,12 +128,12 @@ func getPosixBlockDevices(ctx context.Context) []VFSItem {
 }
 
 // getDeviceSize answers a listed device's size. In posix personality this
-// only ever reads /sys/class/block/*/size (Open/PatchInPlace below still
-// go through plain os.*, unconverted -- see disks_vfs.go; f is realistically
-// always nil here under Wine posix mode as a result, and probeSeekSize's
-// branch is dead in practice, kept only so a future hostfs-backed Open does
-// not have to change this signature).
-func getDeviceSize(devPath string, f *os.File) (int64, error) {
+// only ever reads /sys/class/block/*/size; Open/PatchInPlace in disks_vfs.go
+// now open the device through hostfs too (f4#1461, task 3), so f arrives
+// here as whatever hostfs.OpenFile/hostfs.Open handed back -- a libwinescape
+// wineFile under Wine posix mode, a plain *os.File everywhere else -- and
+// the io.Seeker probe below (probeSeekSize) works the same either way.
+func getDeviceSize(devPath string, f hostfs.File) (int64, error) {
 	if f != nil {
 		if size, found, err := probeSeekSize(f); err != nil {
 			return 0, err
