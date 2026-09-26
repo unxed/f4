@@ -1,10 +1,11 @@
+//go:build !windows
+
 package install
 
 import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -171,9 +172,6 @@ func TestEnsureDirRejectsFileInThePlaceOfADir(t *testing.T) {
 }
 
 func TestCopyExecutablePreservesExecutableBit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows has no Unix-style executable permission bit to preserve")
-	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "f4-src")
 	if err := os.WriteFile(src, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil { // #nosec G306 -- test fixture, not sensitive
@@ -204,9 +202,6 @@ func TestCopyExecutablePreservesExecutableBit(t *testing.T) {
 }
 
 func TestCopyExecutableSetsExecBitEvenWhenSourceLacksIt(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows has no Unix-style executable permission bit to set")
-	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "f4-src")
 	if err := os.WriteFile(src, []byte("binary"), 0o644); err != nil { // #nosec G306 -- test fixture, not sensitive
@@ -300,7 +295,7 @@ func TestAppendProfileLineIsIdempotent(t *testing.T) {
 func TestAppendProfileLinePreservesExistingContentAndAddsNewline(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".bashrc")
-	if err := os.WriteFile(path, []byte("# my existing config, no trailing newline"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("# my existing config, no trailing newline"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	line := `export PATH="$HOME/.local/bin:$PATH"`
