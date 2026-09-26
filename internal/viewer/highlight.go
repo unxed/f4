@@ -62,6 +62,17 @@ func (vv *ViewerView) RefreshHighlighting() {
 	}
 	vv.highlight = nil
 	vv.highlightTried = false
+	// renderText only re-requests a window when the lines on screen hash
+	// differently from the last request it made (highlightKey), so it does
+	// not spam the colorizer every frame while nothing has scrolled. That
+	// hash says nothing about which colorizer made the request, though: left
+	// as is, toggling highlighting back on without scrolling built a fresh,
+	// empty colorizer that never got a Request, because the screen still
+	// hashed to the same key as the one already highlighted before this
+	// toggle turned it off (f4 #1413 — "выключает подсветку сразу, а
+	// включает с нескольких попыток"). Resetting it here makes the next
+	// renderText call send a request regardless of the lines on screen.
+	vv.highlightKey = 0
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.Redraw()
 	}
