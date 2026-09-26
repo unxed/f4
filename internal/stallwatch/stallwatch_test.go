@@ -83,7 +83,6 @@ func TestFrame_DumpsAGapThatInterruptsSteadyWork(t *testing.T) {
 	// A busy stretch: units of work close enough together to count as one.
 	for i := 0; i < busyRun+2; i++ {
 		func() { defer Frame("test.busy")() }()
-		time.Sleep(5 * time.Millisecond)
 	}
 	if got := tightRun.Load(); got < busyRun {
 		t.Fatalf("the busy stretch was not recognised: %d units", got)
