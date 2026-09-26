@@ -2554,20 +2554,22 @@ func TestPanelsFrame_TerminalForwarding_Advanced(t *testing.T) {
 	pty := &mockPty{}
 	pf.Pty = pty
 
-	// 1. Ctrl+Tab remains a global workspace shortcut in Advanced mode.
+	// 1. Ctrl+Tab goes to the terminal app in Advanced mode (f4 #128): the
+	// protocol can tell it apart from plain Tab, so an app that uses the
+	// chord itself (far2l's own panel switch, say) keeps working.
 	handled := pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed,
 	})
-	if handled {
-		t.Error("Ctrl+Tab was erroneously forwarded to term.PTY in Advanced mode")
+	if !handled {
+		t.Error("Ctrl+Tab should be forwarded to term.PTY in Advanced mode")
 	}
-	if len(pty.written) != 0 {
-		t.Error("PTY received bytes for Ctrl+Tab in Advanced mode")
+	if len(pty.written) == 0 {
+		t.Error("PTY did not receive bytes for Ctrl+Tab in Advanced mode")
 	}
 	pty.written = nil
 
-	// 2. Shift+Ctrl+Tab should NOT be forwarded in any mode
+	// 2. Shift+Ctrl+Tab stays f4's own workspace shortcut in every mode.
 	handled = pressKey(pf, &vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true,
 		VirtualKeyCode: vtinput.VK_TAB, ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
@@ -2607,6 +2609,48 @@ func TestPanelsFrame_TerminalForwarding_BusyNonAltScreenWorkspaceKeys(t *testing
 		if got := pty.String(); got != "" {
 			t.Errorf("workspace key with modifiers %#x reached term.PTY as %q", state, got)
 		}
+	}
+}
+
+// f4 #128: the same split applies to a busy non-AltScreen PTY (a Python REPL
+// and the like) as to an AltScreen app: with an advanced protocol negotiated,
+// plain Ctrl+Tab goes to the child instead of switching workspaces, but
+// Ctrl+Shift+Tab is still f4's.
+func TestPanelsFrame_TerminalForwarding_BusyNonAltScreenAdvancedProtocol(t *testing.T) {
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ShowPanels = false
+	pf.TermView.UseAltScreen = false
+	pf.TermView.Win32InputMode = true
+
+	pty := &busyMockPty{}
+	pf.Pty = pty
+
+	handled := pressKey(pf, &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_TAB,
+		ControlKeyState: vtinput.LeftCtrlPressed,
+	})
+	if !handled {
+		t.Error("Ctrl+Tab should be forwarded to a busy term.PTY in Advanced mode")
+	}
+	if len(pty.written) == 0 {
+		t.Error("busy term.PTY did not receive bytes for Ctrl+Tab in Advanced mode")
+	}
+	pty.Reset()
+
+	handled = pressKey(pf, &vtinput.InputEvent{
+		Type:            vtinput.KeyEventType,
+		KeyDown:         true,
+		VirtualKeyCode:  vtinput.VK_TAB,
+		ControlKeyState: vtinput.LeftCtrlPressed | vtinput.ShiftPressed,
+	})
+	if handled {
+		t.Error("Shift+Ctrl+Tab was erroneously forwarded to a busy term.PTY")
+	}
+	if got := pty.String(); got != "" {
+		t.Errorf("Shift+Ctrl+Tab reached a busy term.PTY as %q", got)
 	}
 }
 

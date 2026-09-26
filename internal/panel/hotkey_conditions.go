@@ -175,10 +175,19 @@ func nativeShortcutOwnedByCurrentContext(actionName, key string) bool {
 		if !terminalOwnsInput {
 			return false
 		}
-		// PanelsFrame explicitly releases workspace cycling and, when the
+		// PanelsFrame explicitly releases Ctrl+Shift+Tab and, when the
 		// preference is enabled, Ctrl+N before raw terminal forwarding.
-		if strings.EqualFold(key, "CtrlTab") || strings.EqualFold(key, "CtrlShiftTab") {
+		// Plain Ctrl+Tab is only released this way without an advanced input
+		// protocol: once win32-input-mode or the kitty keyboard protocol is
+		// negotiated, frame.go hands Ctrl+Tab to the running program instead
+		// (far2l's own panel switch, for one), so the Next Workspace hint
+		// must not claim a chord it no longer receives in that state (f4#128).
+		if strings.EqualFold(key, "CtrlShiftTab") {
 			return false
+		}
+		if strings.EqualFold(key, "CtrlTab") {
+			advanced := frame.TermView != nil && (frame.TermView.Win32InputMode || frame.TermView.KittyFlags != 0)
+			return advanced
 		}
 		if strings.EqualFold(key, "CtrlN") && config.App.TerminalCtrlNWorkspace {
 			return false

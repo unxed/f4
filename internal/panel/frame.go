@@ -2311,8 +2311,22 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// process owns the terminal. Returning false lets FrameManager handle both
 	// directions instead of forwarding the key to an AltScreen application or
 	// to a busy ordinary terminal.PTY such as the Python REPL.
+	//
+	// Ctrl+Shift+Tab (Previous) is always ours: nothing below can tell it
+	// apart from Ctrl+Tab anyway without an advanced protocol, so claiming it
+	// unconditionally never costs a terminal app a key it could otherwise use.
+	// Plain Ctrl+Tab (Next) is only ours without an advanced protocol
+	// negotiated (Win32InputMode or the kitty keyboard protocol): a legacy
+	// terminal cannot distinguish Ctrl+Tab from plain Tab, so grabbing it
+	// there would take Tab itself away from whatever runs in the terminal. An
+	// app that negotiated the advanced protocol gets Ctrl+Tab for itself
+	// instead (far2l's own panel switch, for one) — its own Ctrl+Shift+Tab
+	// still goes to f4 (f4#128).
 	if e.Type == vtinput.KeyEventType && e.VirtualKeyCode == vtinput.VK_TAB && ctrl && !alt {
-		return false
+		advanced := pf.TermView.Win32InputMode || pf.TermView.KittyFlags != 0
+		if shift || !advanced {
+			return false
+		}
 	}
 	// Ctrl+N normally forks the active panels into a new workspace. Terminal
 	// applications may use that key themselves, so this interception is a
