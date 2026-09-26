@@ -30,11 +30,19 @@ func fillPlatformTimes(item *VFSItem, info os.FileInfo) {
 		item.ATime = time.Unix(0, stat.LastAccessTime.Nanoseconds())
 		item.CTime = time.Unix(0, stat.CreationTime.Nanoseconds())
 		item.WinAttrs = stat.FileAttributes
-		// Win32FileAttributeData carries no link count. Most files have
-		// exactly one; report that rather than leaving MetadataNlink unset
-		// and the LN column blank for every ordinary file (f4#1400).
-		item.KnownMetadata |= MetadataNlink
-		item.Nlink = 1
+		// Win32FileAttributeData (what FindNextFile/os.ReadDir hands back)
+		// carries no link count at all, so there is nothing honest to put
+		// here — NOT "1", which is what f4#1400's regression report
+		// caught: a hard-linked file on native Windows kept showing 1 in
+		// the LN column forever, because this used to hardcode it rather
+		// than leave the metadata unknown. Getting the real count needs an
+		// extra per-file NTFS query (CreateFile + GetFileInformationByHandleEx),
+		// too costly to pay for every entry in a directory listing (the
+		// same tradeoff fillPhysicalSizeCheap makes for on-disk size, see
+		// os_vfs_physical_windows.go). Stat/Lstat pay that cost already for
+		// fillPhysicalSize's NTFS query and get the real Nlink from it for
+		// free; leave MetadataNlink unset here so the LN column reads
+		// blank rather than lying during ordinary panel browsing.
 	}
 }
 

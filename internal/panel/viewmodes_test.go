@@ -5,12 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/internal/fileops"
+	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/vfs"
 )
 
@@ -212,7 +214,10 @@ func TestPanelLinkCountText(t *testing.T) {
 
 // TestPanelLinkCountColumnEndToEnd is a regression test for f4#1400: a real
 // file on the local filesystem has one hard link, and a panel mode with an
-// LN column must show it.
+// LN column must show it. It also covers the reporter's follow-up
+// (f4#1400): an *additional* hard link to the same file must bump the count
+// past 1 — the original Windows plumbing (fixed here) hardcoded Nlink to 1
+// unconditionally, so it never reflected extra links at all.
 func TestPanelLinkCountColumnEndToEnd(t *testing.T) {
 	resetPanelViewModes(true)
 	defer resetPanelViewModes(true)
@@ -242,6 +247,49 @@ func TestPanelLinkCountColumnEndToEnd(t *testing.T) {
 
 	if got := strings.TrimSpace(fsp.GetCellText(0, 1)); got != "1" {
 		t.Errorf("hard link count of a new file = %q, want %q", got, "1")
+	}
+
+	// Now add a second hard link and confirm the count actually moves —
+	// not just that it starts at a plausible-looking constant.
+	linkPath := filepath.Join(dir, "b.txt")
+	if err := os.Link(filePath, linkPath); err != nil {
+		t.Fatalf("os.Link: %v", err)
+	}
+	linkedItem, err := fs.Stat(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("Stat after Link: %v", err)
+	}
+	if !linkedItem.HasMetadata(vfs.MetadataNlink) {
+		t.Fatal("Stat did not report Nlink metadata after hard-linking")
+	}
+	if linkedItem.Nlink < 2 {
+		t.Errorf("Nlink after hard-linking = %d, want >= 2", linkedItem.Nlink)
+	}
+
+	fsp2 := newStableInfoTestPanel(0, 0, 60, 12, fs, []*FileEntry{{VFSItem: linkedItem}})
+	fsp2.SetViewMode(ViewModeDetailed)
+	if got := strings.TrimSpace(fsp2.GetCellText(0, 1)); got != strconv.FormatUint(linkedItem.Nlink, 10) {
+		t.Errorf("LN cell after hard-linking = %q, want %q", got, strconv.FormatUint(linkedItem.Nlink, 10))
+	}
+}
+
+// TestPanelLinkCountColumnHeaderWidth is a regression test for f4#1400's
+// follow-up report: the reporter found the LN column header "came out
+// funny" — the default width of 4 truncated the Russian header
+// ("Ссылки") down to "Ссы", an unfortunate truncation of an unrelated
+// word. The default width must fit the full localized header (English and
+// Russian) without truncation.
+func TestPanelLinkCountColumnHeaderWidth(t *testing.T) {
+	defer i18n.InitLang("", "", "")
+
+	for _, lang := range []string{"en", "ru"} {
+		i18n.InitLang(lang, "en", "")
+		title := panelColumnTitle(LinkCountColumn)
+		width := panelColumnDefaultWidth(PanelColumn{Type: LinkCountColumn})
+		if titleWidth := runewidth.StringWidth(title); titleWidth > width {
+			t.Errorf("lang %q: LN header %q needs width %d, default column width is only %d",
+				lang, title, titleWidth, width)
+		}
 	}
 }
 
