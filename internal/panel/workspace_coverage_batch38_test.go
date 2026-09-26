@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/unxed/f4/internal/ini"
 )
 
 func batch38Workspace(number int) WorkspaceSessionState {
@@ -70,6 +72,46 @@ func TestValidSessionViewModeFallsBackForInvalidValuesCoverageBatch38(t *testing
 	for _, mode := range []int{-1, 0x7fffffff} {
 		if got := validSessionViewMode(mode); got != ViewModeMedium {
 			t.Errorf("invalid mode %d = %v, want %v", mode, got, ViewModeMedium)
+		}
+	}
+}
+
+// TestValidSessionViewModeAcceptsExtendedModesCoverageBatch38 guards against
+// f4#1496: validSessionViewMode used to know only Brief/Medium/Detailed and
+// silently fell back to Medium for Wide (Ctrl+4) and the far2l-style
+// Ctrl+5..Ctrl+0 extended modes, so anything past the first three modes
+// never survived a restart even after an explicit save.
+func TestValidSessionViewModeAcceptsExtendedModesCoverageBatch38(t *testing.T) {
+	for _, mode := range []ViewMode{ViewModeWide, ViewMode5, ViewMode9, ViewMode0} {
+		if got := validSessionViewMode(int(mode)); got != mode {
+			t.Errorf("extended mode %v round-tripped as %v", mode, got)
+		}
+	}
+}
+
+// TestWorkspaceSessionViewModeRoundTripsThroughSaveAndReloadCoverageBatch38
+// exercises the real save/reload path (WriteWorkspaceSessions ->
+// LoadWorkspaceSessions -> validSessionViewMode, the same sequence
+// ApplyWorkspaceSession uses) for both the legacy three modes and an
+// extended mode, per f4#1496.
+func TestWorkspaceSessionViewModeRoundTripsThroughSaveAndReloadCoverageBatch38(t *testing.T) {
+	for _, mode := range []ViewMode{ViewModeBrief, ViewModeMedium, ViewModeDetailed, ViewModeWide, ViewMode5, ViewMode0} {
+		states := []WorkspaceSessionState{{
+			Number: 1,
+			Left:   PanelSessionState{ViewMode: int(mode)},
+			Right:  PanelSessionState{ViewMode: int(mode)},
+		}}
+		var b strings.Builder
+		WriteWorkspaceSessions(&b, states, 0)
+		got, _ := LoadWorkspaceSessions(ini.Parse(strings.NewReader(b.String())))
+		if len(got) != 1 {
+			t.Fatalf("mode %v: reloaded %d states, want 1", mode, len(got))
+		}
+		if left := validSessionViewMode(got[0].Left.ViewMode); left != mode {
+			t.Errorf("mode %v: left panel reloaded as %v", mode, left)
+		}
+		if right := validSessionViewMode(got[0].Right.ViewMode); right != mode {
+			t.Errorf("mode %v: right panel reloaded as %v", mode, right)
 		}
 	}
 }

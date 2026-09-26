@@ -299,7 +299,7 @@ func WriteWorkspaceSessions(sb *strings.Builder, states []WorkspaceSessionState,
 
 func validSessionViewMode(mode int) ViewMode {
 	viewMode := ViewMode(mode)
-	if viewMode != ViewModeMedium && viewMode != ViewModeDetailed && viewMode != ViewModeBrief {
+	if !viewMode.Valid() {
 		return ViewModeMedium
 	}
 	return viewMode
