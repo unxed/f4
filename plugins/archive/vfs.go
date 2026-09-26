@@ -486,6 +486,37 @@ func (v *ArchiveVFS) LocalArchivePath() (string, bool) {
 	return path, true
 }
 
+// selectedTestPaths turns the panel's marked names -- relative to the
+// directory currently being browsed inside the archive -- into the archive
+// root-relative set actionTestArchive restricts a test to. It builds that set
+// exactly the way copyBulkFrom does for "extract marked only" below, so a
+// marked directory's whole subtree is tested, not only the entry itself. A
+// name that fails cleanArchiveExtractionPath is dropped rather than aborting
+// the test: marked names always come from entries the panel already listed.
+// Empty names yields a nil map, meaning "test the whole archive" (f4#1250).
+func (v *ArchiveVFS) selectedTestPaths(names []string) map[string]bool {
+	if len(names) == 0 {
+		return nil
+	}
+	v.mu.Lock()
+	innerPath := v.innerPath
+	v.mu.Unlock()
+
+	selected := make(map[string]bool, len(names))
+	for _, name := range names {
+		fullInner := strings.ReplaceAll(name, "\\", "/")
+		if innerPath != "." && innerPath != "" {
+			fullInner = path.Join(innerPath, fullInner)
+		}
+		cleanSelected, err := cleanArchiveExtractionPath(fullInner)
+		if err != nil {
+			continue
+		}
+		selected[cleanSelected] = true
+	}
+	return selected
+}
+
 func (v *ArchiveVFS) IsAbs(candidate string) bool {
 	return archivePathHasPrefix(candidate, v.arcPath) || (!vfs.IsURIPath(candidate) && (filepath.IsAbs(candidate) || path.IsAbs(candidate)))
 }
