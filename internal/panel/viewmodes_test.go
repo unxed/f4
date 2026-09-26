@@ -218,11 +218,12 @@ func TestPanelLinkCountColumnEndToEnd(t *testing.T) {
 	defer resetPanelViewModes(true)
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+	filePath := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	fs := vfs.NewOSVFS(dir)
-	item, err := fs.Stat(context.Background(), "a.txt")
+	item, err := fs.Stat(context.Background(), filePath)
 	if err != nil {
 		t.Fatalf("Stat: %v", err)
 	}
