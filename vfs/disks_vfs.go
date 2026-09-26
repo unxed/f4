@@ -8,10 +8,12 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/unxed/f4/vfs/hostfs"
 )
 
 type diskFileWrapper struct {
-	*os.File
+	hostfs.File
 	size int64
 }
 
@@ -95,9 +97,16 @@ func (v *DisksVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) 
 	name := v.Base(path)
 	devPath := resolveDevicePath(name)
 
-	f, err := os.OpenFile(prepareOSPath(devPath), os.O_RDWR, 0)
+	// WINE.md §18.2/§19 (f4#1461, task 3): opening a specific device now
+	// goes through hostfs, the same "what to do vs. how to reach the OS"
+	// split disk *listing* already uses (getPlatformBlockDevices in
+	// disks_windows.go). In posix personality this reaches the real
+	// /dev/sdX node through libwinescape instead of a bogus \\.\-shaped
+	// Win32 path Wine cannot resolve; on every other GOOS/personality
+	// hostfs.OpenFile/Open forward to os.OpenFile/os.Open unchanged.
+	f, err := hostfs.OpenFile(prepareOSPath(devPath), os.O_RDWR, 0)
 	if err != nil {
-		f, err = os.Open(prepareOSPath(devPath))
+		f, err = hostfs.Open(prepareOSPath(devPath))
 	}
 
 	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
@@ -144,9 +153,16 @@ func (v *DisksVFS) PatchInPlace(ctx context.Context, path string, pieces []Patch
 	name := v.Base(path)
 	devPath := resolveDevicePath(name)
 
-	var f *os.File
+	// Same hostfs conversion as Open above; the sudo/elevation fallback
+	// below is untouched -- it is still exactly the Windows-elevation
+	// concept it always was (globalSudoClient.Open), just reached after a
+	// hostfs.OpenFile attempt instead of a bare os.OpenFile one. A
+	// posix/Wine equivalent of that elevation path has not been designed
+	// (f4#1461 flags it explicitly), so this still only fires under real
+	// Windows permission errors, same as before.
+	var f hostfs.File
 	var err error
-	f, err = os.OpenFile(prepareOSPath(devPath), os.O_RDWR, 0)
+	f, err = hostfs.OpenFile(prepareOSPath(devPath), os.O_RDWR, 0)
 	if err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable() {
 		f, err = globalSudoClient.Open(prepareOSPath(devPath), os.O_RDWR, 0)
 	}
