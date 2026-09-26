@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -445,6 +446,81 @@ func TestCmdSessionFlickeringPromptHeldByChildIsNotReleased(t *testing.T) {
 		}
 		testutil.DrainUITasks()
 		sim.expectExecuting(false, "after far.exe exited")
+	})
+}
+
+// f4#1376's residual report, after the fix in #1495: the first `cls` typed
+// at Far Manager's own command line still dropped back to f4 (Esc bounced
+// back into Far), but a second `cls` right after worked correctly. The
+// difference is not in whether the child veto fires -- TestCmdSession
+// FlickeringPromptHeldByChildIsNotReleased above already proves that in
+// isolation -- but in how much retry budget a flicker gets before that veto
+// even has to be asked: retryOrRelease's own bound-exceeded fallback resets
+// the attempt counter once it vetoes (so the *next* flicker gets a full
+// budget), and rescheduleWhileBusy does the same for a busy, non-prompt
+// screen, but settle()'s own "screen unchanged, still held by a child"
+// branch did not. Far Manager, drawing full screen without an alternate
+// screen of its own, settles into exactly that branch as soon as it is
+// launched -- its own command line is prompt-shaped and holds still for as
+// long as the user takes before typing anything -- and used to freeze the
+// counter wherever the brief flicker of Far's own startup drawing left it.
+// The very next flicker (`cls` redrawing that same line) then inherited
+// whatever was left instead of a fresh budget, reaching the bound-exceeded
+// fallback -- and therefore having to trust a single, uncached
+// child-process scan -- after only a look or two instead of
+// cmdPromptMaxAttempts of them. This test drives the real settle() path
+// (not retryOrRelease directly) through exactly that "already primed by an
+// earlier flicker, then settled, still held" sequence and checks the
+// budget survives it.
+func TestCmdSessionStableHoldResetsRetryBudget(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		sim.start()
+		sim.run("far.exe")
+		sim.pty.setChildren(terminal.ChildProcess{Name: "far.exe", GUI: false})
+
+		// Far settles at its own idle command line: prompt-shaped, and held
+		// still there for as long as the user takes before typing anything.
+		// This is examined by whatever settle chain the mark below leaves
+		// running -- Far does not remark a screen that is not changing, so
+		// nothing supersedes that chain until the screen changes again.
+		sim.prompt("")
+		seq := sim.pf.CmdSession.promptSeq
+		sim.wait(2 * cmdPromptRecheckDelay)
+		sim.expectExecuting(true, "while far.exe holds Far's own idle command line")
+
+		// Models a brief flicker while Far's own UI first painted: one look
+		// short of the bound retryOrRelease would enforce on a screen that
+		// never holds still. The screen is unchanged (still Far's idle
+		// prompt), so the next settle() call takes the held-by-child branch
+		// below, not retryOrRelease.
+		sim.pf.CmdSession.attempts = cmdPromptMaxAttempts - 1
+		sim.pf.CmdSession.settle(seq)
+		testutil.DrainUITasks()
+		sim.expectExecuting(true, "while far.exe holds an unchanged, prompt-shaped screen")
+
+		// This is the decisive check: a fake child list that always
+		// correctly reports far.exe (as it does throughout this test) can't
+		// by itself distinguish a veto that fires promptly from one that
+		// only fires after the bound is already exhausted -- both leave
+		// Executing true. What actually differs in the field is how much
+		// budget the *next* flicker gets before it has to trust that live,
+		// uncached check at all, which is exactly this counter.
+		if got := sim.pf.CmdSession.attempts; got != 0 {
+			t.Fatalf("[%s] settle's held-by-child branch left attempts=%d, want 0 -- the next flicker (cls) would inherit a used-up budget instead of cmdPromptMaxAttempts=%d fresh looks", sim.build.name, got, cmdPromptMaxAttempts)
+		}
+
+		// The next flicker -- cls clearing and redrawing Far's own command
+		// line -- now gets the full retry budget. Vary only trailing
+		// spaces so the screen keeps changing (current != previous) while
+		// staying prompt-shaped (promptShaped trims trailing spaces),
+		// mirroring cls redrawing the same "C:\path>" line repeatedly while
+		// Far repaints.
+		for i := 0; i < cmdPromptMaxAttempts-1; i++ {
+			sim.feed("\r" + promptText + strings.Repeat(" ", i+1))
+			sim.pf.CmdSession.settle(seq)
+			testutil.DrainUITasks()
+			sim.expectExecuting(true, "cls's flicker must not exhaust an already-spent budget")
+		}
 	})
 }
 
