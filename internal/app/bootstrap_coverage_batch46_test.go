@@ -13,10 +13,10 @@ type coverageBatch46PositionRenderer struct {
 }
 
 func (coverageBatch46PositionRenderer) Render([]vtui.CharInfo, []vtui.CharInfo, int, int, bool) {}
-func (coverageBatch46PositionRenderer) SetCursor(int, int, bool, vtui.CursorShape)   {}
-func (coverageBatch46PositionRenderer) SetPalette(*[256]uint32)                       {}
-func (coverageBatch46PositionRenderer) SetWindowTitle(string)                         {}
-func (coverageBatch46PositionRenderer) Flush()                                         {}
+func (coverageBatch46PositionRenderer) SetCursor(int, int, bool, vtui.CursorShape)              {}
+func (coverageBatch46PositionRenderer) SetPalette(*[256]uint32)                                 {}
+func (coverageBatch46PositionRenderer) SetWindowTitle(string)                                   {}
+func (coverageBatch46PositionRenderer) Flush()                                                  {}
 
 func (r coverageBatch46PositionRenderer) WindowPosition() (int, int, bool) {
 	return r.x, r.y, r.ok
