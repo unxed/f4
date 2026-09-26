@@ -1826,6 +1826,15 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 				scr.FillRect(startX, currY, maxX, currY, ' ', fillBg)
 			}
 
+			// far2l marks a row that ends mid-line (word wrap, not the
+			// line's actual end) with a glyph in its last column, so it
+			// reads as "keeps going" rather than a real line break (f4
+			// #1415). There's nowhere to put it when the fragment's own
+			// text already reaches the last column.
+			if shouldDrawWrapMark(fIdx, len(frags), startX, maxX) {
+				scr.Write(maxX, currY, vtui.StringToCharInfo("»", vtui.Palette[theme.ColEditorWrapMark]))
+			}
+
 			if absVRow == curVRow {
 				scr.SetCursorPos(ev.X1+curVCol+ev.CursorVirtualSpaces-ev.ScrollLeft, currY)
 				scr.SetCursorVisible(true)
@@ -1913,6 +1922,15 @@ DoneRendering:
 			ev.scrollBar.Show(scr)
 		}
 	}
+}
+
+// shouldDrawWrapMark reports whether the row just rendered — fragment fIdx
+// of fragCount fragments making up one logical line — ended because word
+// wrap broke it, not because the logical line itself ended, and whether the
+// row has a free cell at maxX to carry the mark in (f4 #1415). fragCount-1
+// is the line's last fragment, the one that really does end the line.
+func shouldDrawWrapMark(fIdx, fragCount, startX, maxX int) bool {
+	return fIdx < fragCount-1 && startX <= maxX
 }
 
 // VetoActionKey reports modal input states in which the editor must see

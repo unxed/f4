@@ -5720,3 +5720,83 @@ func TestEditor_LineTextForHighlight(t *testing.T) {
 		t.Error("a negative line must not report success")
 	}
 }
+
+// f4 #1415: shouldDrawWrapMark says a row carries the "this is a wrap, not
+// the line's real end" mark exactly when it is not the logical line's last
+// fragment and there is a free cell at maxX to put it in.
+func TestShouldDrawWrapMark(t *testing.T) {
+	cases := []struct {
+		name            string
+		fIdx, fragCount int
+		startX, maxX    int
+		want            bool
+	}{
+		{"first of two fragments, room to spare", 0, 2, 5, 7, true},
+		{"first of two fragments, exact fit, no room", 0, 2, 8, 7, false},
+		{"middle of three fragments, room to spare", 1, 3, 5, 7, true},
+		{"the line's last fragment never gets the mark", 1, 2, 5, 7, false},
+		{"a line with a single fragment never wraps", 0, 1, 5, 7, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldDrawWrapMark(tc.fIdx, tc.fragCount, tc.startX, tc.maxX); got != tc.want {
+				t.Errorf("shouldDrawWrapMark(%d, %d, %d, %d) = %v, want %v", tc.fIdx, tc.fragCount, tc.startX, tc.maxX, got, tc.want)
+			}
+		})
+	}
+}
+
+// f4 #1415: a wrapped row (word wrap broke the line, not a real newline)
+// ends with a marker glyph in ColEditorWrapMark, like far2l's, so it reads
+// as "the line keeps going" rather than the file's actual line end. This
+// exercises the real render path (DisplayObject -> ScreenBuf), not just the
+// shouldDrawWrapMark decision above, so a wiring mistake (wrong column,
+// wrong color slot, or the mark leaking onto the line's real last row)
+// would still be caught.
+//
+// Row 0 is the top bar, not text (see occurrenceEditor's comment in
+// editor_occurrence_test.go), so the text area starts at screen row 1. The
+// editor also always reserves its rightmost column for the scrollbar gutter
+// -- even on a line count too short to ever need scrolling, since NewEditorView
+// allocates the scrollbar unconditionally and DisplayObject's width
+// computation subtracts a column for it whenever it's non-nil -- so with
+// X1=0, X2=7 the text area is 7 columns wide (0..6), not 8.
+func TestEditorView_WordWrapDrawsWrapMark(t *testing.T) {
+	theme.SetDefaultF4Palette()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	// Effective text width 7 (see above): "aaaaa " (6 cols) is the last word
+	// boundary that fits, so the first visual row wraps there with 1 blank
+	// column to spare; the long second word ("bbbbbbbbbb") hard-wraps across
+	// the rows after it.
+	Pt := piecetable.New([]byte("aaaaa bbbbbbbbbb"))
+	ev := NewEditorView(Pt, nil, "")
+	defer ev.Close()
+	ev.WordWrap = true
+	ev.SetPosition(0, 0, 7, 10) // X1=0, X2=7 -> 8 raw columns, 7 of them text
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(8, 11)
+	ev.Show(scr)
+
+	frags := ev.Engine.GetFragments(0)
+	if len(frags) < 2 {
+		t.Fatalf("expected the line to wrap into at least 2 fragments, got %d", len(frags))
+	}
+
+	const (
+		firstTextRow = 1 // row 0 is the top bar
+		lastTextCol  = 6 // column 7 is the scrollbar gutter
+	)
+	wrapMark := vtui.Palette[theme.ColEditorWrapMark]
+	row0 := scr.GetCell(lastTextCol, firstTextRow)
+	if rune(row0.Char) != '»' || row0.Attributes != wrapMark { // #nosec G115 -- Char holds a rendered rune, well within int32 range.
+		t.Errorf("wrapped row 0 last cell = %q attr %x, want '»' in ColEditorWrapMark (%x)", rune(row0.Char), row0.Attributes, wrapMark) // #nosec G115 -- same as above.
+	}
+
+	lastFragRow := firstTextRow + len(frags) - 1
+	lastCell := scr.GetCell(lastTextCol, lastFragRow)
+	if rune(lastCell.Char) == '»' { // #nosec G115 -- Char holds a rendered rune, well within int32 range.
+		t.Errorf("the line's actual last row must not carry the wrap mark, got %q", rune(lastCell.Char))
+	}
+}
