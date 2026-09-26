@@ -2227,6 +2227,25 @@ func ShouldRecordFolderHistory(fp *FileSystemPanel, path string) bool {
 	return !filepath.IsAbs(path) && !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "\\")
 }
 
+// RecordFolderHistoryEntry records the folder-history entry, if any, for
+// loadVFS's current path. A VFS that implements vfs.HistoryPathProvider
+// (a panel plugin's session, e.g. NetFox) owns the decision entirely
+// (f4#262): whatever it hands back through HistoryEntry is what gets
+// recorded, and it gets nothing at all when the plugin declines. Any other
+// VFS falls back to the real-path rules in ShouldRecordFolderHistory, exactly
+// as before this hook existed.
+func RecordFolderHistoryEntry(fp *FileSystemPanel, loadVFS vfs.VFS, path string) {
+	if provider, ok := loadVFS.(vfs.HistoryPathProvider); ok {
+		if display, ref, ok := provider.HistoryEntry(); ok {
+			history.AddPluginFolderHistory(display, fmt.Sprintf("%T", loadVFS), ref)
+		}
+		return
+	}
+	if ShouldRecordFolderHistory(fp, path) {
+		history.AddFolderHistory(path)
+	}
+}
+
 // showDirectoryError keeps asynchronous refresh failures from stacking modal
 // dialogs. A failed recovery may schedule another read before the user closes
 // the first message; only the first live dialog should remain actionable.
@@ -2300,11 +2319,11 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		fp.clearCalculatedPanelTotal()
 	}
 	fp.lastLoadedPath = path
-	if directoryChanged && !suppressFolderHistory && ShouldRecordFolderHistory(fp, path) {
+	if directoryChanged && !suppressFolderHistory {
 		// Record accepted navigation in UI order, not in backend completion
 		// order. Otherwise an older slow cloud ReadDir can finish after a newer
 		// visit and move its path to the front of the global MRU history.
-		history.AddFolderHistory(path)
+		RecordFolderHistoryEntry(fp, loadVFS, path)
 	}
 
 	if fp.PendingSelection == "" {

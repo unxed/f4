@@ -19,6 +19,22 @@ type HistoryRecord struct {
 	Extra     string    `json:"extra,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitempty"`
 	Lock      bool      `json:"lock,omitempty"`
+
+	// PluginType and PluginRef, when both set, mark this entry as owned by a
+	// panel plugin's VFS (vfs.HistoryPathProvider) rather than a real
+	// filesystem path (f4#262): Name is display text the plugin chose, not
+	// something safe to open directly, and Dir/Extra are unused. Navigating
+	// here means asking an already-open VFS of PluginType to accept
+	// PluginRef — never opening a new connection. See
+	// panel.NavigateOpenPluginHistoryEntry.
+	PluginType string `json:"pluginType,omitempty"`
+	PluginRef  string `json:"pluginRef,omitempty"`
+}
+
+// IsPluginEntry reports whether this record is owned by a panel plugin's
+// VFS, per PluginType/PluginRef, rather than being a real filesystem path.
+func (r HistoryRecord) IsPluginEntry() bool {
+	return r.PluginType != "" && r.PluginRef != ""
 }
 
 func (r HistoryRecord) Directory() string {
@@ -350,4 +366,34 @@ func AddFolderHistory(path string) {
 		newHist = newHist[:100]
 	}
 	vtui.GlobalHistoryProvider.SaveHistory("folders", newHist)
+}
+
+// AddPluginFolderHistory records a folder-history entry owned by a panel
+// plugin's VFS (vfs.HistoryPathProvider) rather than a real filesystem path
+// (f4#262). display is the text the plugin chose to show; pluginType and
+// pluginRef identify, together, which VFS kind and which opaque reference
+// panel.NavigateOpenPluginHistoryEntry should try when the entry is picked.
+// It requires the rich (*F4HistoryProvider) history store: a plain
+// vtui.HistoryProvider has no room for PluginType/PluginRef, and recording
+// the display text alone there would make it indistinguishable from a real
+// path, which is exactly the bug this hook exists to avoid.
+func AddPluginFolderHistory(display, pluginType, pluginRef string) {
+	if display == "" || pluginType == "" || pluginRef == "" || vtui.GlobalHistoryProvider == nil {
+		return
+	}
+	records, hp := LoadFolderHistoryRecords(vtui.GlobalHistoryProvider)
+	if hp == nil {
+		return
+	}
+	current := HistoryRecord{Name: display, PluginType: pluginType, PluginRef: pluginRef, Timestamp: time.Now()}
+	newHistory := []HistoryRecord{current}
+	for _, record := range records {
+		if record.PluginType == pluginType && record.PluginRef == pluginRef {
+			newHistory[0].Lock = record.Lock
+			continue
+		}
+		newHistory = append(newHistory, record)
+	}
+	newHistory = LimitRichHistory(newHistory, 100)
+	SaveFolderHistoryRecords(hp, newHistory)
 }

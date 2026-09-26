@@ -508,6 +508,12 @@ func (v *FishVFS) Reconnect(ctx context.Context) error {
 
 func (v *FishVFS) GetTitle() string { return v.title }
 
+// HistoryEntry and NavigateHistoryEntry implement vfs.HistoryPathProvider
+// (f4#262): a FISH+ session owns its own folder-history entries instead of
+// its raw remote path (e.g. /root/foo) being recorded as if it were local.
+func (v *FishVFS) HistoryEntry() (display, ref string, ok bool) { return netfoxHistoryEntry(v) }
+func (v *FishVFS) NavigateHistoryEntry(ref string) bool         { return netfoxNavigateHistoryEntry(v, ref) }
+
 // SetPanelTitleFormatter customizes only the path rendered in the panel
 // border. The canonical POSIX path and the session title remain untouched.
 func (v *FishVFS) SetPanelTitleFormatter(formatter func(title, path string) string) {

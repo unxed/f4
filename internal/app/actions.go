@@ -141,15 +141,32 @@ func actionFoldersHistory(pf *panel.PanelsFrame) {
 		}
 	}
 
-	// Shared "cd on active panel" path used by bare Enter and by mouse click.
-	gotoActive := func(pos int) {
-		search.cleanup()
-		menu.Close()
-		if targetPanel := pf.GetActivePanel(); targetPanel != nil {
+	// navigateFolderHistorySelection resolves one chosen entry. A
+	// panel-plugin-owned entry (f4#262) is not a real path: it is resolved by
+	// asking whichever panel already has that session open to move itself
+	// there, never by handing its display text to targetPanel as if it were
+	// one, and never by opening a new connection. targetPanel only matters
+	// for an ordinary path entry.
+	navigateFolderHistorySelection := func(pos int, targetPanel *panel.FileSystemPanel) {
+		if pos < 0 || pos >= len(richFolders) {
+			return
+		}
+		if rec := richFolders[pos]; rec.IsPluginEntry() {
+			pf.NavigateOpenPluginHistoryEntry(rec.PluginType, rec.PluginRef)
+			return
+		}
+		if targetPanel != nil {
 			// The menu is oldest → newest. If the selected path disappeared,
 			// navigateAvailableFolderHistory walks toward newer entries.
 			pf.NavigateAvailableFolderHistory(targetPanel, h, pos, -1)
 		}
+	}
+
+	// Shared "cd on active panel" path used by bare Enter and by mouse click.
+	gotoActive := func(pos int) {
+		search.cleanup()
+		menu.Close()
+		navigateFolderHistorySelection(pos, pf.GetActivePanel())
 	}
 	menu.OnAction = func(int) {
 		if historyPos, _, ok := search.selected(); ok {
@@ -178,7 +195,12 @@ func actionFoldersHistory(pf *panel.PanelsFrame) {
 			if path := pins.SlotAt(int(e.VirtualKeyCode - vtinput.VK_0)); path != "" {
 				search.cleanup()
 				menu.Close()
-				if targetPanel := pf.GetActivePanel(); targetPanel != nil {
+				// A pinned entry can be a panel-plugin-owned one (f4#262):
+				// its "path" is display text, not something NavigateToPath
+				// can open, so route it the same way an ordinary Enter would.
+				if pos := indexOfFolderHistoryName(richFolders, path); pos >= 0 && richFolders[pos].IsPluginEntry() {
+					navigateFolderHistorySelection(pos, nil)
+				} else if targetPanel := pf.GetActivePanel(); targetPanel != nil {
 					pf.NavigateToPath(targetPanel, path)
 				}
 			}
@@ -208,9 +230,7 @@ func actionFoldersHistory(pf *panel.PanelsFrame) {
 			if shift {
 				search.cleanup()
 				menu.Close()
-				if targetPanel := pf.GetInactivePanel(); targetPanel != nil {
-					pf.NavigateAvailableFolderHistory(targetPanel, h, historyPos, -1)
-				}
+				navigateFolderHistorySelection(historyPos, pf.GetInactivePanel())
 				return true
 			}
 			gotoActive(historyPos)
@@ -513,6 +533,20 @@ func confirmAndClearRichHistory(title, providerName string, h *[]history.History
 		}
 	}
 }
+
+// indexOfFolderHistoryName returns the position of the first record whose
+// Name equals name, or -1. Pinned folders (panel.FolderPins) are keyed by
+// this same Name string, including for a panel-plugin-owned entry whose Name
+// is display text rather than a real path.
+func indexOfFolderHistoryName(records []history.HistoryRecord, name string) int {
+	for i, record := range records {
+		if record.Name == name {
+			return i
+		}
+	}
+	return -1
+}
+
 func confirmAndPruneMissingFolderHistory(h *[]string, rich *[]history.HistoryRecord, hp *history.F4HistoryProvider, search *historySearch, menu *vtui.VMenu) {
 	buttons := []string{i18n.Msg("vtui.Ok"), i18n.Msg("vtui.Cancel")}
 	dlg := vtui.ShowMessage(i18n.Msg("History.FoldersTitle"), i18n.Msg("History.ConfirmPruneMissing"), buttons)
@@ -523,7 +557,11 @@ func confirmAndPruneMissingFolderHistory(h *[]string, rich *[]history.HistoryRec
 		kept := make([]history.HistoryRecord, 0, len(*rich))
 		for _, record := range *rich {
 			p := record.Name
-			if record.Lock {
+			// A panel-plugin-owned entry's Name is display text, not a real
+			// path (f4#262): os.Stat on it says nothing about whether the
+			// entry is still reachable, so it is kept unconditionally, the
+			// same as a locked entry.
+			if record.Lock || record.IsPluginEntry() {
 				kept = append(kept, record)
 				continue
 			}

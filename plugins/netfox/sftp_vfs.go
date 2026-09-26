@@ -149,6 +149,12 @@ func (v *SFTPVFS) EncodeCommandListANSI(text []byte) ([]byte, error) {
 func (v *SFTPVFS) GetTitle() string { return v.title }
 func (v *SFTPVFS) SessionKey() any  { return v.client }
 
+// HistoryEntry and NavigateHistoryEntry implement vfs.HistoryPathProvider
+// (f4#262): an SFTP session owns its own folder-history entries instead of
+// its raw remote path (e.g. /root/foo) being recorded as if it were local.
+func (v *SFTPVFS) HistoryEntry() (display, ref string, ok bool) { return netfoxHistoryEntry(v) }
+func (v *SFTPVFS) NavigateHistoryEntry(ref string) bool         { return netfoxNavigateHistoryEntry(v, ref) }
+
 func (v *SFTPVFS) IsAtRoot() bool {
 	p := v.GetPath()
 	return p == "/" || p == ""

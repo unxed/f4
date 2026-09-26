@@ -914,6 +914,37 @@ type ConnectionInfoProvider interface {
 	ConnectionInfo() (host, port, user string, ok bool)
 }
 
+// HistoryPathProvider lets a panel plugin's VFS own its folder-history
+// entries, instead of the panel core judging one from GetPath() alone (see
+// panel.ShouldRecordFolderHistory). A plugin session's path is often
+// meaningless outside the plugin — a NetFox path such as /home/user is a
+// server-side path, indistinguishable from a real local one if recorded raw
+// — so a nested VFS that answers ok=false, or that does not implement this
+// interface at all, gets no folder-history entry: silence beats a raw
+// remote path mistaken for a local one, and beats a bare entry point with
+// no navigational value (f4#262).
+type HistoryPathProvider interface {
+	// HistoryEntry returns the text to show for the panel's current
+	// location, plus an opaque, plugin-defined reference that the same VFS
+	// kind can later use, through NavigateHistoryEntry, to return there. Both
+	// values are stored verbatim in folder history, including across
+	// restarts, so ref must never carry a password or other secret. ok is
+	// false when the current location has nothing worth remembering — for
+	// example, a plugin's own connection-list root screen.
+	HistoryEntry() (display, ref string, ok bool)
+
+	// NavigateHistoryEntry moves this VFS instance to the location named by
+	// ref, previously returned by HistoryEntry from (maybe) a different
+	// instance of the same kind. It must act only when this instance is
+	// already a live session for that ref's connection, and must never open
+	// a new connection or prompt for credentials: an implementation that
+	// would need to reconnect returns false instead, so picking a history
+	// entry never surprises the user with a password or sudo prompt
+	// (f4#262). It also returns false, leaving this instance untouched, when
+	// ref does not belong to this session at all.
+	NavigateHistoryEntry(ref string) bool
+}
+
 type ReadAtCloser interface {
 	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
 	Read(ctx context.Context, p []byte) (n int, err error)

@@ -6147,6 +6147,38 @@ func (pf *PanelsFrame) NavigateAvailableFolderHistory(fsp *FileSystemPanel, hist
 	return false
 }
 
+// NavigateOpenPluginHistoryEntry resolves a panel-plugin-owned folder-history
+// entry (f4#262, see vfs.HistoryPathProvider): it looks only at this frame's
+// two panels for one whose VFS is already a live session of vfsType and
+// accepts ref, and if so switches focus to it. It never opens a new
+// connection or reconnects — an entry whose session is not open on either
+// panel is simply reported as unreachable, the same "skip it, do not
+// surprise the user" choice NavigateAvailableFolderHistory makes for an
+// ordinary entry it cannot open (#814).
+func (pf *PanelsFrame) NavigateOpenPluginHistoryEntry(vfsType, ref string) bool {
+	if vfsType == "" || ref == "" {
+		return false
+	}
+	for idx, candidate := range pf.Panels {
+		fsp, ok := candidate.(*FileSystemPanel)
+		if !ok || fsp == nil || fsp.Vfs == nil {
+			continue
+		}
+		if fmt.Sprintf("%T", fsp.Vfs) != vfsType {
+			continue
+		}
+		provider, ok := fsp.Vfs.(vfs.HistoryPathProvider)
+		if !ok || !provider.NavigateHistoryEntry(ref) {
+			continue
+		}
+		pf.ActiveIdx = idx
+		fsp.PendingSelection = ".."
+		fsp.ReadDirectory()
+		return true
+	}
+	return false
+}
+
 func (pf *PanelsFrame) MoveFolderHistory(fsp *FileSystemPanel, direction int) bool {
 	if fsp == nil || vtui.GlobalHistoryProvider == nil {
 		return false
