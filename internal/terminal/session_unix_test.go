@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -260,5 +262,226 @@ func TestAdoptClientTerminal_ForgetsFar2lNegotiation(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("far2l negotiation was forgotten %d times, want once", calls)
+	}
+}
+
+// startFakeDaemon spawns a stand-in for a session daemon: a process whose
+// argv carries "--server" and the socket path (the identity stopSession
+// checks), living in its own session so its process group id equals its pid,
+// just like startNewSession's Setsid does. The command must not exec-replace
+// itself — an exec'd "sleep 30" would drop the extra argv and break the
+// identity check under test — so the script blocks on reading its stdin,
+// which the returned closer keeps open.
+func startFakeDaemon(t *testing.T, script string, args ...string) (*exec.Cmd, <-chan struct{}, *error) {
+	t.Helper()
+	argv := append([]string{"/bin/sh", "-c", script}, args...)
+	cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- test helper, fixed "/bin/sh -c" plus this test's own literal script/args, no untrusted input
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("StdinPipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start fake daemon: %v", err)
+	}
+	// Reap asynchronously: stopSession treats a zombie as exited, and cmd.Wait
+	// is what actually reaps our child. The channel is closed rather than
+	// sent on so both the test and t.Cleanup can wait for the same exit.
+	done := make(chan struct{})
+	var waitErr error
+	go func() {
+		waitErr = cmd.Wait()
+		close(done)
+	}()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		<-done
+		_ = stdin.Close()
+	})
+	return cmd, done, &waitErr
+}
+
+func writeSessionFiles(t *testing.T, info SessionInfo) (jsonPath, startupPath, sudoPath, apPath string) {
+	t.Helper()
+	dir := sessionDir()
+	jsonPath = filepath.Join(dir, fmt.Sprintf("f4-%d.json", info.PID))
+	data, err := json.Marshal(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jsonPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(info.SockPath, []byte("socket placeholder"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	startupPath = info.SockPath + ".startup"
+	if err := os.WriteFile(startupPath, []byte("startup log"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sudoPath = filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-%d.sock", info.PID))
+	apPath = filepath.Join(os.TempDir(), fmt.Sprintf("f4-ap-%d.sock", info.PID))
+	for _, p := range []string{sudoPath, apPath} {
+		if err := os.WriteFile(p, []byte("sock placeholder"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, p := range []string{jsonPath, info.SockPath, startupPath, sudoPath, apPath} {
+			_ = os.Remove(p)
+		}
+	})
+	return jsonPath, startupPath, sudoPath, apPath
+}
+
+// stopSession must terminate a daemon that presents the recorded identity and
+// then drop every file that described it. Killing happens before removal: the
+// daemon rewrites its json on every accept-loop iteration, so removing files
+// while it still runs would race a rewrite.
+func TestStopSession_TerminatesDaemonAndRemovesFiles(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cmdline"); err != nil {
+		t.Skip("no procfs; identity check falls back to socket existence")
+	}
+
+	sockPath := filepath.Join(sessionDir(), fmt.Sprintf("f4-stop-%d.sock", time.Now().UnixNano()))
+	cmd, done, waitErr := startFakeDaemon(t, "read x", "--server", sockPath)
+	info := SessionInfo{PID: cmd.Process.Pid, Title: "fake", SockPath: sockPath}
+	jsonPath, startupPath, sudoPath, apPath := writeSessionFiles(t, info)
+
+	stopAllSessions([]SessionInfo{info})
+
+	select {
+	case <-done:
+		if *waitErr == nil {
+			t.Error("fake daemon exited cleanly; want killed by signal")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("fake daemon still running after stopAllSessions")
+	}
+
+	for name, path := range map[string]string{
+		"session json": jsonPath,
+		"socket":       info.SockPath,
+		"startup log":  startupPath,
+		"sudo socket":  sudoPath,
+		"askpass sock": apPath,
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("stopAllSessions left %s %s (err=%v)", name, path, err)
+		}
+	}
+}
+
+// A session file can outlive the pid it records; that pid may then belong to
+// an unrelated process. stopSession must refuse to signal it (cmdline lacks
+// "--server" and the recorded socket) while still clearing the stale files.
+func TestStopSession_RefusesUnrelatedProcessStillRemovesFiles(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cmdline"); err != nil {
+		t.Skip("no procfs; identity check falls back to socket existence")
+	}
+
+	sockPath := filepath.Join(sessionDir(), fmt.Sprintf("f4-refuse-%d.sock", time.Now().UnixNano()))
+	cmd, done, waitErr := startFakeDaemon(t, "read x") // argv has no --server / socket path
+	info := SessionInfo{PID: cmd.Process.Pid, Title: "not a daemon", SockPath: sockPath}
+	jsonPath, startupPath, sudoPath, apPath := writeSessionFiles(t, info)
+
+	stopAllSessions([]SessionInfo{info})
+
+	select {
+	case <-done:
+		t.Fatalf("stopAllSessions killed an unrelated process (%v)", *waitErr)
+	case <-time.After(300 * time.Millisecond):
+		// Still running, as it must be.
+	}
+	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Fatalf("unrelated process is no longer signalable: %v", err)
+	}
+	for name, path := range map[string]string{
+		"session json": jsonPath,
+		"socket":       info.SockPath,
+		"startup log":  startupPath,
+		"sudo socket":  sudoPath,
+		"askpass sock": apPath,
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("stopAllSessions left stale %s %s (err=%v)", name, path, err)
+		}
+	}
+}
+
+// The picker's own pid must never be signalled: it is the f4 process showing
+// the dialog, not a daemon, and killing it would take down the UI mid-click.
+// Its metadata still has to go so the next picker does not list it.
+func TestStopSession_NeverKillsOwnPidButRemovesItsFiles(t *testing.T) {
+	sockPath := filepath.Join(sessionDir(), fmt.Sprintf("f4-self-%d.sock", time.Now().UnixNano()))
+	info := SessionInfo{PID: os.Getpid(), Title: "picker", SockPath: sockPath}
+	jsonPath, startupPath, sudoPath, apPath := writeSessionFiles(t, info)
+
+	stopAllSessions([]SessionInfo{info})
+
+	// If stopSession had signalled us, the test process would already be gone.
+	if !isProcessAlive(os.Getpid()) {
+		t.Fatal("stopAllSessions signalled the test process itself")
+	}
+	for name, path := range map[string]string{
+		"session json": jsonPath,
+		"socket":       info.SockPath,
+		"startup log":  startupPath,
+		"sudo socket":  sudoPath,
+		"askpass sock": apPath,
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("stopAllSessions left %s %s (err=%v)", name, path, err)
+		}
+	}
+}
+
+func TestSessionProcessMatches_IdentityRules(t *testing.T) {
+	sockPath := filepath.Join(sessionDir(), fmt.Sprintf("f4-ident-%d.sock", time.Now().UnixNano()))
+	if err := os.WriteFile(sockPath, []byte("socket placeholder"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(sockPath) })
+
+	if sessionProcessMatches(SessionInfo{PID: 0, SockPath: sockPath}) {
+		t.Error("pid 0 matched")
+	}
+	if sessionProcessMatches(SessionInfo{PID: 1, SockPath: sockPath}) {
+		t.Error("pid 1 (init) matched")
+	}
+	if sessionProcessMatches(SessionInfo{PID: os.Getpid(), SockPath: sockPath}) {
+		t.Error("own pid matched")
+	}
+	if sessionProcessMatches(SessionInfo{PID: -1, SockPath: sockPath}) {
+		t.Error("negative pid matched")
+	}
+	if sessionProcessMatches(SessionInfo{PID: 0xDEAD, SockPath: sockPath}) {
+		t.Error("dead pid matched")
+	}
+
+	// Live process whose argv lacks the identity: must not match. (Own pid
+	// short-circuits earlier, so this needs a separate process.)
+	if _, err := os.Stat("/proc/self/cmdline"); err == nil {
+		stranger, _, _ := startFakeDaemon(t, "read x")
+		if sessionProcessMatches(SessionInfo{PID: stranger.Process.Pid, SockPath: sockPath}) {
+			t.Error("matched a process whose cmdline does not name the socket")
+		}
+		// And with the identity present, the same check must say yes —
+		// otherwise stopSession could never kill a real daemon either.
+		daemon, _, _ := startFakeDaemon(t, "read x", "--server", sockPath)
+		// Small grace for /proc/<pid>/cmdline to become readable under heavy
+		// parallel test load; failure here means the identity check itself is
+		// broken, not a timing issue.
+		var matched bool
+		for i := 0; i < 20; i++ {
+			if sessionProcessMatches(SessionInfo{PID: daemon.Process.Pid, SockPath: sockPath}) {
+				matched = true
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if !matched {
+			t.Error("did not match a daemon whose cmdline names --server and the socket")
+		}
 	}
 }

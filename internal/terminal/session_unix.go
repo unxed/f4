@@ -109,6 +109,91 @@ func removeSessionInfo(sockPath string) {
 	os.Remove(sockPath)
 }
 
+// sessionProcessMatches reports whether pid still runs the daemon that wrote
+// info. Session files outlive their daemons for a while, and pid values get
+// reused, so killing on pid alone would eventually terminate an unrelated
+// program. The daemon's argv carries both "--server" and its socket path,
+// which is the strongest identity check available without cooperation from
+// the process being inspected.
+func sessionProcessMatches(info SessionInfo) bool {
+	if info.PID <= 1 || info.PID == os.Getpid() || !isProcessAlive(info.PID) {
+		return false
+	}
+	// #nosec G304 -- path is derived from an integer pid.
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", info.PID))
+	if err != nil {
+		// No procfs (macOS, BSD, Solaris): fall back to the same evidence
+		// listSessions used to show the entry at all -- the socket exists.
+		_, statErr := os.Stat(info.SockPath)
+		return statErr == nil
+	}
+	cmdline := string(data)
+	return strings.Contains(cmdline, "--server") && strings.Contains(cmdline, info.SockPath)
+}
+
+// stopSession terminates the daemon described by info and removes the files
+// that described it. SIGTERM goes to the whole process group first: the
+// daemon is started with Setsid, so its group id equals its pid, and the
+// group also holds the sudo dispatcher child. Processes are reaped elsewhere
+// (the daemon's parent is init), but a child of ours can linger as a zombie,
+// so /proc/<pid>/stat state "Z" counts as exited while polling.
+func stopSession(info SessionInfo) {
+	if sessionProcessMatches(info) {
+		if err := syscall.Kill(-info.PID, syscall.SIGTERM); err != nil {
+			_ = syscall.Kill(info.PID, syscall.SIGTERM)
+		}
+		deadline := time.Now().Add(time.Second)
+		for isProcessAlive(info.PID) && time.Now().Before(deadline) {
+			if procState(info.PID) == 'Z' {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if isProcessAlive(info.PID) && procState(info.PID) != 'Z' {
+			if err := syscall.Kill(-info.PID, syscall.SIGKILL); err != nil {
+				_ = syscall.Kill(info.PID, syscall.SIGKILL)
+			}
+		}
+	}
+
+	// The daemon rewrites its json on every loop iteration, so files go only
+	// after the process is gone -- otherwise the write would resurrect it.
+	_ = os.Remove(filepath.Join(sessionDir(), fmt.Sprintf("f4-%d.json", info.PID)))
+	if info.SockPath != "" {
+		_ = os.Remove(info.SockPath)
+		_ = os.Remove(info.SockPath + ".startup")
+	}
+	_ = os.Remove(filepath.Join(os.TempDir(), fmt.Sprintf("f4-sudo-%d.sock", info.PID)))
+	_ = os.Remove(filepath.Join(os.TempDir(), fmt.Sprintf("f4-ap-%d.sock", info.PID)))
+}
+
+// procState returns the single-letter process state from /proc/<pid>/stat,
+// or 0 when it cannot be read (no procfs, process gone).
+func procState(pid int) byte {
+	// #nosec G304 -- path is derived from an integer pid.
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return 0
+	}
+	// The comm field is parenthesised and may itself contain spaces or ')',
+	// so the state is the byte after the last ')'.
+	s := string(data)
+	close := strings.LastIndexByte(s, ')')
+	if close < 0 || close+2 >= len(s) {
+		return 0
+	}
+	return s[close+2]
+}
+
+// stopAllSessions terminates every listed daemon. A refused kill is
+// tolerated: the files are removed regardless, and listSessions drops stale
+// entries on the next scan anyway.
+func stopAllSessions(sessions []SessionInfo) {
+	for _, s := range sessions {
+		stopSession(s)
+	}
+}
+
 func ManageSessions() {
 	gui.Running = false
 	if len(os.Args) > 1 && os.Args[1] == "--server" {
@@ -858,8 +943,10 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	}
 
 	btnOk := vtui.NewButton(0, 0, i18n.Msg("vtui.Ok"))
+	btnDeleteAll := vtui.NewButton(0, 0, i18n.Msg("Session.DeleteAll"))
 	btnCancel := vtui.NewButton(0, 0, i18n.Msg("vtui.Cancel"))
 	dlg.AddItem(btnOk)
+	dlg.AddItem(btnDeleteAll)
 	dlg.AddItem(btnCancel)
 
 	// Layout Engine
@@ -870,6 +957,7 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
+	hbox.Add(btnDeleteAll, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
@@ -877,6 +965,25 @@ func runSessionPicker(sessions []SessionInfo) *SessionInfo {
 	btnOk.OnClick = func() {
 		if lb.OnAction != nil {
 			lb.OnAction(lb.SelectPos)
+		}
+	}
+	btnDeleteAll.OnClick = func() {
+		confirm := vtui.ShowMessageEx(
+			i18n.Msg("Session.DeleteAllTitle"),
+			fmt.Sprintf(i18n.Msg("Session.DeleteAllConfirm"), len(sessions)),
+			[]string{i18n.Msg("vtui.Ok"), i18n.Msg("vtui.Cancel")},
+			vtui.MessageWarn,
+		)
+		// ShowMessageEx runs OnResult from inside SetExitCode, before the
+		// FrameManager cleans up Done frames, so this still executes while
+		// both dialogs are on the stack.
+		confirm.OnResult = func(code int) {
+			if code != 0 {
+				return
+			}
+			stopAllSessions(sessions)
+			selected = &SessionInfo{PID: 0}
+			dlg.SetExitCode(1)
 		}
 	}
 	btnCancel.OnClick = func() { dlg.SetExitCode(-1) }

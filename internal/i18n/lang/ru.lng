@@ -2006,6 +2006,9 @@ Queue.ColProgress=Ход
 Queue.ColSpeed=Скорость
 
 Session.Title= Выберите сессию
+Session.DeleteAll=Стереть все сессии
+Session.DeleteAllTitle= Стереть все сессии
+Session.DeleteAllConfirm= Остановить все %d работающих сессии? Привязанные окна f4 будут закрыты, несохранённые изменения потеряются.
 
 AI.Title= Панель ИИ
 AI.ErrorTitle= Ошибка панели ИИ
