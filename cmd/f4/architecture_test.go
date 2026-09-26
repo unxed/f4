@@ -35,6 +35,11 @@ var architectureLayers = map[string]int{
 	// Checked conversions, shared by seven packages. Zero imports of ours.
 	"internal/numeric": 0,
 
+	// The --install/--self-install CLI command. Standalone: it copies the
+	// running executable and edits a shell profile, importing nothing else
+	// of ours.
+	"internal/install": 0,
+
 	// Key naming, remapping, input translation and the X key grabs. Reads
 	// internal/config like internal/theme does, and internal/numeric for the
 	// checked conversions the kitty and mouse decoders need.

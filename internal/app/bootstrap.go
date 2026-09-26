@@ -22,6 +22,7 @@ import (
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/ini"
+	"github.com/unxed/f4/internal/install"
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/macro"
 	"github.com/unxed/f4/internal/plughost"
@@ -465,6 +466,8 @@ func Main() {
 	var dumpScreenAfter float64
 	var updateRequested bool
 	var updateChannelArg string
+	var installRequested bool
+	var installYes bool
 
 	exeName := filepath.Base(absExecPath)
 	if strings.Contains(strings.ToLower(exeName), "gui") {
@@ -498,6 +501,10 @@ func Main() {
 				updateChannelArg = os.Args[i+1]
 				i++
 			}
+		case "--install", "--self-install":
+			installRequested = true
+		case "--yes":
+			installYes = true
 		case "-gui", "--gui":
 			guiMode = true
 			startupChoiceGiven = true
@@ -672,6 +679,14 @@ The following switches may be used in the command line:
                          "auto" ignores the configured default for this run
  --input [InputMode]    Defines the preferred vtinput parser method;
                          [InputMode] values: "", "ansi", "ConPTY"
+ --install, --self-install [--yes]
+                         Copy this executable into ~/.local/bin (falling back
+                         to ~/bin), then exit; if that directory is not on
+                         PATH yet, offers to add it to your shell's profile
+                         (bash, zsh or fish, detected from $SHELL) after
+                         confirming, or prints the exact line to add by hand
+                         for another shell; --yes adds the line without
+                         asking. Unix shells only; not available on Windows
  --log [logfile]        If =1 or =true uses profile logs/debug.log,
                          otherwise logfile
  --new-plugin [pluginName]
@@ -713,6 +728,12 @@ see in vtinput project: https://github.com/unxed/vtinput
 	// purpose, this run never touched the session.
 	if updateRequested {
 		os.Exit(update.RunCLI(updateChannelArg, updateSettings(), currentBuild(), applyUpdateSettings))
+	}
+
+	// Installing, like updating, is a command rather than a way to start the
+	// file manager: no panels and no session come up here either.
+	if installRequested {
+		os.Exit(install.RunCLI(absExecPath, install.Options{AutoConfirm: installYes}))
 	}
 
 	for _, arg := range os.Args {
