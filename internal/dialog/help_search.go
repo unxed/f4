@@ -351,34 +351,34 @@ func helpZoomButtonHit(frame vtui.Frame, e *vtinput.InputEvent) bool {
 	return my == y1 && mx >= x2-offset && mx <= x2-offset+2
 }
 
-func ToggleHelpZoom(frame vtui.Frame) bool {
-	resizable, ok := frame.(interface {
-		ChangeSize(int, int)
-		MoveRelative(int, int)
-	})
-	if !ok {
-		return false
-	}
+// helpResizable is what ToggleHelpZoom and reapplyHelpZoom need from a help
+// frame to move and resize it; every vtui.BaseWindow-derived frame (which is
+// what HelpTopicForFrame already requires) satisfies it.
+type helpResizable interface {
+	ChangeSize(int, int)
+	MoveRelative(int, int)
+}
+
+// helpZoomTarget is the bounds a maximized help window fills at the screen's
+// current size: full width, and the same top/bottom insets vtui's
+// BaseWindow.ToggleZoom and f4's settingsCenter.ResizeConsole use (f4#904:
+// three earlier rounds only shrank the target height by a guessed constant,
+// which never moved the top of the window down, so the maximized window's
+// own top border still rendered under the workspace tab strip; the tab strip
+// owns WorkspaceTopInset() row(s) above and the key bar owns the bottom row,
+// both painted after frames, so a maximized window must start below the
+// strip, not just be a row or two shorter).
+func helpZoomTarget() helpWindowBounds {
+	width, height := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
+	top := vtui.FrameManager.WorkspaceTopInset()
+	return helpWindowBounds{0, top, width - 1, max(top, height-2)}
+}
+
+// applyHelpBounds moves and resizes frame to target, the way ToggleHelpZoom
+// always has: through ChangeSize/MoveRelative (not SetPosition) so lastW/lastH
+// stay correct for whichever BaseWindow-derived type frame is.
+func applyHelpBounds(frame vtui.Frame, resizable helpResizable, target helpWindowBounds) bool {
 	x1, y1, x2, y2 := frame.GetPosition()
-	target := helpWindowBounds{}
-	if currentHelpZoom != nil && currentHelpZoom.frame == frame {
-		target = fitHelpBounds(currentHelpZoom.saved)
-		currentHelpZoom = nil
-	} else {
-		currentHelpZoom = &helpZoomState{frame: frame, saved: helpWindowBounds{x1, y1, x2, y2}}
-		width, height := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
-		// f4#904: three earlier rounds only shrank the target height by a
-		// guessed constant (GetScreenHeight()-2, then -3, -4, -5), which
-		// never moved the top of the window down, so the maximized window's
-		// own top border still rendered under the workspace tab strip. Match
-		// vtui's BaseWindow.ToggleZoom and f4's settingsCenter.ResizeConsole
-		// (both fixed for the identical symptom in issue #1144): the tab
-		// strip owns WorkspaceTopInset() row(s) above and the key bar owns
-		// the bottom row, both painted after frames, so a maximized window
-		// must start below the strip, not just be a row or two shorter.
-		top := vtui.FrameManager.WorkspaceTopInset()
-		target = helpWindowBounds{0, top, width - 1, max(top, height-2)}
-	}
 	lastW, okW := nestedHelpInt(reflect.ValueOf(frame), "lastW")
 	lastH, okH := nestedHelpInt(reflect.ValueOf(frame), "lastH")
 	if !okW || !okH {
@@ -389,8 +389,59 @@ func ToggleHelpZoom(frame vtui.Frame) bool {
 	resizable.ChangeSize(lastW+targetW-currentW, lastH+targetH-currentH)
 	nowX1, nowY1, _, _ := frame.GetPosition()
 	resizable.MoveRelative(target.x1-nowX1, target.y1-nowY1)
+	return true
+}
+
+func ToggleHelpZoom(frame vtui.Frame) bool {
+	resizable, ok := frame.(helpResizable)
+	if !ok {
+		return false
+	}
+	x1, y1, x2, y2 := frame.GetPosition()
+	target := helpWindowBounds{}
+	if currentHelpZoom != nil && currentHelpZoom.frame == frame {
+		target = fitHelpBounds(currentHelpZoom.saved)
+		currentHelpZoom = nil
+	} else {
+		currentHelpZoom = &helpZoomState{frame: frame, saved: helpWindowBounds{x1, y1, x2, y2}}
+		target = helpZoomTarget()
+	}
+	if !applyHelpBounds(frame, resizable, target) {
+		return false
+	}
 	vtui.FrameManager.Redraw()
 	return true
+}
+
+// reapplyHelpZoom re-asserts the maximized bounds a live terminal resize
+// (vtui's FrameManager.Resize, forwarded to every open frame's
+// ResizeConsole) just undid. f4#378 (follow-up): montoner0 reported that
+// after F5 maximizes Help, expanding or resizing the window again leaves the
+// text wrapped to the old width. vtui.HelpView.ResizeConsole has no idea a
+// window is "maximized" -- that state lives entirely here, in
+// currentHelpZoom, outside vtui -- so on every resize it recenters the
+// window at its ordinary, width-capped size, silently discarding the zoom
+// currentHelpZoom still thinks is in effect. HelpView itself re-wraps
+// correctly for whatever bounds it is given (rewrapOnResize, called from
+// Show); the bug is only that a resize while zoomed gives it the wrong
+// bounds. Re-fitting to the current screen here, right after the frame
+// painted with those wrong bounds, and repainting immediately, means the
+// window (and its wrapped text) never visibly shrinks back.
+func reapplyHelpZoom(scr *vtui.ScreenBuf, frame vtui.Frame) {
+	if currentHelpZoom == nil || currentHelpZoom.frame != frame {
+		return
+	}
+	resizable, ok := frame.(helpResizable)
+	if !ok {
+		return
+	}
+	target := helpZoomTarget()
+	if x1, y1, x2, y2 := frame.GetPosition(); (helpWindowBounds{x1, y1, x2, y2}) == target {
+		return
+	}
+	if applyHelpBounds(frame, resizable, target) {
+		frame.Show(scr)
+	}
 }
 
 func fitHelpBounds(bounds helpWindowBounds) helpWindowBounds {
@@ -463,6 +514,11 @@ func drawHelpWindowControls(scr *vtui.ScreenBuf, frame vtui.Frame) {
 // pushed above Help and inside the screen grabber's snapshot, and a frame on
 // top no longer throws the search away (#378).
 func RenderHelpFrame(scr *vtui.ScreenBuf, frame vtui.Frame) {
+	// Re-fit and re-wrap first: HelpTopicForFrame below reads the topic's
+	// current, already-wrapped layout off frame, and a stale zoom (see
+	// reapplyHelpZoom) would otherwise hand back rows wrapped for the wrong
+	// width for the rest of this render.
+	reapplyHelpZoom(scr, frame)
 	TopicName, topic, isHelp := HelpTopicForFrame(frame)
 	if !isHelp {
 		return

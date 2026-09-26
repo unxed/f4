@@ -49,24 +49,43 @@ func TestHelpRewrapsAfterF5ZoomToggle(t *testing.T) {
 
 // f4 #378 (follow-up): the other resize path a real user hits is the terminal
 // window itself being resized (SIGWINCH), which vtui's FrameManager.Resize
-// forwards to every open frame's ResizeConsole. This exercises that exact
-// path -- not vtui.HelpView.SetPosition, which help_search_test.go already
-// covers -- to see whether it, like F5, correctly re-wraps.
-func TestHelpRewrapsAfterLiveTerminalResize(t *testing.T) {
+// forwards to every open frame's ResizeConsole. On its own, a live resize
+// while Help is at its ordinary (non-maximized) size is not informative here:
+// vtui.HelpView.ResizeConsole always re-centers at its normal, width-capped
+// size regardless of the terminal's width, so nothing is expected to change
+// and TestHelpRewrapsAfterF5ZoomToggle above already covers the case where
+// the window's width genuinely changes.
+//
+// The real, reproducible bug is a live resize *while Help is zoomed*:
+// ResizeConsole has no idea the window is maximized -- that state
+// (currentHelpZoom) lives entirely in this package, outside vtui -- so a
+// resize recenters the window back to its ordinary width, silently
+// discarding the zoom and, with it, the wider re-wrap montoner0 expected to
+// still be there.
+func TestHelpZoomSurvivesLiveTerminalResize(t *testing.T) {
 	long := "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron"
 	view, scr := newSearchableHelpForTestAtSize(t, 100, 25, []string{"first", long, "last"})
 
-	view.Show(scr)
-	rowsBefore := len(view.CurrentTopic().Lines)
-	if rowsBefore <= 3 {
-		t.Fatalf("the narrow window laid the topic out in %d rows, want the long line broken into more than one row", rowsBefore)
+	f5 := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F5}
+	if !HandleHelpSearchHotkey(f5) {
+		t.Fatal("F5 was not consumed by the Help zoom toggle")
 	}
+
+	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	rowsZoomed := len(view.CurrentTopic().Lines)
 
 	vtui.FrameManager.Resize(220, 25)
 
 	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	x1, _, x2, _ := view.GetPosition()
+	if x1 != 0 || x2 != 219 {
+		t.Fatalf("after the terminal resized wider while Help was zoomed, the window sits at %d..%d instead of filling the new width 0..219: the resize silently un-zoomed it", x1, x2)
+	}
+
 	rowsAfter := len(view.CurrentTopic().Lines)
-	if rowsAfter >= rowsBefore {
-		t.Fatalf("after the terminal resized wider, the topic still lays out in %d rows (was %d before): the long line was not re-wrapped to the new width", rowsAfter, rowsBefore)
+	if rowsAfter > rowsZoomed {
+		t.Fatalf("after the terminal resized wider while Help was zoomed, the topic laid out in %d rows (was %d right after zooming): the long line was re-wrapped back to a narrower width instead of the new, wider one", rowsAfter, rowsZoomed)
 	}
 }
