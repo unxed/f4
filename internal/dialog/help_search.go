@@ -367,9 +367,11 @@ func ToggleHelpZoom(frame vtui.Frame) bool {
 	} else {
 		currentHelpZoom = &helpZoomState{frame: frame, saved: helpWindowBounds{x1, y1, x2, y2}}
 		width, height := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
-		// Leave one extra row below the maximized help window so its top
-		// border and controls remain inside the visible frame.
-		target = helpWindowBounds{0, 0, width - 1, height - 4}
+		// f4#904: the maximized help window still rendered its top border
+		// one row too low, under the tab bar, until it collapsed back down.
+		// Leaving one more row free below the window keeps the whole frame,
+		// top border included, inside the visible area.
+		target = helpWindowBounds{0, 0, width - 1, height - 5}
 	}
 	lastW, okW := nestedHelpInt(reflect.ValueOf(frame), "lastW")
 	lastH, okH := nestedHelpInt(reflect.ValueOf(frame), "lastH")
