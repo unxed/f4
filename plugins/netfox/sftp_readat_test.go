@@ -95,7 +95,7 @@ func TestSFTPFileReadAtIsRandomAccessNotFullDownload(t *testing.T) {
 
 	const fileSize = 8 << 20 // 8MB: large enough that "downloaded it all" is obvious.
 	content := make([]byte, fileSize)
-	rand.New(rand.NewSource(42)).Read(content)
+	rand.New(rand.NewSource(42)).Read(content) // #nosec G404 -- deterministic test fixture data, not security-sensitive.
 
 	wf, err := client.Create("/big.bin")
 	if err != nil {
