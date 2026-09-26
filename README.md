@@ -84,6 +84,37 @@ XP lacks a few functions ReactOS has.
 
 **The Core:** Creating an experimental, cross-platform TUI (Terminal User Interface) file manager that aims to fully replicate the features, UX, data structures, and rendering logic of `far2l` and Far Manager, but implemented entirely in Go.
 
+### 🧪 Experimental: Redox, GNU Hurd, Haiku
+
+Ports to three more OSes are in progress in [unxed/sandbox](https://github.com/unxed/sandbox),
+built and verified only in that repo's own GitHub Actions (nothing in `unxed/f4` itself
+changes yet). No nightly artifacts for these three are published from `unxed/f4`'s own
+release pipeline, so there is nothing in the table above for them — here are the most
+useful current links instead.
+
+- **[Redox OS](https://github.com/unxed/sandbox/tree/main/f4-redox)** — builds for
+  `GOOS=redox GOARCH=amd64` and runs in the console (panels, F-keys, Help, menu, built-in
+  shell) and over the pure-Go X11 backend, verified by
+  [`f4-redox.yml`](https://github.com/unxed/sandbox/blob/main/.github/workflows/f4-redox.yml).
+  No standalone binary is published yet — see the sandbox README for build steps and
+  screenshots.
+- **[GNU Hurd](https://github.com/unxed/sandbox/tree/main/f4-hurd)** — builds for
+  `GOOS=hurd` and runs in the console and over the pure-Go X11 backend. A prebuilt binary
+  from the last verified run is available at
+  [unxed/debian-hurd `poc/f4/f4.gz`](https://github.com/unxed/debian-hurd/blob/main/poc/f4/f4.gz)
+  (stripped, ~27 MB gzipped) — enthusiasts on Debian GNU/Hurd can try it directly; everyone
+  else, see the sandbox README for how it's built.
+- **[Haiku](https://github.com/unxed/sandbox/tree/main/f4-haiku)** — builds for
+  `GOOS=haiku GOARCH=amd64` and has run in a real Haiku VM (native Terminal, directory
+  navigation, PTY-backed shell commands), verified by
+  [`f4-haiku.yml`](https://github.com/unxed/sandbox/blob/main/.github/workflows/f4-haiku.yml).
+  This one is the least stable of the three right now — check that workflow's recent runs
+  before relying on it. No standalone binary is published yet.
+
+None of these three has reached the point of a maintained, always-current downloadable
+build; treat them as a moving snapshot of in-progress porting work, not a supported release
+channel.
+
 ### Philosophy & Goals
 
 This project is built around several core philosophical and technical principles:
