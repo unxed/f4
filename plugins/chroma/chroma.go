@@ -3,6 +3,7 @@ package chroma
 import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
@@ -18,23 +19,42 @@ func (p *Plugin) Init(api vfs.HostAPI) error {
 func (p *Plugin) Close() error    { return nil }
 func (p *Plugin) GetName() string { return "Internal Syntax Highlighter (Chroma)" }
 
-// SyntaxMap links Chroma token types to f4 colors
-var SyntaxMap = map[chroma.TokenType]uint32{
-	chroma.Comment:        0x555753, // Gray
-	chroma.Keyword:        0x729FCF, // Light Blue
-	chroma.String:         0x8AE234, // Green
-	chroma.Number:         0xAD7FA8, // Purple
-	chroma.Operator:       0xFFFFFF, // White
-	chroma.NameFunction:   0xFCE94F, // Yellow
-	chroma.NameVariable:   0xEEEEEC, // Near White
-	chroma.GenericHeading: 0x729FCF,
+// syntaxSlots links Chroma token types to f4 theme color slots (f4#1470).
+// The actual RGB value for each slot lives in vtui.Palette and is resolved
+// at call time (see GetSyntaxAttr/SyntaxMap), so it tracks whichever f4
+// theme is active (internal/theme) instead of being a fixed palette baked
+// into this plugin — exactly like the rest of f4's themed UI elements.
+var syntaxSlots = map[chroma.TokenType]int{
+	chroma.Comment:        theme.ColEditorSyntaxComment,
+	chroma.Keyword:        theme.ColEditorSyntaxKeyword,
+	chroma.String:         theme.ColEditorSyntaxString,
+	chroma.Number:         theme.ColEditorSyntaxNumber,
+	chroma.Operator:       theme.ColEditorSyntaxOperator,
+	chroma.NameFunction:   theme.ColEditorSyntaxFunction,
+	chroma.NameVariable:   theme.ColEditorSyntaxVariable,
+	chroma.GenericHeading: theme.ColEditorSyntaxHeading,
 }
 
-// GetSyntaxAttr returns vtui attributes for a specific token type
+// SyntaxMap returns the current token-type -> RGB color mapping, read live
+// from the active f4 theme's palette (vtui.Palette). It replaces the old
+// hardcoded package-level map of the same name: callers that want "the
+// current syntax colors" get exactly that, including right after a theme
+// switch, without needing to restart f4.
+func SyntaxMap() map[chroma.TokenType]uint32 {
+	m := make(map[chroma.TokenType]uint32, len(syntaxSlots))
+	for t, idx := range syntaxSlots {
+		m[t] = vtui.GetRGBFore(vtui.Palette[idx])
+	}
+	return m
+}
+
+// GetSyntaxAttr returns vtui attributes for a specific token type, using
+// whichever color the active f4 theme currently assigns to that token's
+// slot (see syntaxSlots).
 func GetSyntaxAttr(t chroma.TokenType, baseAttr uint64) uint64 {
 	for t != chroma.None {
-		if color, ok := SyntaxMap[t]; ok {
-			return vtui.SetRGBFore(baseAttr, color)
+		if idx, ok := syntaxSlots[t]; ok {
+			return vtui.SetRGBFore(baseAttr, vtui.GetRGBFore(vtui.Palette[idx]))
 		}
 		p := t.Parent()
 		if p == t {
