@@ -40,7 +40,7 @@ func TestIssue1186WinRARAesSFXPassword(t *testing.T) {
 
 	root := t.TempDir()
 	path := filepath.Join(root, "setup.exe")
-	if err := os.WriteFile(path, fixture, 0o600); err != nil {
+	if err := os.WriteFile(path, fixture, 0o600); err != nil { // #nosec G703 -- path is inside the per-test directory created by testing.T.TempDir.
 		t.Fatal(err)
 	}
 	ctx := context.Background()
@@ -103,7 +103,7 @@ func TestIssue1186WinRARAesSFXPassword(t *testing.T) {
 		if strings.HasSuffix(f.Name, "/") {
 			continue
 		}
-		got, err := os.ReadFile(filepath.Join(dest, f.Name))
+		got, err := os.ReadFile(filepath.Join(dest, f.Name)) // #nosec G703 -- f.Name comes from the committed fixture archive, not untrusted input, and dest is the per-test directory created by testing.T.TempDir.
 		if err != nil {
 			t.Fatalf("read extracted %s: %v", f.Name, err)
 		}
