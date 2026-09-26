@@ -308,6 +308,23 @@ func (s *cmdShellSession) settle(seq uint64) {
 				vtui.DebugLog("CMD_SESSION: prompt %d held by child %v, rechecking", seq, children)
 				s.mu.Lock()
 				if !s.Closed && seq == s.promptSeq {
+					// Reset the attempt counter for the same reason
+					// rescheduleWhileBusy and retryOrRelease's own veto do:
+					// a console child genuinely holding the terminal is not
+					// "stuck settling", so whatever budget an earlier,
+					// unrelated bit of flicker already spent must not carry
+					// into whatever flicker comes next. Without this, Far
+					// Manager (#1376) sitting at its own idle, prompt-shaped
+					// command line -- unchanged and held for as long as the
+					// user takes before typing anything -- silently freezes
+					// the counter wherever settling into that steady state
+					// left it, so the very next flicker (`cls` redrawing
+					// that same line) can reach retryOrRelease's
+					// bound-exceeded fallback, and therefore have to trust a
+					// single, uncached child-process scan, after only one or
+					// two looks instead of the intended ~cmdPromptMaxAttempts
+					// of them.
+					s.attempts = 0
 					s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
 				}
 				s.mu.Unlock()
