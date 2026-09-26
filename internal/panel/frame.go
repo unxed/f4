@@ -643,6 +643,7 @@ func (pf *PanelsFrame) leftMenu() vtui.MenuBarItem {
 		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortSize")), Command: appcmd.CmLeftSortSize},
 		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUnsorted")), Command: appcmd.CmLeftSortUnsorted},
 		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups")), Command: appcmd.CmLeftSortGroups},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortNumeric")), Command: appcmd.CmLeftSortNumeric},
 		{Text: sideMenuText("Group.Menu"), Command: appcmd.CmLeftGroupMenu},
 		{Separator: true},
 		{Text: sideMenuText("Menu.Left.DriveMenu"), Command: appcmd.CmLeftDriveMenu, Shortcut: "Alt+F1"},
@@ -683,6 +684,7 @@ func (pf *PanelsFrame) rightMenu() vtui.MenuBarItem {
 		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortSize")), Command: appcmd.CmRightSortSize},
 		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUnsorted")), Command: appcmd.CmRightSortUnsorted},
 		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups")), Command: appcmd.CmRightSortGroups},
+		{Text: menuhotkeys.Auto(i18n.Msg("Menu.SortNumeric")), Command: appcmd.CmRightSortNumeric},
 		{Text: sideMenuText("Group.Menu"), Command: appcmd.CmRightGroupMenu},
 		{Separator: true},
 		{Text: sideMenuText("Menu.Right.DriveMenu"), Command: appcmd.CmRightDriveMenu, Shortcut: "Alt+F2"},
@@ -791,6 +793,7 @@ var CommandToActionName = map[int]string{
 	appcmd.CmLeftSortSize:          "Panel.Left.SortBySize",
 	appcmd.CmLeftSortUnsorted:      "Panel.Left.SortUnsorted",
 	appcmd.CmLeftSortGroups:        "Panel.Left.SortUseGroups",
+	appcmd.CmLeftSortNumeric:       "Panel.Left.SortNumeric",
 	appcmd.CmLeftGroupMenu:         "Panel.Left.GroupMenu",
 	appcmd.CmRightSortName:         "Panel.Right.SortByName",
 	appcmd.CmRightSortExt:          "Panel.Right.SortByExt",
@@ -798,6 +801,7 @@ var CommandToActionName = map[int]string{
 	appcmd.CmRightSortSize:         "Panel.Right.SortBySize",
 	appcmd.CmRightSortUnsorted:     "Panel.Right.SortUnsorted",
 	appcmd.CmRightSortGroups:       "Panel.Right.SortUseGroups",
+	appcmd.CmRightSortNumeric:      "Panel.Right.SortNumeric",
 	appcmd.CmRightGroupMenu:        "Panel.Right.GroupMenu",
 	appcmd.CmLeftAIContext:         "AI.Left.ViewContext",
 	appcmd.CmLeftAIChat:            "AI.Left.ViewChat",
@@ -851,6 +855,7 @@ var commandShortcutActionName = map[int]string{
 	appcmd.CmLeftSortSize:      "Panel.SortBySize",
 	appcmd.CmLeftSortUnsorted:  "Panel.SortUnsorted",
 	appcmd.CmLeftSortGroups:    "Panel.SortUseGroups",
+	appcmd.CmLeftSortNumeric:   "Panel.SortNumeric",
 	appcmd.CmLeftGroupMenu:     "Panel.GroupMenu",
 	appcmd.CmRightSortName:     "Panel.SortByName",
 	appcmd.CmRightSortExt:      "Panel.SortByExt",
@@ -858,6 +863,7 @@ var commandShortcutActionName = map[int]string{
 	appcmd.CmRightSortSize:     "Panel.SortBySize",
 	appcmd.CmRightSortUnsorted: "Panel.SortUnsorted",
 	appcmd.CmRightSortGroups:   "Panel.SortUseGroups",
+	appcmd.CmRightSortNumeric:  "Panel.SortNumeric",
 	appcmd.CmRightGroupMenu:    "Panel.GroupMenu",
 }
 
@@ -872,15 +878,18 @@ func (pf *PanelsFrame) UpdateMenuCheckmarks() {
 	lMode, rMode := ViewModeMedium, ViewModeMedium
 	lSort, rSort := SortName, SortName
 	lGroups, rGroups := false, false
+	lNumeric, rNumeric := false, false
 	if fsp, ok := pf.Panels[0].(*FileSystemPanel); ok {
 		lMode = fsp.ViewMode
 		lSort = fsp.SortMode
 		lGroups = fsp.UseSortGroups
+		lNumeric = fsp.SortNumeric
 	}
 	if fsp, ok := pf.Panels[1].(*FileSystemPanel); ok {
 		rMode = fsp.ViewMode
 		rSort = fsp.SortMode
 		rGroups = fsp.UseSortGroups
+		rNumeric = fsp.SortNumeric
 	}
 
 	if pf.Wide && pf.WidePanel == 0 {
@@ -917,6 +926,14 @@ func (pf *PanelsFrame) UpdateMenuCheckmarks() {
 		groupLabel := menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups"))
 		pf.MenuBar.Items[0].SubItems[10].Text = getToggleMenuText(lGroups, groupLabel)
 		pf.MenuBar.Items[4].SubItems[10].Text = getToggleMenuText(rGroups, groupLabel)
+	}
+
+	// The numeric-sort toggle sits right after the sort-group toggle, for the
+	// same reason and with the same test-friendly guard.
+	if len(pf.MenuBar.Items[0].SubItems) > 11 && len(pf.MenuBar.Items[4].SubItems) > 11 {
+		numericLabel := menuhotkeys.Auto(i18n.Msg("Menu.SortNumeric"))
+		pf.MenuBar.Items[0].SubItems[11].Text = getToggleMenuText(lNumeric, numericLabel)
+		pf.MenuBar.Items[4].SubItems[11].Text = getToggleMenuText(rNumeric, numericLabel)
 	}
 
 	// Update shortcuts dynamically from the action registry. Framework-owned
@@ -4019,6 +4036,18 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		}
 		pf.UpdateMenuCheckmarks()
 		return true
+	case appcmd.CmLeftSortNumeric:
+		if fsp, ok := pf.Panels[0].(*FileSystemPanel); ok {
+			fsp.ToggleSortNumeric()
+		}
+		pf.UpdateMenuCheckmarks()
+		return true
+	case appcmd.CmRightSortNumeric:
+		if fsp, ok := pf.Panels[1].(*FileSystemPanel); ok {
+			fsp.ToggleSortNumeric()
+		}
+		pf.UpdateMenuCheckmarks()
+		return true
 	case appcmd.CmSwapPanels:
 		pf.Panels[0], pf.Panels[1] = pf.Panels[1], pf.Panels[0]
 		pf.ActiveIdx = 1 - pf.ActiveIdx
@@ -4060,6 +4089,12 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 	case appcmd.CmSortGroups:
 		if fsp := pf.GetActivePanel(); fsp != nil {
 			fsp.ToggleSortGroups()
+		}
+		pf.UpdateMenuCheckmarks()
+		return true
+	case appcmd.CmSortNumeric:
+		if fsp := pf.GetActivePanel(); fsp != nil {
+			fsp.ToggleSortNumeric()
 		}
 		pf.UpdateMenuCheckmarks()
 		return true
@@ -5109,6 +5144,7 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 			cloneFsp.SortMode = fsp.SortMode
 			cloneFsp.SortReverse = fsp.SortReverse
 			cloneFsp.UseSortGroups = fsp.UseSortGroups
+			cloneFsp.SortNumeric = fsp.SortNumeric
 			cloneFsp.GroupBy, cloneFsp.GroupReverse, cloneFsp.GroupFoldersSeparately = fsp.GroupBy, fsp.GroupReverse, fsp.GroupFoldersSeparately
 			cloneFsp.nextSourceOrder = fsp.nextSourceOrder
 

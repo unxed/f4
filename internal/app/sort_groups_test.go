@@ -202,3 +202,22 @@ func TestWorkspaceSessionRoundTripsSortGroupFlag(t *testing.T) {
 		t.Fatalf("sort-group flag did not survive the session round trip:\n got: %#v\nwant: %#v", got, states)
 	}
 }
+
+// TestWorkspaceSessionRoundTripsSortNumericFlag mirrors the sort-group flag
+// test above for f4#1471's numeric-sort toggle: it must persist across a
+// session save/load the same way every other per-panel sort setting does.
+func TestWorkspaceSessionRoundTripsSortNumericFlag(t *testing.T) {
+	states := []panel.WorkspaceSessionState{{
+		Number: 1, ActivePanel: 0, WidePanel: -1,
+		ShowPanels: true, ShowLeft: true, ShowRight: true,
+		Left:  panel.PanelSessionState{Path: "/left", ViewMode: int(panel.ViewModeMedium), SortMode: int(panel.SortName), SortNumeric: true},
+		Right: panel.PanelSessionState{Path: "/right", ViewMode: int(panel.ViewModeMedium), SortMode: int(panel.SortName)},
+	}}
+
+	var encoded strings.Builder
+	panel.WriteWorkspaceSessions(&encoded, states, 0)
+	got, _ := panel.LoadWorkspaceSessions(ini.Parse(strings.NewReader(encoded.String())))
+	if !reflect.DeepEqual(got, states) {
+		t.Fatalf("numeric-sort flag did not survive the session round trip:\n got: %#v\nwant: %#v", got, states)
+	}
+}

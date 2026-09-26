@@ -85,6 +85,27 @@ func TestActionSortMenuTogglesGroups(t *testing.T) {
 	}
 }
 
+func TestActionSortMenuTogglesNumeric(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	pf := panel.NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	fsp := pf.GetActivePanel()
+	if fsp == nil {
+		t.Fatal("panels frame has no active panel")
+	}
+
+	actionSortMenuForPanel(pf, fsp)
+	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
+	defer menu.Close()
+	want := !fsp.SortNumeric
+	menu.OnAction(6)
+	if fsp.SortNumeric != want {
+		t.Fatalf("SortNumeric after toggle = %v, want %v", fsp.SortNumeric, want)
+	}
+}
+
 func TestFindOpenedEditorWithoutFrameManager(t *testing.T) {
 	old := vtui.FrameManager
 	vtui.FrameManager = nil

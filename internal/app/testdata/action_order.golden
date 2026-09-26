@@ -74,6 +74,7 @@ Panel.CopySelectedNames
 Panel.CopySelectedPaths
 Panel.CopySelectedRealPaths
 Panel.SortUseGroups
+Panel.SortNumeric
 Panel.SortMenu
 Panel.GroupMenu
 Panel.GroupByNone
@@ -241,6 +242,7 @@ Panel.Left.SortByTime
 Panel.Left.SortBySize
 Panel.Left.SortUnsorted
 Panel.Left.SortUseGroups
+Panel.Left.SortNumeric
 Panel.Left.GroupMenu
 AI.Left.ViewContext
 AI.Left.ViewChat
@@ -256,6 +258,7 @@ Panel.Right.SortByTime
 Panel.Right.SortBySize
 Panel.Right.SortUnsorted
 Panel.Right.SortUseGroups
+Panel.Right.SortNumeric
 Panel.Right.GroupMenu
 AI.Right.ViewContext
 AI.Right.ViewChat

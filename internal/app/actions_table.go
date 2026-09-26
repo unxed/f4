@@ -1373,6 +1373,23 @@ func init() {
 		Handler: withPF(func(pf *panel.PanelsFrame) { vtui.FrameManager.EmitCommand(appcmd.CmSortGroups, nil) }),
 	})
 	registerAction(action.Action{
+		Name:        "Panel.SortNumeric",
+		Area:        "Shell",
+		Label:       "Numeric Sort",
+		LabelKey:    "Menu.SortNumeric",
+		Description: "Sort names by treating digit runs as numbers",
+		DescKey:     "Action.Panel.SortNumeric.Desc",
+		Checked: func() bool {
+			pf := panel.FindPanelsFrameAnyScreen()
+			if pf == nil {
+				return false
+			}
+			fsp := pf.GetActivePanel()
+			return fsp != nil && fsp.SortNumeric
+		},
+		Handler: withPF(func(pf *panel.PanelsFrame) { vtui.FrameManager.EmitCommand(appcmd.CmSortNumeric, nil) }),
+	})
+	registerAction(action.Action{
 		Name:                "Panel.SortMenu",
 		Area:                "Shell",
 		Label:               "Sort Modes",
