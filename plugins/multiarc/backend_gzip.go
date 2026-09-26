@@ -62,7 +62,7 @@ func (b gzipBackend) decompressTo(ctx context.Context, localPath, destPath strin
 	if err != nil {
 		return fmt.Errorf("multiarc: %s -dc %s: %w (%s)", bin, localPath, err, strings.TrimSpace(string(errOut)))
 	}
-	return os.WriteFile(destPath, out, 0o644)
+	return os.WriteFile(destPath, out, 0o600)
 }
 
 func (b gzipBackend) extractAll(ctx context.Context, localPath, destDir string) error {

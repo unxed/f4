@@ -145,7 +145,7 @@ func TestMultiArcVFSOpenExtractsAndReads(t *testing.T) {
 			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 				return err
 			}
-			return os.WriteFile(full, []byte("content"), 0o644)
+			return os.WriteFile(full, []byte("content"), 0o600)
 		},
 	}
 	v := newTestVFS(t, b)
@@ -155,7 +155,7 @@ func TestMultiArcVFSOpenExtractsAndReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if f.Size() != 7 {
 		t.Errorf("Size() = %d, want 7", f.Size())
 	}

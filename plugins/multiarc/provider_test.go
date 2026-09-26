@@ -19,7 +19,7 @@ func TestProviderCanOpen(t *testing.T) {
 
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "backup.tar.gz")
-	if err := os.WriteFile(archivePath, []byte("not a real archive, CanOpen never reads it"), 0o644); err != nil {
+	if err := os.WriteFile(archivePath, []byte("not a real archive, CanOpen never reads it"), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 	parent := vfs.NewOSVFS(dir)
@@ -54,7 +54,7 @@ func TestProviderOpen(t *testing.T) {
 
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "backup.tar.gz")
-	if err := os.WriteFile(archivePath, []byte("stub"), 0o644); err != nil {
+	if err := os.WriteFile(archivePath, []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 	parent := vfs.NewOSVFS(dir)
@@ -83,7 +83,7 @@ func TestProviderOpenNoToolAvailable(t *testing.T) {
 	withFakeTools(t, func(string) (string, error) { return "", errNotFoundStub }, nil)
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "backup.7z")
-	if err := os.WriteFile(archivePath, []byte("stub"), 0o644); err != nil {
+	if err := os.WriteFile(archivePath, []byte("stub"), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 	parent := vfs.NewOSVFS(dir)
