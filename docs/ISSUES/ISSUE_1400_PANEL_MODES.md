@@ -30,6 +30,7 @@ last one is shortened and then dropped, as far2l does.
 | `DM`, `DC`, `DA`, `DE` | modified, created, accessed, changed | `B` short date, `M` month name |
 | `A` | Unix permissions or Windows attributes | |
 | `O`, `U` | owner, group | `L` accepted |
+| `LN` | hard link count | |
 
 A group of types that repeats forms stripes: `N,N,N` is Brief, `N,S,N,S` is
 two stripes of a name and a size. Files flow down a stripe and on to the next,
@@ -81,8 +82,10 @@ built-in ones are written, and the file is removed when none do.
   columns per mode are not implemented.
 - far2l's per-mode case conversion and extension alignment are not
   implemented; extension alignment stays the global setting.
-- Link count (`LN`), descriptions (`Z`) and custom columns (`C0`..`C19`) are
-  not available: f4 has no data for them.
+- Descriptions (`Z`) and custom columns (`C0`..`C19`) are not available: f4
+  has no data for them. Hard link count (`LN`) is available (`VFSItem.Nlink`,
+  read from `syscall.Stat_t.Nlink` on Unix and `GetFileInformationByHandle`'s
+  `nNumberOfLinks` via libwinescape on Windows).
 - The Left and Right menus still list only the first four modes.
 - After a restart a widened panel shows mode 4 even if another full screen
   mode was active.

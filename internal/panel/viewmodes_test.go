@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -206,6 +207,40 @@ func TestPanelLinkCountText(t *testing.T) {
 	unknown := &FileEntry{}
 	if got := panelLinkCountText(unknown); got != "" {
 		t.Errorf("unknown link count = %q, want empty", got)
+	}
+}
+
+// TestPanelLinkCountColumnEndToEnd is a regression test for f4#1400: a real
+// file on the local filesystem has one hard link, and a panel mode with an
+// LN column must show it.
+func TestPanelLinkCountColumnEndToEnd(t *testing.T) {
+	resetPanelViewModes(true)
+	defer resetPanelViewModes(true)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fs := vfs.NewOSVFS(dir)
+	item, err := fs.Stat(context.Background(), "a.txt")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if !item.HasMetadata(vfs.MetadataNlink) {
+		t.Fatal("Stat did not report Nlink metadata for a real file")
+	}
+
+	fsp := newStableInfoTestPanel(0, 0, 60, 12, fs, []*FileEntry{{VFSItem: item}})
+	columns, err := TextToViewSettings("N,LN", "0,4")
+	if err != nil {
+		t.Fatalf("TextToViewSettings: %v", err)
+	}
+	panelViewModes.overrides[ViewModeDetailed] = &PanelViewSettings{Columns: columns}
+	panelViewModes.generation++
+	fsp.SetViewMode(ViewModeDetailed)
+
+	if got := strings.TrimSpace(fsp.GetCellText(0, 1)); got != "1" {
+		t.Errorf("hard link count of a new file = %q, want %q", got, "1")
 	}
 }
 
