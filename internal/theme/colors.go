@@ -53,6 +53,7 @@ const (
 	ColEditorCrosshair
 	ColEditorStatus
 	ColEditorScrollbar
+	ColEditorWrapMark
 
 	ColDialogSettingsBackground
 
@@ -137,6 +138,9 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColEditorCrosshair] = vtui.SetRGBBoth(0, 0xD3D7CF, 0x222222)
 	vtui.Palette[ColEditorStatus] = vtui.Palette[ColViewerStatus]
 	vtui.Palette[ColEditorScrollbar] = vtui.Palette[ColPanelScrollbar]
+	// far2l marks a wrapped (not a real newline) row end with a small
+	// arrow-like glyph; reuse the viewer's own continuation-arrow colour.
+	vtui.Palette[ColEditorWrapMark] = vtui.Palette[ColViewerArrows]
 
 	// White reads over every background the far palette puts under the caret.
 	vtui.Palette[ColTerminalCursor] = vtui.SetRGBBoth(0, 0xFFFFFF, 0)
@@ -284,6 +288,7 @@ var ColorSlots = []ColorSlot{
 	{Canonical: "Editor.Occurrence", Index: ColEditorOccurrence, Group: "Editor", ConstantName: "ColEditorOccurrence", Aliases: []string{"Editor.Text.Occurrence"}},
 	{Canonical: "Editor.Scrollbar", Index: ColEditorScrollbar, Group: "Editor", ConstantName: "ColEditorScrollbar"},
 	{Canonical: "Editor.Status", Index: ColEditorStatus, Group: "Editor", ConstantName: "ColEditorStatus"},
+	{Canonical: "Editor.WrapMark", Index: ColEditorWrapMark, Group: "Editor", ConstantName: "ColEditorWrapMark"},
 
 	// Help Group
 	{Canonical: "Help.Text", Index: vtui.ColHelpText, Group: "Help", ConstantName: "ColHelpText"},
