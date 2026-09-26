@@ -29,6 +29,17 @@ func fillPlatformTimes(item *VFSItem, info os.FileInfo) {
 		item.KnownMetadata |= MetadataATime | MetadataCTime | MetadataWinAttrs
 		item.ATime = time.Unix(0, stat.LastAccessTime.Nanoseconds())
 		item.CTime = time.Unix(0, stat.CreationTime.Nanoseconds())
+		// This branch is genuine Windows (Win32FileAttributeData), where
+		// CreationTime really is the object's creation time — unlike the
+		// winescape.Stat_t branch above (Wine posix mode), whose Ctim is a
+		// real POSIX ctime with no creation-time meaning at all. Populate
+		// BTime only here, so the attributes dialog's "Created" row never
+		// shows a Wine-under-Linux ctime mislabeled as a creation date
+		// (f4#1404).
+		if stat.CreationTime != (syscall.Filetime{}) {
+			item.KnownMetadata |= MetadataBTime
+			item.BTime = time.Unix(0, stat.CreationTime.Nanoseconds())
+		}
 		item.WinAttrs = stat.FileAttributes
 		// Win32FileAttributeData carries no link count. Most files have
 		// exactly one; report that rather than leaving MetadataNlink unset

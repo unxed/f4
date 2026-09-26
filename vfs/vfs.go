@@ -101,11 +101,22 @@ type VFSItem struct {
 	// a cache key together with the VFS session and canonical path.
 	Revision string
 	// Metadata for Attributes dialog
-	ATime    time.Time // Last Access
-	CTime    time.Time // Creation (Win) or Status Change (Unix)
-	UnixMode uint32    // Raw numeric mode for chmod
-	Uid, Gid int       // Ownership
-	WinAttrs uint32    // Windows file attributes
+	ATime time.Time // Last Access
+	CTime time.Time // Creation (Win) or Status Change (Unix)
+	// BTime is the object's actual creation/birth time, populated only where
+	// the platform reports one reliably: always on native Windows
+	// (GetFileAttributesEx's CreationTime), and on macOS/FreeBSD/NetBSD
+	// (syscall.Stat_t's Birthtimespec). Classic Unix stat(2) has no portable
+	// birth time at all — Linux would need statx(2) with STATX_BTIME, which
+	// not every filesystem populates even then, and paying for an extra
+	// syscall per directory entry just to attempt it is a bigger tradeoff
+	// than this field is meant to make (f4#1404); OpenBSD, DragonFly,
+	// Solaris and illumos leave it unset for the same reason. Zero value
+	// with MetadataBTime unset means "not available", not "epoch".
+	BTime    time.Time
+	UnixMode uint32 // Raw numeric mode for chmod
+	Uid, Gid int    // Ownership
+	WinAttrs uint32 // Windows file attributes
 	// Nlink is the number of hard links to the file (far3's "LN" panel
 	// column). 1 for an ordinary file with no extra links.
 	Nlink uint64
