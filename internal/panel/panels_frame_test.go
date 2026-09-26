@@ -2730,6 +2730,55 @@ func TestPanelsFrame_ForkFromTerminalOpensPanelsInNewWorkspace(t *testing.T) {
 	waitForLoad(t, clone.Panels[0].(*FileSystemPanel))
 	waitForLoad(t, clone.Panels[1].(*FileSystemPanel))
 }
+
+// f4 discussion #1409: the Settings Center hint for "Terminal presentation"
+// (ConsoleMode) promises it takes effect in new workspaces, without a
+// restart. Clone() used to overwrite the freshly resolved ShellMode of the
+// new workspace with the source workspace's own (possibly stale) ShellMode,
+// so a workspace forked after changing the setting kept showing the old
+// terminal display mode until f4 was restarted. Cloning must instead reflect
+// whatever config.App.ConsoleMode says right now.
+func TestPanelsFrame_Clone_PicksUpConsoleModeChangedAfterSourceCreated(t *testing.T) {
+	oldConsoleMode := config.App.ConsoleMode
+	oldConsoleOverlayUI := config.App.ConsoleOverlayUI
+	oldProbeGUI := terminal.ProbeGUIBackend
+	oldProbeTTY := terminal.ProbeHostTTY
+	oldProbePTY := terminal.ProbePTYUsable
+	defer func() {
+		config.App.ConsoleMode = oldConsoleMode
+		config.App.ConsoleOverlayUI = oldConsoleOverlayUI
+		terminal.ProbeGUIBackend = oldProbeGUI
+		terminal.ProbeHostTTY = oldProbeTTY
+		terminal.ProbePTYUsable = oldProbePTY
+	}()
+	terminal.ProbePTYUsable = func() bool { return true }
+	terminal.ProbeGUIBackend = func() string { return "" }
+	terminal.ProbeHostTTY = func() bool { return true }
+
+	config.App.ConsoleMode = "own"
+	pf := NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(100, 30)
+	if pf.ShellMode != terminal.ShellModeOwn {
+		t.Fatalf("source workspace ShellMode = %v, want ShellModeOwn", pf.ShellMode)
+	}
+
+	// The user opens Settings Center and switches "Terminal presentation" to
+	// the host-with-overlay style without restarting f4.
+	config.App.ConsoleMode = "far"
+
+	clone := pf.Clone()
+	defer clone.Close()
+	if clone.ShellMode != terminal.ShellModeHost {
+		t.Errorf("cloned workspace ShellMode = %v, want ShellModeHost after the live ConsoleMode change", clone.ShellMode)
+	}
+	// The already-open source workspace is unaffected until restarted;
+	// forking is what is expected to observe the new value.
+	if pf.ShellMode != terminal.ShellModeOwn {
+		t.Errorf("source workspace ShellMode changed unexpectedly to %v", pf.ShellMode)
+	}
+}
+
 func TestPanelsFrame_ProcessMouse_RightDoubleClickNoEnter(t *testing.T) {
 	pf := NewPanelsFrame()
 	defer pf.Close()

@@ -1235,8 +1235,13 @@ func setupUI(firstRunStyle func() (string, bool)) {
 	// overlay rows.
 	consoleOverlayOwnedScreen := true
 	// Help's hint, query and match highlights belong to the Help window, so
-	// they are painted with it, in stack order (#378).
-	vtui.FrameManager.AfterFrameShow = dialog.RenderHelpFrame
+	// they are painted with it, in stack order (#378). The optional dialog
+	// outer border (#1399) chains after it for the same reason: each frame
+	// decoration belongs with the frame it decorates, painted right after it.
+	vtui.FrameManager.AfterFrameShow = func(scr *vtui.ScreenBuf, frame vtui.Frame) {
+		dialog.RenderHelpFrame(scr, frame)
+		RenderDialogOuterBorder(scr, frame)
+	}
 	vtui.FrameManager.OnRender = func(scr *vtui.ScreenBuf) {
 		if config.App.WorkspaceTabNumbering == config.WorkspaceTabNumbersOrder {
 			panel.RenumberWorkspaceScreens()

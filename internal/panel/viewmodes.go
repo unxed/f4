@@ -85,24 +85,26 @@ func ViewModeForKey(key int) (ViewMode, bool) {
 type PanelColumnType int
 
 const (
-	NameColumn     PanelColumnType = iota // N
-	SizeColumn                            // S
-	PhysicalColumn                        // P
-	DateColumn                            // D
-	TimeColumn                            // T
-	WDateColumn                           // DM, modification
-	CDateColumn                           // DC, creation (status change on Unix)
-	ADateColumn                           // DA, last access
-	ChDateColumn                          // DE, change
-	AttrColumn                            // A
-	OwnerColumn                           // O
-	GroupColumn                           // U
+	NameColumn      PanelColumnType = iota // N
+	SizeColumn                             // S
+	PhysicalColumn                         // P
+	DateColumn                             // D
+	TimeColumn                             // T
+	WDateColumn                            // DM, modification
+	CDateColumn                            // DC, creation (status change on Unix)
+	ADateColumn                            // DA, last access
+	ChDateColumn                           // DE, change
+	AttrColumn                             // A
+	OwnerColumn                            // O
+	GroupColumn                            // U
+	LinkCountColumn                        // LN, far3: number of hard links
 )
 
 var panelColumnSymbols = map[PanelColumnType]string{
 	NameColumn: "N", SizeColumn: "S", PhysicalColumn: "P", DateColumn: "D",
 	TimeColumn: "T", WDateColumn: "DM", CDateColumn: "DC", ADateColumn: "DA",
 	ChDateColumn: "DE", AttrColumn: "A", OwnerColumn: "O", GroupColumn: "U",
+	LinkCountColumn: "LN",
 }
 
 // PanelColumnFlags are the one-letter modifiers that follow a column type.
@@ -260,6 +262,8 @@ func parsePanelColumnType(token string) (PanelColumn, bool) {
 		rest = token[2:]
 	case token[0] == 'O':
 		column.Type, rest = OwnerColumn, token[1:]
+	case token == "LN":
+		column.Type = LinkCountColumn
 	case token == "D":
 		column.Type = DateColumn
 	case token == "T":
@@ -333,6 +337,8 @@ func panelColumnDefaultWidth(column PanelColumn) int {
 		return 10
 	case OwnerColumn, GroupColumn:
 		return 8
+	case LinkCountColumn:
+		return 4
 	}
 	return 0
 }
@@ -801,6 +807,8 @@ func panelColumnTitle(t PanelColumnType) string {
 		return i18n.Msg("Panel.Column.Owner")
 	case GroupColumn:
 		return i18n.Msg("Panel.Column.Group")
+	case LinkCountColumn:
+		return i18n.Msg("Panel.Column.LinkCount")
 	}
 	return i18n.Msg("Panel.Column.Name")
 }
@@ -845,8 +853,20 @@ func (fp *FileSystemPanel) columnCellText(e *FileEntry, col int) string {
 		return panelOwnerText(fp.Vfs, e, false)
 	case GroupColumn:
 		return panelOwnerText(fp.Vfs, e, true)
+	case LinkCountColumn:
+		return panelLinkCountText(e)
 	}
 	return ""
+}
+
+// panelLinkCountText is far3's "LN" column: the number of hard links to the
+// file. Empty when the VFS never reported it, same as the other optional
+// metadata columns (owner, attributes).
+func panelLinkCountText(e *FileEntry) string {
+	if !e.HasMetadata(vfs.MetadataNlink) {
+		return ""
+	}
+	return strconv.FormatUint(e.Nlink, 10)
 }
 
 // panelSizeColumnText is far2l's FormatStr_Size: folders, links and ".."

@@ -473,13 +473,17 @@ func TestAttributesDialog_InvalidTime(t *testing.T) {
 	editMTime.SetText("99.99.9999 25:61:99")
 
 	if btnSet.OnClick != nil {
-		t.Cleanup(func() { runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone) })
 		btnSet.OnClick()
 	}
 
-	// Since parsing fails, the dialog should remain open (IsDone == false)
-	if fm.GetTopFrame().IsDone() {
+	// f4#1404: an unparseable date must not be silently dropped. The
+	// attributes dialog stays open (it never closes on its own here, so
+	// there is nothing to wait for) and an error dialog appears over it.
+	if dlg.(vtui.Frame).IsDone() {
 		t.Error("Dialog should not close when date is invalid")
+	}
+	if top := fm.GetTopFrame(); any(top) == any(dlg) {
+		t.Error("an error dialog should have appeared over the attributes dialog")
 	}
 }
 

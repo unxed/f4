@@ -321,6 +321,43 @@ func (pf *PanelsFrame) clearConsoleOverlay() {
 	vtui.WritePassthrough([]byte(sb.String()))
 }
 
+// clearGrownHostConsoleArea erases the rows and columns a host-console resize
+// newly exposed. A real terminal does not blank a window it enlarges -- it
+// just reveals more of its own buffer, holding whatever was last drawn there,
+// which while the host console is active (Busy, so FrameManager never Draws
+// or Flushes over it) is nothing f4 painted this session. Growing from a
+// smaller size Far started at back up to one f4's own panels once occupied is
+// exactly how the panels' own stale characters resurface (f4#1376). Mirrors
+// clearConsoleOverlay()'s row-erase technique -- \x1b[2K under a saved cursor
+// -- rather than inventing a second one; ordinary rows use it whole, and
+// surviving rows that only gained columns are erased from the old edge on.
+func (pf *PanelsFrame) clearGrownHostConsoleArea(oldW, oldH, w, h int) {
+	if oldW <= 0 || oldH <= 0 || w <= 0 || h <= 0 {
+		return
+	}
+	if w <= oldW && h <= oldH {
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString("\x1b7")
+	if h > oldH {
+		for row := oldH + 1; row <= h; row++ {
+			fmt.Fprintf(&sb, "\x1b[%d;1H\x1b[0m\x1b[2K", row)
+		}
+	}
+	if w > oldW {
+		lastOldRow := oldH
+		if h < lastOldRow {
+			lastOldRow = h
+		}
+		for row := 1; row <= lastOldRow; row++ {
+			fmt.Fprintf(&sb, "\x1b[%d;%dH\x1b[0m\x1b[0K", row, oldW+1)
+		}
+	}
+	sb.WriteString("\x1b8")
+	vtui.WritePassthrough([]byte(sb.String()))
+}
+
 // drawHostConsoleOverlay is kept as the name used by the host console call sites.
 func (pf *PanelsFrame) drawHostConsoleOverlay() {
 	pf.DrawConsoleOverlay()

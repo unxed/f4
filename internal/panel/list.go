@@ -2094,6 +2094,38 @@ func (fp *FileSystemPanel) SetKnownDirectoryPath(target string) error {
 	return fp.Vfs.SetPath(target)
 }
 
+// navigateElevatedDirectoryAsync resolves newPath off the UI goroutine for an
+// OSVFS target that NeedsElevation says would otherwise block resolving
+// through the sudo helper (f4#1411). It mirrors the synchronous Enter-key
+// handling in processKey, just deferred past a RunOnUI hop: the (possibly
+// slow) resolution runs on a background goroutine, and only the actual path
+// change — an instant field write — happens back on the UI goroutine, which
+// is the only place mutating fp.Vfs is safe.
+func (fp *FileSystemPanel) navigateElevatedDirectoryAsync(osfs *vfs.OSVFS, newPath, oldPath, selectedName string) {
+	sourceVFS := fp.Vfs
+	vtui.RunAsync(func(task *vtui.TaskContext) {
+		abs, err := osfs.ResolveElevated(newPath)
+		task.RunOnUI(func() {
+			if !fileops.SameVFSInstance(fp.Vfs, sourceVFS) || fp.Vfs.GetPath() != oldPath {
+				// The panel navigated elsewhere while the sudo prompt was up;
+				// applying this result now would clobber wherever it is now.
+				return
+			}
+			if err != nil {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot access folder:\n%v", err), []string{"&Ok"})
+				return
+			}
+			osfs.CommitPath(abs)
+			if selectedName == ".." {
+				fp.PendingSelection = fp.Vfs.Base(oldPath)
+			} else {
+				fp.PendingSelection = ".."
+			}
+			fp.ReadDirectory()
+		})
+	})
+}
+
 func (fp *FileSystemPanel) SuppressNextFolderHistory(path string) {
 	fp.suppressFolderHistoryToken++
 	fp.suppressFolderHistoryPath = path
@@ -3539,6 +3571,14 @@ func (fp *FileSystemPanel) processKey(e *vtinput.InputEvent, allowProviderPanelE
 				oldPath := fp.Vfs.GetPath()
 				newPath := fp.Vfs.Join(oldPath, selected.Name)
 				vtui.DebugLog("PANEL: Navigating %q -> %q", oldPath, newPath)
+				if osfs, ok := fp.Vfs.(*vfs.OSVFS); ok && osfs.NeedsElevation(newPath) {
+					// Resolving this path would consult the sudo helper, which can
+					// block for minutes on a slow PAM prompt. f4 has one cooperative
+					// UI goroutine, so doing that here would freeze the whole UI
+					// (f4#1411); resolve it off the UI goroutine instead.
+					fp.navigateElevatedDirectoryAsync(osfs, newPath, oldPath, selected.Name)
+					return true
+				}
 				if err := fp.SetKnownDirectoryPath(newPath); err == nil {
 					if selected.Name == ".." {
 						fp.PendingSelection = fp.Vfs.Base(oldPath)

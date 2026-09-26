@@ -106,6 +106,9 @@ type VFSItem struct {
 	UnixMode uint32    // Raw numeric mode for chmod
 	Uid, Gid int       // Ownership
 	WinAttrs uint32    // Windows file attributes
+	// Nlink is the number of hard links to the file (far3's "LN" panel
+	// column). 1 for an ordinary file with no extra links.
+	Nlink uint64
 }
 
 // VFSCapabilities defines what the current VFS implementation can do efficiently.

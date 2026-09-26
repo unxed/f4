@@ -202,9 +202,23 @@ func extractArchiveWithPasswordPrompt(ctx context.Context, srcPath, destDir stri
 	}
 }
 
+// markedNamesApp is satisfied by an App whose active panel exposes the
+// explicitly marked items, without GetSelectedNames' fallback to the cursor
+// entry. That fallback would make "nothing marked" indistinguishable from
+// "the cursor item is marked", which is exactly the distinction
+// actionTestArchive needs (f4#1250).
+type markedNamesApp interface {
+	GetMarkedNames() []string
+}
+
 // actionTestArchive verifies every regular member of the selected archive by
 // reading it to completion, without writing anything to the panels. Password
 // prompts behave like everywhere else in the plugin.
+//
+// When the archive is browsed with some of its members marked, only those
+// members (and, for a marked directory, everything under it) are tested --
+// the same restriction Shift+F2 already applies to extraction. With nothing
+// marked the whole archive is tested, exactly as before (f4#1250).
 func actionTestArchive(app vfs.App) {
 	srcPath, ok := resolveLocalArchivePath(app)
 	if !ok {
@@ -218,13 +232,17 @@ func actionTestArchive(app vfs.App) {
 	// does not ask again either (#1250). The dialog still comes back if the
 	// password does not open everything.
 	var password string
+	var selected map[string]bool
 	if archiveVFS, ok := app.GetActivePanelVFS().(*ArchiveVFS); ok {
 		password = archiveVFS.installedPassword()
+		if marker, ok := app.(markedNamesApp); ok {
+			selected = archiveVFS.selectedTestPaths(marker.GetMarkedNames())
+		}
 	}
 	go func() {
 		app.RunAdvancedProgressTask(" Testing... ", false, func(ctx context.Context, reporter vfs.TaskReporter) error {
 			reporter.UpdateTransfer("Testing", filepath.Base(srcPath), -1, "", -1, "")
-			return testArchiveStartingWith(ctx, srcPath, password, reporter)
+			return testArchiveStartingWith(withArchiveTestSelection(ctx, selected), srcPath, password, reporter)
 		}, func(err error) { finishArchiveTest(app, srcPath, err) })
 	}()
 }
@@ -333,6 +351,50 @@ type archiveTestTotals struct {
 	known bool
 }
 
+// archiveTestSelectionKey carries the optional "test only these members"
+// restriction through the context a test run already threads through every
+// helper below. A context value is used instead of a parameter so that
+// testArchiveStartingWith, testArchiveOnce, testZipOnce and
+// collectArchiveTestTotals keep the signature every existing caller (and
+// test) already uses, with the common case -- nothing marked, test
+// everything -- unaffected (f4#1250).
+type archiveTestSelectionKey struct{}
+
+// withArchiveTestSelection attaches a "test only these members" restriction
+// to ctx. A nil or empty selected means no restriction, matching today's
+// "test the whole archive" behavior.
+func withArchiveTestSelection(ctx context.Context, selected map[string]bool) context.Context {
+	if len(selected) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, archiveTestSelectionKey{}, selected)
+}
+
+// archiveTestSelectionFromContext returns the restriction withArchiveTestSelection
+// attached to ctx, or nil when the whole archive is being tested.
+func archiveTestSelectionFromContext(ctx context.Context) map[string]bool {
+	selected, _ := ctx.Value(archiveTestSelectionKey{}).(map[string]bool)
+	return selected
+}
+
+// archiveTestMemberSelected reports whether the archive member named
+// nameInArchive should be tested given the restriction ctx carries. It mirrors
+// how copyBulkFrom's extractors decide which member a marked extraction
+// copies: cleanArchiveExtractionPath rejects an unsafe name outright, and
+// archiveExtractionPathSelected matches a marked directory's whole subtree,
+// not only the directory entry itself.
+func archiveTestMemberSelected(ctx context.Context, nameInArchive string) bool {
+	selected := archiveTestSelectionFromContext(ctx)
+	if selected == nil {
+		return true
+	}
+	cleanName, err := cleanArchiveExtractionPath(nameInArchive)
+	if err != nil || cleanName == "." || cleanName == "" {
+		return false
+	}
+	return archiveExtractionPathSelected(cleanName, selected)
+}
+
 // archiveFormatListsWithoutDecoding reports whether a format can enumerate its
 // members from a directory or a header instead of by decoding payloads: zip
 // keeps a central directory, 7z a header, and rar a chain of file block
@@ -409,6 +471,9 @@ func collectArchiveTestTotals(ctx context.Context, srcPath, password string) (ar
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if !archiveTestMemberSelected(ctx, info.NameInArchive) {
+			return nil
+		}
 		if info.IsDir() || !info.Mode().IsRegular() {
 			return nil
 		}
@@ -450,7 +515,7 @@ func testZipOnce(ctx context.Context, srcPath, backingPath, password string, rep
 
 	var total int64
 	for _, member := range reader.File {
-		if member.FileInfo().IsDir() {
+		if member.FileInfo().IsDir() || !archiveTestMemberSelected(ctx, member.Name) {
 			continue
 		}
 		// #nosec G115 -- a size above MaxInt64 does not fit in the archive
@@ -476,6 +541,9 @@ func testZipOnce(ctx context.Context, srcPath, backingPath, password string, rep
 	for _, member := range reader.File {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if !archiveTestMemberSelected(ctx, member.Name) {
+			continue
 		}
 		if member.FileInfo().IsDir() {
 			reportProgress(member.Name, -1, 0)
@@ -611,6 +679,9 @@ func testArchiveOnce(ctx context.Context, srcPath, backingPath, password string,
 	err = extractor.Extract(ctx, countedStream, func(ctx context.Context, info archives.FileInfo) error {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if !archiveTestMemberSelected(ctx, info.NameInArchive) {
+			return nil
 		}
 		if info.IsDir() || !info.Mode().IsRegular() {
 			reportProgress(info.NameInArchive, -1, 0)

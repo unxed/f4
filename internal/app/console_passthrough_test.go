@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
 	"strings"
@@ -272,6 +273,59 @@ func TestHostConsole_FarStyleScrollRegion(t *testing.T) {
 	written = out.String()
 	if !strings.Contains(written, "\x1b[r") {
 		t.Errorf("leaveHostConsole missing scroll region reset \\x1b[r: %q", written)
+	}
+}
+
+// TestHostConsole_ResizeLargerClearsNewArea covers f4#1376: growing the
+// console while Far (or any child) owns the screen through the host console
+// must not leave the rows/columns the resize newly exposed showing whatever
+// the real terminal's own buffer last held there (f4's own panels, in the
+// reporter's case) until the child gets around to repainting them.
+func TestHostConsole_ResizeLargerClearsNewArea(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	var out bytes.Buffer
+	scr.Writer = &out
+	scr.AllocBuf(130, 30)
+	vtui.FrameManager.Init(scr)
+
+	oldCfg := config.App
+	defer func() { config.App = oldCfg }()
+	config.App.ConsoleMode = "host"
+	config.App.ConsoleOverlayUI = false
+
+	pf := panel.NewPanelsFrame()
+	defer pf.Close()
+	pf.ShellMode = terminal.ShellModeHost
+	pf.ResizeConsole(130, 30)
+	pf.EnterHostConsole()
+
+	out.Reset()
+	pf.ResizeConsole(140, 40)
+
+	written := out.String()
+	if written == "" {
+		t.Fatal("resizing larger while the host console is active wrote nothing to the terminal")
+	}
+	// Every newly exposed row (31..40) must be erased.
+	for row := 31; row <= 40; row++ {
+		want := fmt.Sprintf("\x1b[%d;1H\x1b[0m\x1b[2K", row)
+		if !strings.Contains(written, want) {
+			t.Errorf("resize-larger did not clear new row %d: missing %q in %q", row, want, written)
+		}
+	}
+	// Every surviving row (1..30) must have its newly exposed columns (131..140) erased.
+	for row := 1; row <= 30; row++ {
+		want := fmt.Sprintf("\x1b[%d;131H\x1b[0m\x1b[0K", row)
+		if !strings.Contains(written, want) {
+			t.Errorf("resize-larger did not clear new columns on row %d: missing %q in %q", row, want, written)
+		}
+	}
+
+	// A resize that does not grow the console must not touch the screen this way.
+	out.Reset()
+	pf.ResizeConsole(140, 40)
+	if out.String() != "" {
+		t.Errorf("resizing to the same size wrote %q, want nothing", out.String())
 	}
 }
 

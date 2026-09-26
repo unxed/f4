@@ -1603,6 +1603,7 @@ func (pf *PanelsFrame) openMenuBarFromClick(e *vtinput.InputEvent, my int) bool 
 }
 
 func (pf *PanelsFrame) ResizeConsole(w, h int) {
+	oldW, oldH := pf.LastW, pf.LastH
 	pf.LastW, pf.LastH = w, h
 	pf.SetPosition(0, 0, w-1, h-1) // Update hit-box for FrameManager hit-testing
 	topInset := vtui.FrameManager.WorkspaceTopInset()
@@ -1644,9 +1645,25 @@ func (pf *PanelsFrame) ResizeConsole(w, h int) {
 			}
 			pf.PtyMutex.Unlock()
 		}
-		if pf.IsHostConsoleActive() && n > 0 {
-			vtui.WritePassthrough([]byte(fmt.Sprintf("\x1b[1;%dr", termH)))
-			pf.drawHostConsoleOverlay()
+		if pf.IsHostConsoleActive() {
+			// FrameManager skips Draw/Flush entirely while this frame is Busy
+			// (host console active), so nothing here ever repaints a cell the
+			// child doesn't touch itself. Growing the window exposes rows/columns
+			// the real terminal never cleared -- it just reveals more of its own
+			// buffer, stale from whatever last occupied it (f4's own panels
+			// before Far ever ran, in the reporter's case) -- and a resize alone
+			// gives the child no reason to erase ground it now merely covers
+			// instead of moving into with fresh output (f4#1376). Clear it here,
+			// the same way clearConsoleOverlay() clears its own reserved rows,
+			// so no debris survives until the child (or the user, via cls)
+			// happens to paint over it.
+			if w > oldW || h > oldH {
+				pf.clearGrownHostConsoleArea(oldW, oldH, w, h)
+			}
+			if n > 0 {
+				vtui.WritePassthrough([]byte(fmt.Sprintf("\x1b[1;%dr", termH)))
+				pf.drawHostConsoleOverlay()
+			}
 		}
 	} else {
 		// Keep the configured keybar row out of the own-terminal terminal.PTY even while
@@ -5136,7 +5153,16 @@ func (pf *PanelsFrame) Clone() *PanelsFrame {
 	clone.ShowRightPanel = pf.ShowRightPanel
 	clone.WidePanel = pf.WidePanel
 	clone.Wide = pf.Wide
-	clone.ShellMode = pf.ShellMode
+	// clone.ShellMode was already set by NewPanelsFrame() above from the
+	// *current* config.App.ConsoleMode/ConsoleOverlayUI. Do not overwrite it
+	// with pf.ShellMode here: pf's value was resolved when pf itself was
+	// created (at startup, or by an earlier fork) and goes stale the moment
+	// the user changes the "Terminal presentation" setting afterwards. Since
+	// ResolveShellMode is a pure function of config and environment probes
+	// that do not vary within one process, recomputing it fresh for the new
+	// workspace is equivalent when nothing changed and correct when it did
+	// (f4 discussion #1409: a new workspace kept showing the pre-change
+	// display mode until a full restart).
 
 	if pf.TermView != nil && clone.TermView != nil {
 		clone.TermView.CloneStateFrom(pf.TermView)

@@ -53,6 +53,7 @@ const (
 	ColEditorCrosshair
 	ColEditorStatus
 	ColEditorScrollbar
+	ColEditorWrapMark
 
 	ColDialogSettingsBackground
 
@@ -137,6 +138,9 @@ func SetDefaultF4Palette() {
 	vtui.Palette[ColEditorCrosshair] = vtui.SetRGBBoth(0, 0xD3D7CF, 0x222222)
 	vtui.Palette[ColEditorStatus] = vtui.Palette[ColViewerStatus]
 	vtui.Palette[ColEditorScrollbar] = vtui.Palette[ColPanelScrollbar]
+	// far2l marks a wrapped (not a real newline) row end with a small
+	// arrow-like glyph; reuse the viewer's own continuation-arrow colour.
+	vtui.Palette[ColEditorWrapMark] = vtui.Palette[ColViewerArrows]
 
 	// White reads over every background the far palette puts under the caret.
 	vtui.Palette[ColTerminalCursor] = vtui.SetRGBBoth(0, 0xFFFFFF, 0)
@@ -148,6 +152,21 @@ type ColorSlot struct {
 	Group        string
 	ConstantName string
 	Aliases      []string
+
+	// InheritsBackgroundFrom names another slot's Canonical key. When a
+	// theme file sets no expression for this slot at all (not even via an
+	// alias), the slot's background is copied from that other slot's
+	// resolved background instead of keeping whatever the palette array
+	// happened to already hold at that index.
+	//
+	// far2l themes are one row per element (f4#1232), so an older theme
+	// authored before this slot existed simply has no row for it. Without
+	// this, such a theme leaves the slot on a stray leftover color that
+	// has nothing to do with the theme (f4#1232: Viewer.Scrollbar and
+	// Editor.Scrollbar showed the built-in default's blue in themes that
+	// never mention them). Themes that DO set the slot are unaffected:
+	// this only fills in slots no theme file ever addressed.
+	InheritsBackgroundFrom string
 }
 
 var ColorGroups = []string{
@@ -276,14 +295,15 @@ var ColorSlots = []ColorSlot{
 	{Canonical: "Viewer.Text", Index: ColViewerText, Group: "Viewer", ConstantName: "ColViewerText"},
 	{Canonical: "Viewer.Text.Selected", Index: ColViewerSelectedText, Group: "Viewer", ConstantName: "ColViewerSelectedText"},
 	{Canonical: "Viewer.Status", Index: ColViewerStatus, Group: "Viewer", ConstantName: "ColViewerStatus"},
-	{Canonical: "Viewer.Arrows", Index: ColViewerArrows, Group: "Viewer", ConstantName: "ColViewerArrows"},
-	{Canonical: "Viewer.Scrollbar", Index: ColViewerScrollbar, Group: "Viewer", ConstantName: "ColViewerScrollbar"},
+	{Canonical: "Viewer.Arrows", Index: ColViewerArrows, Group: "Viewer", ConstantName: "ColViewerArrows", InheritsBackgroundFrom: "Viewer.Text"},
+	{Canonical: "Viewer.Scrollbar", Index: ColViewerScrollbar, Group: "Viewer", ConstantName: "ColViewerScrollbar", InheritsBackgroundFrom: "Viewer.Text"},
 
 	// Editor Group
 	{Canonical: "Editor.Text", Index: ColEditorText, Group: "Editor", ConstantName: "ColEditorText"},
 	{Canonical: "Editor.Occurrence", Index: ColEditorOccurrence, Group: "Editor", ConstantName: "ColEditorOccurrence", Aliases: []string{"Editor.Text.Occurrence"}},
-	{Canonical: "Editor.Scrollbar", Index: ColEditorScrollbar, Group: "Editor", ConstantName: "ColEditorScrollbar"},
+	{Canonical: "Editor.Scrollbar", Index: ColEditorScrollbar, Group: "Editor", ConstantName: "ColEditorScrollbar", InheritsBackgroundFrom: "Editor.Text"},
 	{Canonical: "Editor.Status", Index: ColEditorStatus, Group: "Editor", ConstantName: "ColEditorStatus"},
+	{Canonical: "Editor.WrapMark", Index: ColEditorWrapMark, Group: "Editor", ConstantName: "ColEditorWrapMark"},
 
 	// Help Group
 	{Canonical: "Help.Text", Index: vtui.ColHelpText, Group: "Help", ConstantName: "ColHelpText"},
@@ -368,6 +388,7 @@ func FinishColors() {
 	if _, explicit := colorSourceExpressions["Dialog.Settings.Background"]; !explicit {
 		vtui.Palette[ColDialogSettingsBackground] = 0
 	}
+	applyBackgroundInheritance()
 	// Terminal history uses indexed background color 0 for default and blank cells.
 	// Keep it in sync with the configurable user-screen background.
 	vtui.ThemePalette[0] = vtui.GetRGBBack(vtui.Palette[ColCommandLineUserScreen])
@@ -384,6 +405,36 @@ func FinishColors() {
 	cursorFg, _ := GetColorRGBBoth(vtui.Palette[ColTerminalCursor])
 	vtui.CursorColor = int(cursorFg)
 	vtui.DebugLog("COLORS: cursor color #%06X", cursorFg)
+}
+
+// applyBackgroundInheritance fills in the background of every slot with an
+// InheritsBackgroundFrom target that no loaded theme layer addressed at all,
+// copying it from that target slot's own (already layered) background. See
+// the field's doc comment on ColorSlot for why this exists (f4#1232).
+func applyBackgroundInheritance() {
+	for _, slot := range ColorSlots {
+		if slot.InheritsBackgroundFrom == "" {
+			continue
+		}
+		if _, explicit := colorSourceExpressions[slot.Canonical]; explicit {
+			continue
+		}
+		targetIndex, ok := colorMap[slot.InheritsBackgroundFrom]
+		if !ok {
+			continue
+		}
+		vtui.Palette[slot.Index] = copyBackground(vtui.Palette[slot.Index], vtui.Palette[targetIndex])
+	}
+}
+
+// copyBackground returns attr with its background replaced by src's
+// background (index or RGB, whichever src uses), leaving attr's own
+// foreground and style flags untouched.
+func copyBackground(attr, src uint64) uint64 {
+	if src&vtui.IsBgRGB != 0 {
+		return vtui.SetRGBBack(attr, vtui.GetRGBBack(src))
+	}
+	return vtui.SetIndexBack(attr, vtui.GetIndexBack(src))
 }
 
 // FormatFarColor serializes a vtui palette color attribute to a farcolors.ini string.
