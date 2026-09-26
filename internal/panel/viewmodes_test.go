@@ -359,6 +359,51 @@ func TestPanelModesFileRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPanelModesFileRoundTripPreservesDuplicateColumnTypes is a regression
+// test for f4#410 ("Добавить кастомные режимы колонок"): a custom mode may
+// repeat a column type with independent modifiers per occurrence, exactly
+// the issue's own example of two Name+Size pairs side by side. A round trip
+// through panel_modes.ini that deduplicated columns by type, or let a later
+// occurrence's flags overwrite an earlier one's, would silently collapse
+// the two pairs into one.
+func TestPanelModesFileRoundTripPreservesDuplicateColumnTypes(t *testing.T) {
+	resetPanelViewModes(true)
+	defer resetPanelViewModes(true)
+	path := filepath.Join(t.TempDir(), "settings", "panel_modes.ini")
+
+	columns, err := TextToViewSettings("N,SC,N,SF", "0,10,0,10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	panelViewModes.overrides[ViewMode6] = &PanelViewSettings{Columns: columns}
+	if err := savePanelViewModes(path); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := loadPanelViewModes(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	got := loaded[ViewMode6]
+	if got == nil || len(got.Columns) != 4 {
+		t.Fatalf("mode 6 = %+v", got)
+	}
+	want := []PanelColumn{
+		{Type: NameColumn},
+		{Type: SizeColumn, Flags: ColumnCommas, Width: 10},
+		{Type: NameColumn},
+		{Type: SizeColumn, Flags: ColumnFloatSize, Width: 10},
+	}
+	for i, w := range want {
+		if got.Columns[i] != w {
+			t.Errorf("column %d = %+v, want %+v", i, got.Columns[i], w)
+		}
+	}
+	if types, widths := ViewSettingsToText(got.Columns); types != "N,SC,N,SF" || widths != "0,10,0,10" {
+		t.Fatalf("mode 6 columns %q / %q", types, widths)
+	}
+}
+
 func viewModesTestEntries() []*FileEntry {
 	return []*FileEntry{
 		{VFSItem: vfs.VFSItem{Name: "a", Size: 1, SizeKnown: true}},
