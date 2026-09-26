@@ -203,6 +203,15 @@ func ColorerParamEdit(p *ColorerParam, text string) (value *string, changed bool
 // branches guarded by that assertion still compile.
 type ColorerHighlighter struct{}
 
+// Highlight satisfies vtui.Highlighter, which is what ev.Highlighter's field
+// type is: without it, the type assertions below would not just always fail,
+// they would not compile at all ("impossible type assertion"), since Go
+// requires the asserted concrete type to satisfy the interface being
+// asserted from.
+func (ch *ColorerHighlighter) Highlight(line string, prevState any, baseAttr uint64) ([]uint64, any) {
+	return nil, nil
+}
+
 func (ch *ColorerHighlighter) beginColorerStartup()                {}
 func (ch *ColorerHighlighter) noteLineCount(n int)                 {}
 func (ch *ColorerHighlighter) DropFrom(idx int)                    {}
