@@ -2,6 +2,7 @@ package editor
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -258,6 +259,126 @@ func expandColorerUserPath(path string) string {
 	return path
 }
 
+// colorerLocationTagRe matches a <location> element in an hrd-sets XML file,
+// whichever attributes it carries and whether or not it self-closes.
+var colorerLocationTagRe = regexp.MustCompile(`<location(?:\s[^>]*)?/?>`)
+
+// colorerLinkAttrRe matches that element's link attribute and captures its
+// value, single or double quoted.
+var colorerLinkAttrRe = regexp.MustCompile(`\blink\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+
+// colorerUserHRDCacheDirName is where materializeUserHRDPath copies the
+// files a user's hrd-sets <location link> points to. It lives inside the
+// Colorer configuration directory's own "base" folder — the one directory
+// Colorer resolves every <location link> against, no matter which file
+// contains the element (see materializeUserHRDPath) — under a name no
+// catalog uses.
+const colorerUserHRDCacheDirName = ".f4-user-hrd-cache"
+
+// materializeUserHRDPath works around a Colorer limitation reported in
+// f4#277 by montoner0: a <location link> in an hrd-sets file — the format
+// EditorColorerUserHrd loads when it names a single XML file rather than a
+// folder of standalone .hrd files — resolves against catalog.xml's own
+// directory, never against the file that contains the link (traced to
+// ParserFactory::Impl::fillMapper in colorer4go's vendored Colorer-library,
+// which always resolves hrd_location entries against base_catalog_path).
+// HRC schemes have no such problem: HrcLibraryImpl resolves a scheme's
+// <location link> against the file that contains it, via
+// XmlInputSource::createRelative, which is exactly what this function gives
+// hrd-sets files by another route.
+//
+// A user file that lives anywhere else on disk and links to a sibling .hrd
+// file by a plain relative path could therefore never find it. This copies
+// every such link's target into configsDir/base/.f4-user-hrd-cache — inside
+// the directory Colorer does resolve links against — and hands Colorer a
+// rewritten copy of the file whose links point there instead. What is left
+// untouched, on purpose:
+//
+//   - a folder of standalone .hrd files: each names itself in its own root
+//     element and carries no <location> indirection to fix;
+//   - a link that is empty, absolute, a URL, or uses an XML entity such as
+//     &hrd; — only catalog.xml's own DOCTYPE defines those, and a link
+//     written that way already means "resolve me against the catalog",
+//     which keeps working exactly as before.
+//
+// Anything this function cannot read, parse or copy falls back to the
+// original path, which is always a valid, if limited, answer — today's
+// behaviour.
+func materializeUserHRDPath(configsDir, userHRDPath string) string {
+	info, err := os.Stat(userHRDPath)
+	if err != nil || info.IsDir() {
+		return userHRDPath
+	}
+	data, err := os.ReadFile(userHRDPath)
+	if err != nil {
+		return userHRDPath
+	}
+	origDir := filepath.Dir(userHRDPath)
+	cacheDir := filepath.Join(configsDir, "base", colorerUserHRDCacheDirName)
+	newContent, changed := rewriteUserHRDLocationLinks(data, origDir, cacheDir)
+	if !changed {
+		return userHRDPath
+	}
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+		return userHRDPath
+	}
+	topPath := filepath.Join(cacheDir, "top-"+filepath.Base(userHRDPath))
+	if err := os.WriteFile(topPath, newContent, 0600); err != nil {
+		return userHRDPath
+	}
+	return topPath
+}
+
+// rewriteUserHRDLocationLinks rewrites every plain relative <location link>
+// in content — an hrd-sets file whose own directory is origDir — to point
+// into cacheDir instead, copying each link's target there under an
+// ASCII-safe generated name (Colorer's legacy strings read a file name as
+// CP1251, same limit as EditorColorerUserHrd itself). A link this function
+// does not rewrite, and every other byte of content, is returned unchanged;
+// changed is false when nothing needed rewriting, in which case the caller
+// keeps the original file.
+func rewriteUserHRDLocationLinks(content []byte, origDir, cacheDir string) ([]byte, bool) {
+	changed := false
+	n := 0
+	out := colorerLocationTagRe.ReplaceAllFunc(content, func(tag []byte) []byte {
+		loc := colorerLinkAttrRe.FindSubmatchIndex(tag)
+		if loc == nil {
+			return tag
+		}
+		start, end := loc[2], loc[3]
+		if start < 0 {
+			start, end = loc[4], loc[5]
+		}
+		link := string(tag[start:end])
+		if link == "" || strings.ContainsRune(link, '&') || filepath.IsAbs(link) || strings.Contains(link, "://") {
+			return tag
+		}
+		srcPath := filepath.Join(origDir, filepath.FromSlash(link))
+		if srcInfo, statErr := os.Stat(srcPath); statErr != nil || srcInfo.IsDir() {
+			return tag
+		}
+		data, readErr := os.ReadFile(srcPath)
+		if readErr != nil {
+			return tag
+		}
+		n++
+		cacheName := fmt.Sprintf("link%d.hrd", n)
+		if mkErr := os.MkdirAll(cacheDir, 0700); mkErr != nil {
+			return tag
+		}
+		if writeErr := os.WriteFile(filepath.Join(cacheDir, cacheName), data, 0600); writeErr != nil {
+			return tag
+		}
+		changed = true
+		newTag := make([]byte, 0, len(tag)+len(colorerUserHRDCacheDirName)+len(cacheName))
+		newTag = append(newTag, tag[:start]...)
+		newTag = append(newTag, colorerUserHRDCacheDirName+"/"+cacheName...)
+		newTag = append(newTag, tag[end:]...)
+		return newTag
+	})
+	return out, changed
+}
+
 // CurrentColorerSource is the source the applied configuration names.
 func CurrentColorerSource() ColorerSource {
 	return ColorerSource{
@@ -281,7 +402,8 @@ func (src ColorerSource) userOptions() []colorer.Option {
 		opts = append(opts, colorer.WithHRCSettings(settings))
 	}
 	if src.UserHRD != "" {
-		opts = append(opts, colorer.WithUserHRD(expandColorerUserPath(src.UserHRD)))
+		hrdPath := expandColorerUserPath(src.UserHRD)
+		opts = append(opts, colorer.WithUserHRD(materializeUserHRDPath(src.ConfigsDir, hrdPath)))
 	}
 	if src.UserHRC != "" {
 		opts = append(opts, colorer.WithUserHRC(expandColorerUserPath(src.UserHRC)))

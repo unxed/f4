@@ -240,10 +240,20 @@ through `colorer.WithUserHRC` / `WithUserHRD`, styles first.
   background cache compare the whole source. A session loaded without a user
   path is never handed out after the path is set.
 - The module sees each user path through a read-only mount of its folder. A
-  `<location link>` in an `<hrd-sets>` file resolves against catalog.xml, as in
-  Colorer, so it has to stay inside the configuration directory; a folder of
-  `.hrd` files (each root `<hrd>` naming class, name and description) has no
-  such limit.
+  `<location link>` in an `<hrd-sets>` file resolves against catalog.xml, not
+  against the file that contains it — traced to `fillMapper` in colorer4go's
+  vendored Colorer-library, which always resolves an `HrdNode`'s locations
+  against `base_catalog_path` — so a style elsewhere on disk could not link
+  to a sibling `.hrd` file by a plain relative path (reported by montoner0).
+  `materializeUserHRDPath` (`colorer.go`) works around it without touching
+  colorer4go: it copies every such link's target into
+  `configsDir/base/.f4-user-hrd-cache`, the one place Colorer does resolve
+  links against, and hands Colorer a rewritten copy of the file pointing
+  there. A link that is empty, absolute, a URL, or uses an XML entity such as
+  `&hrd;` that only catalog.xml's own DOCTYPE defines is left exactly as
+  written, since it already means "resolve me against the catalog". A folder
+  of `.hrd` files (each root `<hrd>` naming class, name and description) has
+  no `<location>` indirection to fix.
 - File names Colorer opens must be ASCII: its legacy strings read a name as
   CP1251. colorer4go refuses such a path with a warning instead of letting the
   call abort. A path that does not exist is a warning too; a file that does
