@@ -39,6 +39,30 @@ func TestEditorBase64ActionsExposeF11AndEditCommands(t *testing.T) {
 	}
 }
 
+func TestEditorCalculateExpressionActionExposesEditCommand(t *testing.T) {
+	calc, ok := GetAction("Editor.CalculateExpression")
+	if !ok || calc.Area != "Editor" || calc.MenuPath != "Edit" || calc.Handler == nil {
+		t.Fatalf("CalculateExpression action = %#v, present=%t", calc, ok)
+	}
+}
+
+func TestEditorCalculateExpressionActionReplacesSelectionWithResult(t *testing.T) {
+	ev := newActionTestEditor(t, "2 + 2 * 3")
+	vtui.FrameManager.Push(ev)
+	ev.SelActive = true
+	ev.SelAnchorOffset = 0
+	ev.CursorLine = 0
+	ev.CursorPos = len("2 + 2 * 3")
+
+	if !RunAction("Editor.CalculateExpression") {
+		t.Fatal("Editor.CalculateExpression did not run on the editor")
+	}
+
+	if got, want := ev.GetText(), "8"; got != want {
+		t.Fatalf("text after Editor.CalculateExpression = %q, want %q", got, want)
+	}
+}
+
 func TestEditorSortLinesAction(t *testing.T) {
 	sortAction, ok := GetAction("Editor.SortLines")
 	if !ok {
