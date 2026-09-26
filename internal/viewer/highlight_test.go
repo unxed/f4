@@ -224,3 +224,80 @@ func TestViewerRefreshHighlightingRebuildsTheColorizer(t *testing.T) {
 		t.Fatalf("after RefreshHighlighting, windowColorizer() built %d colorizer(s) (want 2) or reused the old one", builds)
 	}
 }
+
+// f4 #1413: turning highlighting off then straight back on, without
+// scrolling, used to leave the viewer dark. renderText skips re-requesting a
+// window whose lines hash the same as the last one it asked a colorizer for
+// (vv.highlightKey), so it never sends a request when what is on screen has
+// not changed since the last time it was highlighted — even though
+// RefreshHighlighting just swapped in a brand new, still-empty colorizer for
+// the old one Close()d. Highlighting only reappeared once the user scrolled
+// and the hash changed, which read as "выключает сразу, а включает с
+// нескольких попыток".
+func TestViewerRefreshHighlightingRerequestsAnUnchangedScreen(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	root := t.TempDir()
+	path := filepath.Join(root, "a.txt")
+	if err := os.WriteFile(path, []byte("zero\none\ntwo\nthree\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	oldAuto, oldDefault := config.App.ViewerAutodetectCodePage, config.App.ViewerDefaultCodePage
+	config.App.ViewerAutodetectCodePage, config.App.ViewerDefaultCodePage = false, 65001
+	t.Cleanup(func() { config.App.ViewerAutodetectCodePage, config.App.ViewerDefaultCodePage = oldAuto, oldDefault })
+
+	var built []*recordingColorizer
+	old := NewWindowColorizer
+	NewWindowColorizer = func(string, string, uint64, func()) WindowColorizer {
+		rec := &recordingColorizer{}
+		built = append(built, rec)
+		return rec
+	}
+	t.Cleanup(func() { NewWindowColorizer = old })
+
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(root), path)
+	if err != nil {
+		t.Fatalf("NewViewerView: %v", err)
+	}
+	defer vv.Close()
+	deadline := time.After(2 * time.Second)
+	for {
+		if _, err := vv.Backend.ReadAt(0, int(vv.Backend.Size())); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			t.Fatal("the file did not load")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	vv.WrapMode = true
+	vv.SetPosition(0, 0, 9, 6)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(10, 7)
+
+	// First render: on-screen lines are requested from the first colorizer.
+	vv.renderText(scr, 8, 4)
+	if len(built) != 1 || built[0].lines == nil {
+		t.Fatalf("first render: built %d colorizer(s), first got a request = %v", len(built), len(built) == 1 && built[0].lines != nil)
+	}
+
+	// Toggle off, then on, exactly as CtrlL does, without moving the view.
+	// Neither call rebuilds the colorizer by itself — windowColorizer only
+	// does that lazily, from the next renderText below — so builds is still
+	// 1 here.
+	vv.RefreshHighlighting()
+	vv.RefreshHighlighting()
+
+	// Same lines on screen as before: renderText must build a second
+	// colorizer and hand it a request, not skip the request because the
+	// lines hash the same as they did for the first colorizer.
+	vv.renderText(scr, 8, 4)
+	if len(built) != 2 {
+		t.Fatalf("built %d colorizer(s) across both renders, want 2", len(built))
+	}
+	if built[1].lines == nil {
+		t.Error("the new colorizer never got a Request after RefreshHighlighting, though the screen did not change")
+	}
+}
