@@ -185,6 +185,36 @@ func TestNativeFrameworkShortcutMetadataRespectsTerminalOwnership(t *testing.T) 
 	}
 }
 
+// TestNativeFrameworkShortcutMetadataRespectsAdvancedProtocol covers the
+// other half of f4#128: once an AltScreen program has negotiated an advanced
+// input protocol (win32-input-mode or the kitty keyboard protocol),
+// frame.go hands it plain Ctrl+Tab instead of running Next Workspace, so the
+// discoverability hint must stop advertising that chord. Ctrl+Shift+Tab
+// keeps working (and keeps being advertised) regardless of the protocol.
+func TestNativeFrameworkShortcutMetadataRespectsAdvancedProtocol(t *testing.T) {
+	initFrameworkActionTestScreen(t)
+	previousHotkeys := keymap.GlobalHotkeysMgr
+	keymap.GlobalHotkeysMgr = nil
+	t.Cleanup(func() {
+		keymap.GlobalHotkeysMgr = previousHotkeys
+	})
+
+	panels := &panel.PanelsFrame{
+		ShowPanels: false,
+		TermView:   &terminal.TerminalView{UseAltScreen: true, Win32InputMode: true},
+	}
+	vtui.FrameManager.Push(panels)
+
+	nextAction, _ := GetAction("Workspace.Next")
+	if got := keymap.NativeShortcutsForAction("Shell", nextAction); len(got) != 0 {
+		t.Fatalf("advanced-protocol terminal advertised Ctrl+Tab next-workspace shortcut it no longer receives: %v", got)
+	}
+	previousAction, _ := GetAction("Workspace.Previous")
+	if got := keymap.NativeShortcutsForAction("Shell", previousAction); !reflect.DeepEqual(got, []string{"Ctrl+Shift+Tab"}) {
+		t.Fatalf("advanced-protocol terminal previous-workspace shortcut = %v, want [Ctrl+Shift+Tab]", got)
+	}
+}
+
 func TestFrameworkHelpAndMainMenuActionsPreserveFrameBehavior(t *testing.T) {
 	initFrameworkActionTestScreen(t)
 	previousHelpEngine := vtui.GlobalHelpEngine
