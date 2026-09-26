@@ -56,6 +56,12 @@ func Readlink(name string) (string, error)  { return os.Readlink(name) }
 func Symlink(oldname, newname string) error { return os.Symlink(oldname, newname) }
 func Link(oldname, newname string) error    { return os.Link(oldname, newname) }
 
+// ReadFile reads the whole of name and returns its contents. Trivially
+// os.ReadFile: every non-Windows GOOS has no second personality to switch
+// to (see the package doc), so there is nothing here for hostmode to
+// change.
+func ReadFile(name string) ([]byte, error) { return os.ReadFile(name) }
+
 func Rename(oldpath, newpath string) error         { return os.Rename(oldpath, newpath) }
 func RemoveAll(path string) error                  { return os.RemoveAll(path) }
 func Remove(name string) error                     { return os.Remove(name) }
