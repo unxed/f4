@@ -3839,6 +3839,13 @@ func (pf *PanelsFrame) HandleCommand(cmd int, args any) bool {
 		return AppCommand(pf, cmd, args)
 	case appcmd.CmFindFile:
 		return AppCommand(pf, cmd, args)
+
+	case appcmd.CmWorkspaceNewTerminal:
+		// The side menus' "Terminal in New Workspace" item carried this
+		// command with no case to receive it (f4#128): the hotkey worked
+		// because it calls the action directly, but selecting the menu item
+		// did nothing. Route it the same way CmNew/CmView/... above do.
+		return AppCommand(pf, cmd, args)
 	case appcmd.CmSwitchToViewer:
 		if ev, ok := args.(*editor.EditorView); ok {
 			doSwitch := func() {
