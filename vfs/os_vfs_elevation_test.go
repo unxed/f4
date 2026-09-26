@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs/hostfs"
 )
@@ -44,6 +45,90 @@ func succeedingDispatcher(t *testing.T, item VFSItem) *SudoClient {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return &SudoClient{conn: conn}
+}
+
+// slowSucceedingDispatcher is succeedingDispatcher, but the dispatcher goroutine
+// sleeps for delay before answering the request — standing in for the slow PAM
+// prompt (fingerprint reader, etc.) that f4#1411 reported freezing the whole UI,
+// since it was previously waited on synchronously from the single UI goroutine.
+func slowSucceedingDispatcher(t *testing.T, item VFSItem, delay time.Duration) *SudoClient {
+	t.Helper()
+	sock := filepath.Join(shortSocketDir(t), "d.sock")
+	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	go func() {
+		conn, err := l.AcceptUnix()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		for {
+			var req SudoRequest
+			if _, err := recvMsg(conn, &req); err != nil {
+				return
+			}
+			time.Sleep(delay)
+			if err := sendMsg(conn, SudoResponse{Item: item}, -1); err != nil {
+				return
+			}
+		}
+	}()
+	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: sock, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return &SudoClient{conn: conn}
+}
+
+// f4#1411, timing-based regression: the bug was that pressing Enter on a
+// directory needing sudo called SetPath synchronously on f4's single
+// cooperative UI goroutine, and SetPath waits on the sudo dispatcher — a real
+// slow PAM prompt (fingerprint reader retries) could hold that for many
+// seconds, freezing the entire UI, not just that one navigation.
+//
+// This proves both halves of the fix with an actual slow dispatcher rather
+// than reasoning about the code: NeedsElevation (what internal/panel/list.go's
+// Enter handler now calls synchronously, f4#1411) must return long before the
+// dispatcher would ever answer, because it never talks to it at all — while
+// SetPath (still used exactly as before by every caller that never got
+// migrated to the async path, and by this test as a stand-in for "the old
+// synchronous call the UI goroutine used to make") does sit for the full
+// delay, demonstrating the freeze is real and that avoiding SetPath here is
+// what fixes it.
+func TestOSVFSNeedsElevationDoesNotBlockOnSlowDispatcher(t *testing.T) {
+	const delay = 300 * time.Millisecond
+	target, startPath := makeLocallyDeniedDir(t)
+	v := NewOSVFS(startPath)
+
+	old := globalSudoClient
+	t.Cleanup(func() { globalSudoClient = old })
+	globalSudoClient = slowSucceedingDispatcher(t, VFSItem{IsDir: true}, delay)
+
+	start := time.Now()
+	needs := v.NeedsElevation(target)
+	elapsed := time.Since(start)
+	if !needs {
+		t.Fatal("NeedsElevation = false, want true (target is locally permission-denied and sudo is available)")
+	}
+	if elapsed >= delay {
+		t.Fatalf("NeedsElevation took %v, want well under the dispatcher's %v delay -- it must never consult the dispatcher itself", elapsed, delay)
+	}
+
+	// Sanity check that the dispatcher delay above is real and would indeed
+	// have frozen a caller waiting on it synchronously -- otherwise the
+	// assertion above would pass for the wrong reason (a broken dispatcher
+	// answering instantly, say).
+	start = time.Now()
+	if err := v.SetPath(target); err != nil {
+		t.Fatalf("SetPath: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < delay {
+		t.Fatalf("SetPath took %v, want at least the dispatcher's %v delay -- the slow dispatcher isn't exercising the code path this test relies on", elapsed, delay)
+	}
 }
 
 // makeLocallyDeniedDir creates root/denied-parent (search permission denied)
