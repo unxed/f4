@@ -459,6 +459,7 @@ type F4Config struct {
 	HelpLanguage             string
 	UseLocalLanguageFiles    bool
 	AlwaysShowMenuBar        bool
+	DialogOuterBorder        bool // draw an extra frame one cell outside dialog/UserMenu borders, far2l/Far3 style (default off)
 	WorkspaceTabMode         int
 	WorkspaceTabsOverlay     bool
 	CtrlTabShowsMenu         bool
@@ -669,6 +670,7 @@ var App = F4Config{
 	HelpLanguage:             "en",
 	UseLocalLanguageFiles:    false,
 	AlwaysShowMenuBar:        false,
+	DialogOuterBorder:        false,
 	WorkspaceTabMode:         int(vtui.WorkspaceTabsAlways),
 	WorkspaceTabsOverlay:     true,
 	CtrlTabShowsMenu:         false,
@@ -905,6 +907,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 	cfg.ConsoleTitleTemplate = merged.GetString("Interface", "ConsoleTitleTemplate", "f4 %Ver %Platform %Admin - %State")
 	cfg.DisplayFullPathInTitle = merged.GetString("Interface", "DisplayFullPathInTitle", "0") == "1"
 	cfg.AlwaysShowMenuBar = merged.GetString("Interface", "AlwaysShowMenuBar", "0") == "1"
+	cfg.DialogOuterBorder = merged.GetString("Interface", "DialogOuterBorder", "0") == "1"
 	switch strings.ToLower(merged.GetString("Interface", "WorkspaceTabMode", "always")) {
 	case "always":
 		cfg.WorkspaceTabMode = int(vtui.WorkspaceTabsAlways)
@@ -1243,6 +1246,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "ConsoleTitleTemplate = %s\n", cfg.ConsoleTitleTemplate)
 	fmt.Fprintf(&sb, "DisplayFullPathInTitle = %d\n", map[bool]int{true: 1, false: 0}[cfg.DisplayFullPathInTitle])
 	fmt.Fprintf(&sb, "AlwaysShowMenuBar = %d\n", map[bool]int{true: 1, false: 0}[cfg.AlwaysShowMenuBar])
+	fmt.Fprintf(&sb, "DialogOuterBorder = %d\n", map[bool]int{true: 1, false: 0}[cfg.DialogOuterBorder])
 	workspaceTabMode := "multiple"
 	if cfg.WorkspaceTabMode == int(vtui.WorkspaceTabsAlways) {
 		workspaceTabMode = "always"

@@ -42,6 +42,7 @@ GuiUseSystemMonospace|appearance|Font|Use system monospace font|Use the platform
 GuiFont|appearance|Font|Graphical font|Choose a font for supported graphical frontends. A custom font can be entered manually.||restart
 GuiFontSize|appearance|Font|Font size|Set graphical font size. This does not change the font of an external terminal emulator.||restart
 AlwaysShowMenuBar|appearance|Titles and menus|Always show menu bar|Keep the main menu bar visible instead of showing it only when activated.||live
+DialogOuterBorder|appearance|Dialogs|Extra outer border for dialogs|Draw an additional frame one cell outside the border of dialogs and the user menu, far2l/Far3 style.||live
 ConsoleTitleTemplate|appearance|Titles and menus|Window title template|Format the host title with %State, %Ver, %Platform, %Backend, %Host, %User and %Admin.||live
 DisplayFullPathInTitle|appearance|Titles and menus|Full file paths in titles|Show the complete file identity in editor and viewer title bars instead of only the basename.||live
 StartupMode|startup|Launch defaults|Startup mode|Choose how plain f4 launches. Explicit --gui or --tty arguments override this default for that launch.|auto:Automatic;tty:Terminal;gui:Graphical|restart
