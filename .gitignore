@@ -11,6 +11,7 @@ dummy_rpc_plugin
 _failed_tests_f4.log
 rsrc_windows_amd64.syso
 rsrc_windows_arm64.syso
+rsrc_windows_386.syso
 Profile/
 afix.ap
 afailed.*
