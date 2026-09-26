@@ -26,58 +26,9 @@ on:
 # concurrent runners on the free tier, two overlapping runs queue each other
 # into waves. Tag pushes publish releases, so those runs are never cancelled;
 # each tag is its own group anyway.
-#
-# That per-ref grouping still leaves every DIFFERENT open pull_request in
-# its own group, so several simultaneously open PRs run several full
-# matrices in true parallel, all competing for the same finite runner
-# pool -- which is exactly what starved a release tag's own queued run on
-# 2026-09-26. The Лунобот bot swarm routinely keeps 4-7 PRs open at once,
-# each redundantly re-testing unrelated, unchanged code. Those specifically
-# get folded into one shared 'bot-pr-queue' group, cancel-in-progress:
-# false so nothing is ever dropped -- every bot PR still gets a complete,
-# honest CI result, just one full matrix at a time for the swarm
-# collectively instead of N in parallel. Anything else (a human PR, or a
-# main/tag push) keeps its own per-ref group above, fully unaffected.
-#
-# Bot branches are recognised by github.head_ref: the 'codex/' and
-# 'lunobot/' prefixes (per-node working-branch layout; f4 is mid-transition
-# between the two) plus a bare leading digit, which is the shape Лунобот
-# currently uses for its f4 PR branches (e.g. "1502-recursive-chown-chmod",
-# "128-proactive-kitty-protocol" -- issue-number-first, no prefix at all).
-# A human is exceedingly unlikely to pick 'codex/' or 'lunobot/' as a
-# personal branch prefix, but a digit-led branch name is a much weaker
-# signal: GitHub's own "create a branch for this issue" button suggests
-# that exact shape to any contributor, bot or human. Accepted risk: a
-# human PR named that way queues behind the bot lane instead of starting
-# immediately -- it still runs to completion and reports a full, correct
-# result, just later.
 concurrency:
-  group: >-
-    ${{
-      (github.event_name == 'pull_request' &&
-        (startsWith(github.head_ref, 'codex/') ||
-         startsWith(github.head_ref, 'lunobot/') ||
-         startsWith(github.head_ref, '0') || startsWith(github.head_ref, '1') ||
-         startsWith(github.head_ref, '2') || startsWith(github.head_ref, '3') ||
-         startsWith(github.head_ref, '4') || startsWith(github.head_ref, '5') ||
-         startsWith(github.head_ref, '6') || startsWith(github.head_ref, '7') ||
-         startsWith(github.head_ref, '8') || startsWith(github.head_ref, '9')))
-      && 'bot-pr-queue'
-      || format('{0}-{1}', github.workflow, github.ref)
-    }}
-  cancel-in-progress: >-
-    ${{
-      (github.event_name == 'pull_request' &&
-        (startsWith(github.head_ref, 'codex/') ||
-         startsWith(github.head_ref, 'lunobot/') ||
-         startsWith(github.head_ref, '0') || startsWith(github.head_ref, '1') ||
-         startsWith(github.head_ref, '2') || startsWith(github.head_ref, '3') ||
-         startsWith(github.head_ref, '4') || startsWith(github.head_ref, '5') ||
-         startsWith(github.head_ref, '6') || startsWith(github.head_ref, '7') ||
-         startsWith(github.head_ref, '8') || startsWith(github.head_ref, '9')))
-      && false
-      || !startsWith(github.ref, 'refs/tags/')
-    }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 # Where a tag build writes the tag with -X: every build step below takes the
 # name from here. The linker skips an -X whose name resolves to nothing without
