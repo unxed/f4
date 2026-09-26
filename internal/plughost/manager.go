@@ -160,11 +160,12 @@ func (pm *PluginManager) loadInternal() {
 		mediainfo.NewPlugin(config.GetF4ConfigDir()),
 		sqliteplugin.NewPlugin(),
 	}
-	// archive, cloudfox (cloud services) and netfox (ftp/sftp/scp) are the
-	// heavy VFS providers f4#1178 excludes from a lite build; see
-	// plugins_lite.go/plugins_full.go, the single point of truth for which
-	// build tag gets which set. A later slice replaces them with plugins
-	// that wrap CLI archivers and ssh/scp/sftp instead (f4#1178, part 2).
+	// cloudfox (cloud services) and netfox (ftp/sftp/scp) stay excluded from
+	// a lite build; archive support comes back as plugins/multiarc, a
+	// CLI-archiver wrapper, in place of the native-library one (f4#1178,
+	// part 2). See plugins_lite.go/plugins_full.go, the single point of
+	// truth for which build tag gets which set, for the full accounting
+	// including why FISH+ stayed out too.
 	plugins = append(plugins, optionalVFSPlugins()...)
 
 	for _, p := range plugins {
