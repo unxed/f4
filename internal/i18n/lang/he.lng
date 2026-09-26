@@ -2022,6 +2022,7 @@ SettingsCenter.Text.4a8bb929ad96374dc45759fedbfb0d8677e8a33051ea220032c2af71ee18
 SettingsCenter.Text.b54d5f151044cd7ccaa1e6dff537e38abed8dbba0c5c126d0cf4aadb86615698=השתמש בסכמות ובסגנונות תחביר של Colorer. תומך בנתוני הסכימה הניתנים להגדרה, אך זקוק לסכימות מותקנות ויכול לחזור אם הן אינן זמינות.
 SettingsCenter.Text.66913610bfd33055181edb7d0e4fa367507f0a49a3861c1d3d55a82f90408cff=השבת הדגשת תחביר בעורכים שנפתחו לאחרונה. נמנע מעבודת צביעה תחבירית ומציג טקסט באמצעות פלטת העורך הרגילה.
 SettingsCenter.Text.f75db9fdf1854fbe9bce5bf34233636b3b3726189f6e0e1d0266f9e4d93cb10f=השתמש בערכת ברירת המחדל המובנית של Colorer במקום בסכימת HRD מותקנת בשם.
+SettingsCenter.Text.8008c99689b343ec6bdc6ca1e458ed6879e95daf3c634d6a2ce1f72c478e2709=השתמש בסגנון הצבע המובנה כברירת מחדל במקום בסגנון מותקן בעל שם.
 SettingsCenter.Text.7763567cecd6d64bd32c6ca495d30ed5f61244e3c37f9b0ae0096d4651dadaf7=אפשר אקורדים לעריכה בסגנון Mac ב-macOS ואקורדי עריכה רגילים במקומות אחרים. עדיין דרושה תמיכה בקצה האחורי עבור תרגום מקש Command.
 SettingsCenter.Text.60f4ce4d7f6bfc3167ed215bc7411978ddbb765a79f2c39ed7af8ce4acb504d0=הכריח אקורדים לעריכה בסגנון Mac בעורכים ובשדות דו-שיח נתמכים. הניווט בלוח נשאר בסגנון רחוק; תרגום הפקודה תלוי ב-backend.
 SettingsCenter.Text.4e3f8b832d02f866212c38194f541012bd3e92adbb9e501b6fb554df370866da=השתמש באקורדי עריכה רגילים אפילו ב-macOS. לא משנה את דגם הניווט בפאנל.
