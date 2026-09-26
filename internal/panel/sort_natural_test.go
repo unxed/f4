@@ -127,6 +127,8 @@ func TestNaturalCompareOrdersTrackNumbersNumerically(t *testing.T) {
 	// guarantees and easy to read as "is this order already correct".
 	for i := 0; i < len(names); i++ {
 		for j := 0; j < len(names)-1-i; j++ {
+			// #nosec G602 -- j < len(names)-1-i guarantees j+1 < len(names); a
+			// standard bubble-sort bound gosec's taint analysis can't verify.
 			if naturalCompare(names[j], names[j+1], caseInsensitiveTextCompare) > 0 {
 				names[j], names[j+1] = names[j+1], names[j]
 			}
