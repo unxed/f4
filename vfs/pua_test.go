@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -110,6 +111,14 @@ func TestPUA_DisplayName(t *testing.T) {
 // resolves to the exact same on-disk file, proving the mapping is lossless
 // in both directions rather than merely not crashing.
 func TestOSVFS_NonUTF8Name_RoundTripsThroughListingAndOps(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		// HFS+/APFS validate filenames as UTF-8 at the filesystem layer
+		// itself, unlike Linux's opaque-bytes paths -- the raw open(2) this
+		// test needs to create the fixture fails with EILSEQ before OSVFS
+		// ever sees the name, so the scenario this test is about cannot
+		// occur on this platform at all.
+		t.Skip("macOS rejects non-UTF-8 filenames at the filesystem layer; nothing to round-trip")
+	}
 	tmpDir := t.TempDir()
 	rawName := "bad_utf8_\xff\xfe\x80_name.txt"
 	if utf8.ValidString(rawName) {
@@ -205,7 +214,7 @@ func TestOSVFS_NonUTF8Name_RoundTripsThroughListingAndOps(t *testing.T) {
 func TestOSVFS_ValidUTF8Name_UnaffectedByMapping(t *testing.T) {
 	tmpDir := t.TempDir()
 	name := "обычное имя.txt"
-	if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("data"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("data"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
