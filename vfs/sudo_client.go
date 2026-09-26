@@ -362,6 +362,13 @@ func (c *SudoClient) SetAttributes(path string, item VFSItem) error {
 	return err
 }
 
+// Unmount asks the elevated dispatcher to unmount mountPoint (f4#415), for
+// when UnmountDevice's unprivileged attempts were refused.
+func (c *SudoClient) Unmount(mountPoint string) error {
+	_, _, err := c.SendRequest(SudoRequest{Cmd: CmdUnmount, Path: mountPoint})
+	return err
+}
+
 func getAskpassSocketPath(pid int) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("f4-ap-%d.sock", pid))
 }

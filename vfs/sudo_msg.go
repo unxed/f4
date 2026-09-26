@@ -16,6 +16,13 @@ const (
 	CmdSymlink
 	// CmdHardlink makes Path a hard link to the existing Path2.
 	CmdHardlink
+	// CmdUnmount unmounts the filesystem mounted at Path (f4#415). It is
+	// the fallback UnmountDevice (mount_linux.go) reaches for only when
+	// udisksctl is unavailable or refuses: unmounting something the current
+	// user did not mount typically needs root, unlike the rest of this
+	// dispatcher's calls, which exist for permission-denied filesystem
+	// operations in general.
+	CmdUnmount
 )
 
 // SudoRenameNoReplace, in Flags of a CmdRename, makes the dispatcher refuse to
