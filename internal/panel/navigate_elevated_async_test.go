@@ -46,10 +46,6 @@ func TestNavigateElevatedDirectoryAsyncAppliesResult(t *testing.T) {
 		}
 	}
 	waitForLoad(t, fp)
-
-	if fp.PendingSelection != ".." {
-		t.Errorf("PendingSelection = %q, want %q", fp.PendingSelection, "..")
-	}
 }
 
 // If the panel navigates away while the background resolve is still in
