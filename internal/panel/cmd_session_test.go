@@ -410,6 +410,44 @@ func TestCmdSessionFlickeringPromptIsReleased(t *testing.T) {
 	})
 }
 
+// A prompt-shaped screen that keeps changing while a console child is still
+// running must not be released just because the flicker outlasted the retry
+// bound: the child, not the bound, decides. This is f4#1376's "cls sends me
+// back to f4" report -- Far Manager draws full screen without an alternate
+// screen of its own, so its own command line ("C:\path>") is promptShaped,
+// and `cls` clearing and redrawing it can flicker across a few looks while
+// Far is still the one running. Compare TestCmdSessionFlickeringPromptIsReleased,
+// which is the same flicker with no child present and must still release.
+func TestCmdSessionFlickeringPromptHeldByChildIsNotReleased(t *testing.T) {
+	forEachBuild(t, func(t *testing.T, sim *cmdShellSim) {
+		oldMax := cmdPromptMaxAttempts
+		cmdPromptMaxAttempts = 3
+		t.Cleanup(func() { cmdPromptMaxAttempts = oldMax })
+
+		sim.pty.setChildren(terminal.ChildProcess{Name: "far.exe", GUI: false})
+
+		sim.pf.Executing = true
+		sim.pf.CmdSession.pending = true
+		sim.pf.CmdSession.promptSeq = 5
+		sim.pf.CmdSession.sentSeq = 4
+		seq := sim.pf.CmdSession.promptSeq
+		for i := 0; i < cmdPromptMaxAttempts+2; i++ {
+			sim.pf.CmdSession.retryOrRelease(seq)
+		}
+		testutil.DrainUITasks()
+		sim.expectExecuting(true, "far.exe still running through a flickering, prompt-shaped repaint")
+
+		// Far exits; nothing holds the terminal any more, so the same bound
+		// releases exactly as the unheld case already does.
+		sim.pty.setChildren()
+		for i := 0; i < cmdPromptMaxAttempts; i++ {
+			sim.pf.CmdSession.retryOrRelease(seq)
+		}
+		testutil.DrainUITasks()
+		sim.expectExecuting(false, "after far.exe exited")
+	})
+}
+
 // When a batch file calls cmd, the nested shell's prompt must not end the
 // batch's execution: the batch will continue after the nested cmd exits.
 // The panels must stay hidden until the batch truly finishes.
