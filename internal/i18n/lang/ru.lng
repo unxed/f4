@@ -85,6 +85,7 @@ Panel.Column.Changed=Сменён
 Panel.Column.Attributes=Атрибуты
 Panel.Column.Owner=Владелец
 Panel.Column.Group=Группа
+Panel.Column.LinkCount=Ссылки
 Panel.Modes.Title=Режимы файловых панелей
 Panel.Modes.Mode1=Краткий
 Panel.Modes.Mode2=Средний

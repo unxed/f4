@@ -17,9 +17,10 @@ import (
 
 func fillPlatformTimes(item *VFSItem, info os.FileInfo) {
 	if stat, ok := info.Sys().(*winescape.Stat_t); ok {
-		item.KnownMetadata |= MetadataATime | MetadataCTime | MetadataUID | MetadataGID | MetadataPermissions
+		item.KnownMetadata |= MetadataATime | MetadataCTime | MetadataUID | MetadataGID | MetadataPermissions | MetadataNlink
 		item.UnixMode = stat.Mode & 07777
 		item.Uid, item.Gid = int(stat.Uid), int(stat.Gid)
+		item.Nlink = stat.Nlink
 		item.ATime = time.Unix(stat.Atim.Sec, stat.Atim.Nsec)
 		item.CTime = time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec)
 	}
@@ -29,6 +30,11 @@ func fillPlatformTimes(item *VFSItem, info os.FileInfo) {
 		item.ATime = time.Unix(0, stat.LastAccessTime.Nanoseconds())
 		item.CTime = time.Unix(0, stat.CreationTime.Nanoseconds())
 		item.WinAttrs = stat.FileAttributes
+		// Win32FileAttributeData carries no link count. Most files have
+		// exactly one; report that rather than leaving MetadataNlink unset
+		// and the LN column blank for every ordinary file (f4#1400).
+		item.KnownMetadata |= MetadataNlink
+		item.Nlink = 1
 	}
 }
 

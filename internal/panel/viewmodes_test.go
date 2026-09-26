@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,15 +15,15 @@ import (
 )
 
 func TestTextToViewSettingsRoundTrip(t *testing.T) {
-	columns, err := TextToViewSettings("nm, sca ,dmb,O,u,A,P,D,T,DC,DA,DE", "0,10,15%,8,8,10")
+	columns, err := TextToViewSettings("nm, sca ,dmb,O,u,A,P,D,T,DC,DA,DE,ln", "0,10,15%,8,8,10")
 	if err != nil {
 		t.Fatalf("TextToViewSettings: %v", err)
 	}
 	types, widths := ViewSettingsToText(columns)
-	if types != "NM,SCA,DMB,O,U,A,P,D,T,DC,DA,DE" {
+	if types != "NM,SCA,DMB,O,U,A,P,D,T,DC,DA,DE,LN" {
 		t.Errorf("types = %q", types)
 	}
-	if widths != "0,10,15%,8,8,10,0,0,0,0,0,0" {
+	if widths != "0,10,15%,8,8,10,0,0,0,0,0,0,0" {
 		t.Errorf("widths = %q", widths)
 	}
 }
@@ -195,6 +196,52 @@ func TestFormatPanelColumnTime(t *testing.T) {
 	}
 	if got := formatPanelColumnTime(time.Time{}, PanelColumn{Type: WDateColumn, Width: 14}, later); got != "" {
 		t.Errorf("zero time = %q", got)
+	}
+}
+
+func TestPanelLinkCountText(t *testing.T) {
+	known := &FileEntry{VFSItem: vfs.VFSItem{Nlink: 3, KnownMetadata: vfs.MetadataNlink}}
+	if got := panelLinkCountText(known); got != "3" {
+		t.Errorf("known link count = %q, want %q", got, "3")
+	}
+	unknown := &FileEntry{}
+	if got := panelLinkCountText(unknown); got != "" {
+		t.Errorf("unknown link count = %q, want empty", got)
+	}
+}
+
+// TestPanelLinkCountColumnEndToEnd is a regression test for f4#1400: a real
+// file on the local filesystem has one hard link, and a panel mode with an
+// LN column must show it.
+func TestPanelLinkCountColumnEndToEnd(t *testing.T) {
+	resetPanelViewModes(true)
+	defer resetPanelViewModes(true)
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fs := vfs.NewOSVFS(dir)
+	item, err := fs.Stat(context.Background(), filePath)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if !item.HasMetadata(vfs.MetadataNlink) {
+		t.Fatal("Stat did not report Nlink metadata for a real file")
+	}
+
+	fsp := newStableInfoTestPanel(0, 0, 60, 12, fs, []*FileEntry{{VFSItem: item}})
+	columns, err := TextToViewSettings("N,LN", "0,4")
+	if err != nil {
+		t.Fatalf("TextToViewSettings: %v", err)
+	}
+	panelViewModes.overrides[ViewModeDetailed] = &PanelViewSettings{Columns: columns}
+	panelViewModes.generation++
+	fsp.SetViewMode(ViewModeDetailed)
+
+	if got := strings.TrimSpace(fsp.GetCellText(0, 1)); got != "1" {
+		t.Errorf("hard link count of a new file = %q, want %q", got, "1")
 	}
 }
 
