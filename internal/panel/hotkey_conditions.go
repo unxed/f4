@@ -110,6 +110,17 @@ var hotkeyConditions = map[string]func() bool{
 	// being forwarded to the running application.
 	"terminalquiet": func() bool {
 		if pf := FindPanelsFrameAnyScreen(); pf != nil {
+			// Same reasoning as noaltscreenapp/noterminalapp above (see
+			// TerminalOwnsKeyboard): SimpleInline has no terminal.PTY, so
+			// pf.TermView is a leftover background object that does not
+			// reflect what's on screen, and no foreign program can ever be
+			// "loud" here anyway. Reading its UseAltScreen field hit the
+			// exact stray-flip bug that broke Ctrl+O in this mode (f4#1376)
+			// before TerminalOwnsKeyboard got the same short-circuit; F3/F4
+			// (f4#897) were left reading it directly and so stayed broken.
+			if pf.ShellMode == terminal.ShellModeSimpleInline {
+				return true
+			}
 			return pf.TermView != nil && !pf.TermView.UseAltScreen && !pf.IsPtyBusy()
 		}
 		return false
