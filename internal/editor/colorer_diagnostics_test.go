@@ -8,8 +8,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	colorer "github.com/unxed/colorer4go"
+	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/vtui"
 )
 
@@ -198,5 +201,69 @@ func TestColorer_RegionDefineReportsAFailedColourStyle(t *testing.T) {
 	}
 	if pooledColorerSession() != nil {
 		t.Error("the session the colour style broke was pooled")
+	}
+}
+
+// withColorerSource points CurrentColorerSource (what newColorerHighlighter
+// reads) at the given catalog and scheme for the test's duration.
+func withColorerSource(t *testing.T, configsDir, scheme string) {
+	t.Helper()
+	prevCatalog := config.App.EditorColorerCatalog
+	prevScheme := config.App.EditorColorerScheme
+	prevUserHrc := config.App.EditorColorerUserHrc
+	prevUserHrd := config.App.EditorColorerUserHrd
+	config.App.EditorColorerCatalog = configsDir
+	config.App.EditorColorerScheme = scheme
+	config.App.EditorColorerUserHrc = ""
+	config.App.EditorColorerUserHrd = ""
+	t.Cleanup(func() {
+		config.App.EditorColorerCatalog = prevCatalog
+		config.App.EditorColorerScheme = prevScheme
+		config.App.EditorColorerUserHrc = prevUserHrc
+		config.App.EditorColorerUserHrd = prevUserHrd
+	})
+}
+
+// The other half of issue #306: the owner's own trailing note said a scheme
+// failure reaching only debug.log, with the editor silently falling back to
+// another highlighter, was easy to miss. newColorerHighlighter must also
+// raise a toast, in addition to (not instead of) the debug.log entry.
+func TestColorer_SchemeFailureAlsoShowsAToast(t *testing.T) {
+	logs := captureDebugLog(t)
+	ResetColorerSessions()
+	t.Cleanup(ResetColorerSessions)
+
+	// minimalColorerConfigs has no hrd-sets at all, so any colour style name
+	// fails SetHRD once the session itself has started cleanly.
+	withColorerSource(t, minimalColorerConfigs(t), "")
+
+	t.Cleanup(testutil.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	t.Cleanup(colorerSetups.wait)
+
+	previousDuration := colorerSchemeFailureToastDuration
+	colorerSchemeFailureToastDuration = 2 * time.Second
+	t.Cleanup(func() { colorerSchemeFailureToastDuration = previousDuration })
+
+	stub := &stubHighlighter{}
+	ch := newColorerHighlighter(nil, "broken.txt", "", stub)
+	t.Cleanup(func() { ch.Close() })
+
+	// The goroutine's own failure handling has already run its toast.Show
+	// and useFallback calls by the time this returns; both only queued
+	// tasks on the frame manager, so draining it is still needed below.
+	colorerSetups.wait()
+	testutil.DrainUITasks()
+
+	toastMsg := vtui.FrameManager.GetActiveToast()
+	if toastMsg == "" {
+		t.Fatal("a Colorer scheme failure did not raise a toast")
+	}
+	if !strings.Contains(toastMsg, "broken.txt") {
+		t.Errorf("toast %q does not name the file the scheme failed for", toastMsg)
+	}
+	if !logs.has("COLORER: Colour style", "broken.txt") {
+		logs.dump(t)
+		t.Error("the same failure the toast reported is missing from debug.log")
 	}
 }
