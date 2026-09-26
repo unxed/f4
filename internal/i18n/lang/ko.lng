@@ -2017,6 +2017,7 @@ SettingsCenter.Text.4a8bb929ad96374dc45759fedbfb0d8677e8a33051ea220032c2af71ee18
 SettingsCenter.Text.b54d5f151044cd7ccaa1e6dff537e38abed8dbba0c5c126d0cf4aadb86615698=컬러어 문법 스키마와 스타일을 사용하십시오. 구성 가능한 스키마 데이터를 지원하지만 설치된 스키마가 필요하며 사용할 수 없는 경우 뒤로 떨어질 수 있습니다.
 SettingsCenter.Text.66913610bfd33055181edb7d0e4fa367507f0a49a3861c1d3d55a82f90408cff=새로 개설된 편집기에서 문법 강조를 비활성화하십시오. 문법 색칠 작업을 피하고 일반적인 편집자 패릿을 사용하여 텍스트를 표시합니다.
 SettingsCenter.Text.f75db9fdf1854fbe9bce5bf34233636b3b3726189f6e0e1d0266f9e4d93cb10f=내장된 기본 컬러 스키마를 설치된 HRD 스키마 대신 사용하십시오.
+SettingsCenter.Text.8008c99689b343ec6bdc6ca1e458ed6879e95daf3c634d6a2ce1f72c478e2709=이름이 지정된 설치된 스타일 대신 기본 내장 색상 스타일을 사용합니다.
 SettingsCenter.Text.7763567cecd6d64bd32c6ca495d30ed5f61244e3c37f9b0ae0096d4651dadaf7=MacOS에서 Mac 스타일의 편집 아코드 및 다른 곳에서 일반적인 편집 아코드를 활성화하십시오. 명령 키 번역에는 여전히 백엔드 지원이 필요합니다.
 SettingsCenter.Text.60f4ce4d7f6bfc3167ed215bc7411978ddbb765a79f2c39ed7af8ce4acb504d0=지원된 편집자 및 대화 필드에서 Mac 스타일의 편집 음향을 강제합니다. 패널 내비게이션은 원형으로 유지됩니다. 명령어 번역은 백엔드에 달려 있습니다.
 SettingsCenter.Text.4e3f8b832d02f866212c38194f541012bd3e92adbb9e501b6fb554df370866da=MacOS에서도 일반적인 편집 음향을 사용하십시오. 패널 내비게이션 모델을 변경하지 않습니다.

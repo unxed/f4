@@ -47,7 +47,7 @@ EditorCrossMode|3|Draw both cursor guides when crosshair display is enabled. Mak
 EditorHighlighter|Chroma|Use the bundled Chroma syntax engine. Does not require Colorer's external schemas; its language rules and colors differ from Colorer.
 EditorHighlighter|Colorer|Use Colorer syntax schemas and styles. Supports its configurable scheme data, but needs installed schemas and can fall back if they are unavailable.
 EditorHighlighter|None|Disable syntax highlighting in newly opened editors. Avoids syntax coloring work and shows text using the ordinary editor palette.
-EditorColorerScheme||Use the built-in default Colorer scheme rather than a named installed HRD scheme.
+EditorColorerScheme||Use the built-in default color style rather than a named installed one.
 MacKeyboard|auto|Enable Mac-style editing chords on macOS and ordinary editing chords elsewhere. Backend support is still needed for Command-key translation.
 MacKeyboard|on|Force Mac-style editing chords in supported editors and dialog fields. Panel navigation stays Far-style; Command translation depends on the backend.
 MacKeyboard|off|Use ordinary editing chords even on macOS. Does not change the panel navigation model.

@@ -216,6 +216,18 @@ func handleSudoClient(conn *net.UnixConn) {
 				resp.Error = err.Error()
 			}
 
+		case CmdUnmount:
+			// f4#415: reached only when UnmountDevice's unprivileged
+			// attempts (udisksctl, then a plain unmount(2)) both failed on
+			// a permission error, so this always needs the root this
+			// dispatcher runs as. rawUnmount (sudo_unmount_bsd.go /
+			// sudo_unmount_other.go) is where the actual syscall lives,
+			// split out because it is not available on every GOOS this
+			// file's own build tag admits.
+			if err := rawUnmount(req.Path); err != nil {
+				resp.Error = err.Error()
+			}
+
 		case CmdSetAttributes:
 			// Apply all 3 metadata types at once under root
 			err := os.Chmod(req.Path, os.FileMode(req.Item.UnixMode))
