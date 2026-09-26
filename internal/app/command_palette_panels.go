@@ -3,12 +3,12 @@ package app
 import (
 	"fmt"
 	"github.com/unxed/f4/internal/panel"
-	"os"
 	"strings"
 
 	"github.com/unxed/f4/internal/action"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -421,7 +421,7 @@ func commandPaletteBookmarkEntries(pf *panel.PanelsFrame) []commandPaletteEntry 
 			if !commandPaletteBookmarkFrameActive(pf) {
 				return false
 			}
-			home, _ := os.UserHomeDir()
+			home, _ := hostmode.UserHomeDir()
 			fsp := pf.GetActivePanel()
 			if home == "" || fsp == nil {
 				return false

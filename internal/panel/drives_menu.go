@@ -8,6 +8,7 @@ import (
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/sysinfo"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -71,7 +72,7 @@ func driveMenuInfoPath(name string) string {
 	case strings.HasPrefix(clean, "/ Root"):
 		return "/"
 	case strings.HasPrefix(clean, "~ Home"):
-		home, _ := os.UserHomeDir()
+		home, _ := hostmode.UserHomeDir()
 		return home
 	case len(clean) >= 2 && clean[1] == ':':
 		// GetDiskFreeSpaceEx and GetVolumeInformation both want a root.

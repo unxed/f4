@@ -14,6 +14,7 @@ import (
 	colorer "github.com/unxed/colorer4go"
 	colorerdata "github.com/unxed/f4/internal/colorer"
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
 
@@ -250,7 +251,7 @@ func expandColorerUserPath(path string) string {
 		return "$" + name
 	})
 	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
-		if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if home, err := hostmode.UserHomeDir(); err == nil && home != "" {
 			return filepath.Join(home, path[1:])
 		}
 	}
