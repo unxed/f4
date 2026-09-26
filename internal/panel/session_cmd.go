@@ -122,6 +122,25 @@ func childHoldsTerminal(children []terminal.ChildProcess) bool {
 	return false
 }
 
+// heldByChild reports whether one of the shell's children still holds the
+// terminal, folding in the same batch exception the caller needs: in batch
+// mode a nested cmd.exe child is not "the shell now" -- the batch file will
+// continue after it exits, so the terminal is still held.
+func heldByChild(children []terminal.ChildProcess, inBatch bool) bool {
+	if childHoldsTerminal(children) {
+		return true
+	}
+	if !inBatch {
+		return false
+	}
+	for _, c := range children {
+		if !c.GUI && strings.ToLower(c.Name) == "cmd.exe" {
+			return true
+		}
+	}
+	return false
+}
+
 // promptShaped reports whether text is what cmd's $P$G leaves in front of the
 // cursor: a path with a drive, then ">". A batch line echo has the command
 // text after the ">", a `set /p` prompt has no drive, and program output that
@@ -285,19 +304,7 @@ func (s *cmdShellSession) settle(seq uint64) {
 
 		if inspector, ok := pf.localPTY().(childInspector); ok {
 			children := inspector.ChildProcesses()
-			held := childHoldsTerminal(children)
-			if !held && inBatch {
-				// In batch mode a nested cmd.exe child is not "the
-				// shell now": the batch file will continue after it
-				// exits, so the terminal is still held.
-				for _, c := range children {
-					if !c.GUI && strings.ToLower(c.Name) == "cmd.exe" {
-						held = true
-						break
-					}
-				}
-			}
-			if held {
+			if heldByChild(children, inBatch) {
 				vtui.DebugLog("CMD_SESSION: prompt %d held by child %v, rechecking", seq, children)
 				s.mu.Lock()
 				if !s.Closed && seq == s.promptSeq {
@@ -333,6 +340,16 @@ func (s *cmdShellSession) rescheduleWhileBusy(seq uint64) {
 // rather than holding matters because a stuck wait leaves pf.executing set,
 // and isPtyBusy reports that as busy, disabling every hotkey gated on a quiet
 // terminal (Esc) while leaving the ungated ones (Ctrl+O) alive.
+//
+// But a console child that is still running is never "stuck settling" --
+// it is simply busy, exactly like the held branch in settle() below, and
+// must get the same veto before the bound gives up on it. Without this, a
+// full-screen program with no alternate screen of its own (Far Manager,
+// #1376) whose own command line happens to look prompt-shaped (a bare
+// "C:\path>") can flicker across a few looks while it repaints -- `cls`
+// clears and redraws that exact line -- and exhausting the retry budget
+// then released the wait and handed the terminal back to f4 while Far was
+// still very much running.
 func (s *cmdShellSession) retryOrRelease(seq uint64) {
 	s.mu.Lock()
 	if s.Closed || seq != s.promptSeq {
@@ -345,7 +362,20 @@ func (s *cmdShellSession) retryOrRelease(seq uint64) {
 		s.mu.Unlock()
 		return
 	}
+	inBatch := s.inBatch
 	s.mu.Unlock()
+
+	if inspector, ok := s.Pf.localPTY().(childInspector); ok && heldByChild(inspector.ChildProcesses(), inBatch) {
+		vtui.DebugLog("CMD_SESSION: prompt %d flickering but held by a child, rechecking", seq)
+		s.mu.Lock()
+		if !s.Closed && seq == s.promptSeq {
+			s.attempts = 0
+			s.timer = time.AfterFunc(cmdPromptRecheckDelay, func() { s.settle(seq) })
+		}
+		s.mu.Unlock()
+		return
+	}
+
 	vtui.DebugLog("CMD_SESSION: prompt %d never settled, releasing the wait", seq)
 	s.release()
 }
