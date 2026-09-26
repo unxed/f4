@@ -10,7 +10,9 @@ import "testing"
 func TestDriveBookmarkDialogWidth(t *testing.T) {
 	cases := []struct{ screen, want int }{
 		{0, driveBookmarkDialogMinWidth},
-		{60, driveBookmarkDialogMinWidth},
+		// Narrower than the floor: the screen itself still wins, the same
+		// way FileDialogWidth clamps down rather than overflow it.
+		{60, 60},
 		{128, driveBookmarkDialogMinWidth},
 		{140, 70},
 		{200, 100},
