@@ -213,6 +213,9 @@ func ensurePrivateTrashDir(path string) error {
 		return fmt.Errorf("unsafe Recycle Bin directory: %s", path)
 	}
 	uid := trashGetuid()
+	// #nosec G115 -- a real process uid is always non-negative; trashGetuid
+	// only ever wraps os.Getuid()/winescape.Getuid(), both of which return
+	// the calling process's own uid.
 	if owner != uint32(uid) {
 		return fmt.Errorf("Recycle Bin directory is owned by uid %d, not uid %d: %s", owner, uid, path)
 	}
@@ -228,6 +231,8 @@ func ensurePrivateTrashDir(path string) error {
 			return err
 		}
 		_, owner, ok = trashStatIdentity(info)
+		// #nosec G115 -- see the identical conversion above: uid is always
+		// a real, non-negative process uid.
 		if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || owner != uint32(uid) {
 			return fmt.Errorf("Recycle Bin directory changed while repairing permissions: %s", path)
 		}
