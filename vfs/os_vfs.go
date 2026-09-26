@@ -44,22 +44,25 @@ func (v *OSVFS) IsAtRoot() bool {
 	return v.currentPath == "/"
 }
 
-func (v *OSVFS) SetPath(path string) error {
-	vtui.DebugLog("VFS: SetPath(%q) called", path)
+// resolveAndStat resolves path relative to the current directory (following
+// the same Windows reparse-point fallback SetPath uses) and stats the
+// result. It never consults the sudo helper, so SetPath and NeedsElevation
+// can share it without either one triggering the other's side effects.
+func (v *OSVFS) resolveAndStat(path string) (abs string, st os.FileInfo, statErr error) {
 	target := path
 	if !hostpath.IsAbs(path) && hostpath.VolumeName(path) == "" {
 		target = hostpath.Join(v.currentPath, path)
 	}
 	abs, err := hostpath.Abs(target)
 	if err != nil {
-		return err
+		return "", nil, err
 	}
 
 	// First try to verify the original path directly. If it exists, is
 	// accessible and is a directory (or a symlink to one), we keep the
 	// original visual path in the panel without forcing a dereference.
 	if st, errStat := hostfs.Stat(prepareOSPath(abs)); errStat == nil && st.IsDir() {
-		goto verify
+		return abs, st, nil
 	}
 
 	// If direct access failed (e.g. Permission Denied on the Windows system
@@ -72,42 +75,91 @@ func (v *OSVFS) SetPath(path string) error {
 		for _, candidate := range resolveReparseCandidates(abs) {
 			vtui.DebugLog("VFS: SetPath: trying reparse candidate %q -> %q", abs, candidate)
 			if st, errStat := hostfs.Stat(prepareOSPath(candidate)); errStat == nil && st.IsDir() {
-				abs = candidate
-				goto verify
+				return candidate, st, nil
 			}
 		}
 	}
 
-verify:
-	st, err := hostfs.Stat(prepareOSPath(abs))
+	st, statErr = hostfs.Stat(prepareOSPath(abs))
+	return abs, st, statErr
+}
+
+func (v *OSVFS) SetPath(path string) error {
+	vtui.DebugLog("VFS: SetPath(%q) called", path)
+	abs, err := v.resolvePathWithElevation(path)
+	if err != nil {
+		return err
+	}
+	vtui.DebugLog("VFS: Path changed to %q", abs)
+	v.currentPath = abs
+	return nil
+}
+
+// resolvePathWithElevation resolves path exactly as SetPath does, including
+// the sudo fallback, but does not mutate v. SetPath wraps it for ordinary
+// synchronous callers; ResolveElevated exposes it directly for a caller that
+// wants to run the (possibly sudo-blocking) resolution off the UI goroutine
+// and apply the result itself via CommitPath.
+func (v *OSVFS) resolvePathWithElevation(path string) (string, error) {
+	abs, st, err := v.resolveAndStat(path)
 	if err != nil {
 		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
 			vtui.DebugLog("VFS: SetPath: Permission denied for %q, checking via sudo...", abs)
 			item, sudoErr := globalSudoClient.Stat(prepareOSPath(abs))
 			if sudoErr == nil {
 				if item.IsDir {
-					vtui.DebugLog("VFS: Path changed to %q (via sudo Stat)", abs)
-					v.currentPath = abs
-					return nil
+					return abs, nil
 				}
 				vtui.DebugLog("VFS: SetPath(%q) FAILED: not a directory (via sudo Stat)", abs)
-				return os.ErrInvalid
+				return "", os.ErrInvalid
 			}
-			return sudoErr
+			return "", sudoErr
 		}
-		return err
+		return "", err
 	}
 	if !st.IsDir() {
 		vtui.DebugLog("VFS: SetPath(%q) FAILED: not a directory", abs)
-		return os.ErrInvalid
+		return "", os.ErrInvalid
 	}
 	if err := refuseNotListable(abs); err != nil {
 		vtui.DebugLog("VFS: SetPath(%q) FAILED: directory cannot be listed: %v", abs, err)
-		return err
+		return "", err
 	}
+	return abs, nil
+}
+
+// NeedsElevation reports whether calling SetPath(path) would have to consult
+// the sudo helper to resolve path, and could therefore block waiting for its
+// dispatcher. It never mutates v and never calls the sudo helper itself.
+//
+// f4#1411: SudoClient.Connect can block for minutes waiting on a slow PAM
+// prompt (e.g. a fingerprint reader), and f4 has a single cooperative UI
+// goroutine, so calling SetPath synchronously from it froze the whole UI
+// whenever Enter was pressed on a directory that needs elevation. A caller
+// on the UI goroutine checks this first (it only ever does a plain, fast
+// os.Stat, so it is itself safe to call synchronously) and, if true, calls
+// ResolveElevated on a background goroutine instead, applying the result via
+// CommitPath back on the UI goroutine.
+func (v *OSVFS) NeedsElevation(path string) bool {
+	_, _, err := v.resolveAndStat(path)
+	return err != nil && os.IsPermission(err) && globalSudoClient.IsAvailable()
+}
+
+// ResolveElevated is resolvePathWithElevation exported for a caller that
+// runs it off the UI goroutine after NeedsElevation reported true. It does
+// not mutate v; the caller applies the returned path with CommitPath.
+func (v *OSVFS) ResolveElevated(path string) (string, error) {
+	return v.resolvePathWithElevation(path)
+}
+
+// CommitPath sets the current path to an already-resolved absolute
+// directory, without stating or validating it again. It exists so a caller
+// that resolved a path off the UI goroutine via ResolveElevated (f4#1411)
+// can apply the result on the UI goroutine — the only place mutating v is
+// safe — without repeating (and potentially re-blocking on) the resolution.
+func (v *OSVFS) CommitPath(abs string) {
 	vtui.DebugLog("VFS: Path changed to %q", abs)
 	v.currentPath = abs
-	return nil
 }
 
 func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem)) error {
