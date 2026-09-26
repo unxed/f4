@@ -94,7 +94,7 @@ func issue1250BuildMarkableZip(t *testing.T) []byte {
 func TestActionTestArchiveOnlyTestsMarkedMembers(t *testing.T) {
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "marked.zip")
-	if err := os.WriteFile(archivePath, issue1250BuildMarkableZip(t), 0o644); err != nil {
+	if err := os.WriteFile(archivePath, issue1250BuildMarkableZip(t), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
