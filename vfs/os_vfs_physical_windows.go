@@ -71,6 +71,12 @@ func fillPhysicalSizeCheap(item *VFSItem, info os.FileInfo) {
 // under-reported the real footprint by the per-file cluster slack —
 // ~24 MB on a 116 GB tree.) Non-NTFS or unopenable paths fall back to
 // info.Size().
+//
+// The same FILE_STANDARD_INFO query also carries NumberOfLinks, so this
+// fills VFSItem.Nlink too (f4#1400's "LN" panel column) at no extra
+// syscall cost — fillPlatformTimes can't report it honestly on native
+// Windows because Win32FileAttributeData (what the cheap ReadDir path
+// uses) has no link count at all.
 func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 	if path == "" || info == nil {
 		return
@@ -112,6 +118,8 @@ func fillPhysicalSize(item *VFSItem, info os.FileInfo, path string) {
 	}
 	item.PhysicalSize = fsi.AllocationSize
 	item.KnownMetadata |= MetadataPhysicalSize
+	item.Nlink = uint64(fsi.NumberOfLinks)
+	item.KnownMetadata |= MetadataNlink
 }
 
 // SupportsPhysicalSize is true on Windows — see the Unix version

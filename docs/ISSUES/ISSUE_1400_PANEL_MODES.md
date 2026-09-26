@@ -84,8 +84,16 @@ built-in ones are written, and the file is removed when none do.
   implemented; extension alignment stays the global setting.
 - Descriptions (`Z`) and custom columns (`C0`..`C19`) are not available: f4
   has no data for them. Hard link count (`LN`) is available (`VFSItem.Nlink`,
-  read from `syscall.Stat_t.Nlink` on Unix and `GetFileInformationByHandle`'s
-  `nNumberOfLinks` via libwinescape on Windows).
+  read from `syscall.Stat_t.Nlink` on Unix, and the same way under Wine's
+  libwinescape posix personality on Windows). On *native* Windows the link
+  count is not part of the data `FindNextFile`/`os.ReadDir` returns, so the
+  ordinary directory listing that fills the panel cannot show it without an
+  extra per-file NTFS query for every visible row; f4 pays that query only
+  where it already opens the file for other metadata (`Stat`/`Lstat`, via
+  `GetFileInformationByHandleEx(FileStandardInfo)`, the same call that also
+  fills the `P` physical-size column), so the `LN` column reads blank during
+  plain panel browsing on native Windows — same as `O`/`U`/`P` already do
+  there — rather than showing a wrong number (f4#1400).
 - The Left and Right menus still list only the first four modes.
 - After a restart a widened panel shows mode 4 even if another full screen
   mode was active.

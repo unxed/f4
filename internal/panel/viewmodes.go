@@ -338,7 +338,13 @@ func panelColumnDefaultWidth(column PanelColumn) int {
 	case OwnerColumn, GroupColumn:
 		return 8
 	case LinkCountColumn:
-		return 4
+		// Wide enough for the header word itself ("Ссылки"/"Links", up to
+		// 6 runes) plus a sort arrow, matching Owner/Group above. f4#1400:
+		// the previous width of 4 truncated the Russian header to "Ссы" —
+		// an unfortunate truncation of "Ссылки" the reporter flagged as
+		// "funny" — while the actual hard-link numbers it needs to show
+		// are only 1-2 digits wide.
+		return 8
 	}
 	return 0
 }
