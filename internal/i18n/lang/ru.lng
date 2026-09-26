@@ -1607,6 +1607,7 @@ Attributes.SelectedSymlinks=симлинков: %d
 Attributes.MultipleValues=(несколько значений)
 Attributes.OctalMixedError=Неверное восьмеричное значение.\nИспользуйте цифры 0-7 или - там, где каждый объект сохраняет свои биты.
 Attributes.MTimeInvalidError=Неверная дата/время.\nИспользуйте формат %s.
+Attributes.MTimeFormatHint=ДД.ММ.ГГГГ ЧЧ:ММ:СС
 Attributes.Target=&Цель:
 Attributes.MTime=Время изм.:
 Attributes.LastWrite=Изменён:

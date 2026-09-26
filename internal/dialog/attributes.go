@@ -209,7 +209,13 @@ func setWindowsAttributesForTargets(ctx context.Context, v vfs.VFS, targets []At
 	return nil
 }
 
-// attributesTimeFormat is the format of the dialogs' time fields.
+// attributesTimeFormat is the format of the dialogs' time fields, as a Go
+// reference-time layout (used for both parsing and rendering the current
+// value). It is unfit for showing the user as "the expected format" on a
+// parse error: Go's reference date "02.01.2006 15:04:05" reads as a
+// specific past date/time to anyone who does not know Go's layout
+// convention, not as a pattern to follow (f4#1404) — the error message
+// below uses the localized i18n.Msg("Attributes.MTimeFormatHint") instead.
 const attributesTimeFormat = "02.01.2006 15:04:05"
 
 // attributesSelectionSummary names a multiple selection the way far2l's
@@ -674,7 +680,7 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 			if err != nil {
 				// f4 #1404: a garbled date used to be silently dropped —
 				// nothing applied, nothing said why.
-				vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), attributesTimeFormat), []string{"&Ok"})
+				vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), i18n.Msg("Attributes.MTimeFormatHint")), []string{"&Ok"})
 				return
 			}
 			edit.mtime, edit.setMTime = t, true
@@ -876,7 +882,7 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 			if err != nil {
 				// f4 #1404: a garbled date used to be silently dropped —
 				// nothing applied, nothing said why.
-				vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), attributesTimeFormat), []string{"&Ok"})
+				vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), i18n.Msg("Attributes.MTimeFormatHint")), []string{"&Ok"})
 				return
 			}
 			edit.mtime, edit.setMTime = nt, true
