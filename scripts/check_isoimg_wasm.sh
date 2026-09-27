@@ -1,9 +1,16 @@
 #!/bin/bash
 
 # Validates plugins/observer's isoimg end-to-end test fixture (f4#1563, part
-# 2) against the wasm spec with Binaryen's wasm-validate, and reports what
-# wasm-opt -Oz would shrink it to, using Binaryen's own prebuilt release
-# (never built from source here -- see BINARYEN_PATH below).
+# 2) against the wasm spec, and reports what wasm-opt -Oz would shrink it to,
+# using Binaryen's own prebuilt release (never built from source here -- see
+# BINARYEN_PATH below).
+#
+# Binaryen's distribution has no standalone "wasm-validate" binary: wasm-opt
+# itself parses and validates a module before doing anything else with it
+# (validation is not something -Oz turns on -- an invalid module makes
+# wasm-opt fail the same way with no optimization flags at all), so running
+# it once with no transformation, then again with -Oz, both validates the
+# module and measures -Oz's effect.
 #
 # This is a report/gate step, not a rewrite: it does not replace
 # isoimg_test.wasm with the -Oz output, only prints the size difference, so
@@ -19,12 +26,11 @@
 set -e
 
 BINARYEN_PATH="${BINARYEN_PATH:-/opt/binaryen}"
-WASM_VALIDATE="$BINARYEN_PATH/bin/wasm-validate"
 WASM_OPT="$BINARYEN_PATH/bin/wasm-opt"
 
-if [ ! -x "$WASM_VALIDATE" ] || [ ! -x "$WASM_OPT" ]; then
+if [ ! -x "$WASM_OPT" ]; then
     echo
-    echo "Error: Binaryen's wasm-validate/wasm-opt were not found under:"
+    echo "Error: Binaryen's wasm-opt was not found under:"
     echo "  $BINARYEN_PATH"
     echo
     echo "Please set BINARYEN_PATH to your Binaryen installation."
@@ -33,14 +39,16 @@ fi
 
 WASM="${1:?usage: check_isoimg_wasm.sh path/to/module.wasm}"
 
-echo "Validating $WASM with wasm-validate ($("$WASM_VALIDATE" --version))"
-"$WASM_VALIDATE" "$WASM"
-echo "wasm-validate: OK, $WASM is a spec-valid wasm module."
+VALIDATED_OUT="$(mktemp -u).wasm"
+OPT_OUT="$(mktemp -u).wasm"
+trap 'rm -f "$VALIDATED_OUT" "$OPT_OUT"' EXIT
+
+echo "Validating $WASM with wasm-opt ($("$WASM_OPT" --version))"
+"$WASM_OPT" "$WASM" -o "$VALIDATED_OUT"
+echo "wasm-opt: OK, $WASM is a spec-valid wasm module."
 
 ORIG_SIZE=$(stat -c%s "$WASM" 2>/dev/null || stat -f%z "$WASM")
 
-OPT_OUT="$(mktemp -u).wasm"
-trap 'rm -f "$OPT_OUT"' EXIT
 "$WASM_OPT" -Oz "$WASM" -o "$OPT_OUT"
 OPT_SIZE=$(stat -c%s "$OPT_OUT" 2>/dev/null || stat -f%z "$OPT_OUT")
 
