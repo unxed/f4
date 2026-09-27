@@ -124,12 +124,15 @@ func (b sevenZipBackend) extractOne(ctx context.Context, localPath, destDir, mem
 	}
 	// "--" (and -spd for a name holding "*" or "?", see
 	// sevenZipNameSwitches) keeps a member called "-x" from being read as a
-	// switch and one called "@list" as a list file.
-	args := append([]string{"x"}, sevenZipNameSwitches([]string{member}, "-y", "-o"+destDir)...)
-	args = append(args, localPath, "--", member)
-	_, errOut, err := runTool(ctx, bin, args...)
-	if err != nil {
-		return toolFailure(bin, args, err, errOut)
-	}
-	return nil
+	// switch; sevenZipNames keeps one called "@list" from being read as a
+	// list file.
+	return sevenZipNames([]string{member}, func(switches, tail []string) error {
+		args := append([]string{"x"}, sevenZipNameSwitches([]string{member}, append([]string{"-y", "-o" + destDir}, switches...)...)...)
+		args = append(append(args, localPath), tail...)
+		_, errOut, err := runTool(ctx, bin, args...)
+		if err != nil {
+			return toolFailure(bin, args, err, errOut)
+		}
+		return nil
+	})
 }

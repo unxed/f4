@@ -2,6 +2,7 @@ package multiarc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 )
@@ -27,7 +29,22 @@ func requireRealTool(t *testing.T, names ...string) {
 		if _, err := exec.LookPath(name); err != nil {
 			t.Skipf("%s is not on PATH", name)
 		}
+		if toolCannotStart(name) {
+			t.Skipf("%s is on PATH but cannot start", name)
+		}
 	}
+}
+
+// toolCannotStart reports whether name is found on PATH but Windows cannot
+// load it: exit status 0xC0000135, STATUS_DLL_NOT_FOUND. The Windows
+// runners have such an unzip, without the DLL it was built against. Any
+// other outcome, a usage error included, means the tool runs.
+func toolCannotStart(name string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := exec.CommandContext(ctx, name).Run() // #nosec G204 -- test fixture: a known archiver's name.
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && uint32(exitErr.ExitCode()) == 0xC0000135 // #nosec G115 -- an NTSTATUS, compared bit for bit.
 }
 
 // writeTree creates files under root. A key ending in "/" makes an empty
@@ -56,7 +73,9 @@ func writeTree(t *testing.T, root string, files map[string]string) {
 // fixture never depends on the code it is there to test.
 func runReal(t *testing.T, dir, name string, args ...string) {
 	t.Helper()
-	cmd := exec.Command(name, args...) // #nosec G204 -- test fixture: a known archiver and paths under t.TempDir.
+	// The same Windows fix-up multiarc gives its own commands: GNU tar needs
+	// --force-local to take "C:\..." as a file.
+	cmd := exec.Command(name, platformToolArgs(context.Background(), name, args)...) // #nosec G204 -- test fixture: a known archiver and paths under t.TempDir.
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%s %v: %v (%s)", name, args, err, out)

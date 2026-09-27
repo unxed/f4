@@ -120,8 +120,9 @@ func TestSevenZipBackendExtractOne(t *testing.T) {
 	}
 }
 
-// A member named "@list" is a list file to 7-Zip and "-x" a switch, unless
-// "--" comes first; a "*" or "?" in a name needs -spd to stay literal.
+// A member named "-x" is a switch to 7-Zip unless "--" comes first, and one
+// named "@list" a list file even after "--" in some builds, so it goes in a
+// list file of its own; a "*" or "?" in a name needs -spd to stay literal.
 func TestSevenZipBackendExtractOneOddNames(t *testing.T) {
 	f := &fakeArchiver{tools: map[string]bool{"7z": true}}
 	f.install(t)
@@ -131,7 +132,7 @@ func TestSevenZipBackendExtractOneOddNames(t *testing.T) {
 		}
 	}
 	want := []string{
-		"7z x -y -o/dest /a.7z -- @list.txt",
+		"7z x -y -o/dest -scsUTF-8 /a.7z @[@list.txt]",
 		"7z x -y -o/dest /a.7z -- -x",
 		"7z x -y -o/dest -spd /a.7z -- w*ld",
 	}

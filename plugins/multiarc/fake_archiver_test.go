@@ -60,7 +60,19 @@ func (f *fakeArchiver) commands() []string {
 }
 
 func (f *fakeArchiver) run(_ context.Context, dir, name string, args ...string) ([]byte, []byte, error) {
-	f.calls = append(f.calls, fakeCall{dir: dir, name: name, args: append([]string(nil), args...)})
+	args = append([]string(nil), args...)
+	if isSevenZipName(name) && contains(args, "-scsUTF-8") {
+		// A 7z list file is gone once the command returns: record the names
+		// it held, as "@[a,b]", in place of its random path.
+		if last := args[len(args)-1]; strings.HasPrefix(last, "@") {
+			data, err := os.ReadFile(last[1:])
+			if err != nil {
+				return nil, nil, err
+			}
+			args[len(args)-1] = "@[" + strings.Join(strings.Fields(string(data)), ",") + "]"
+		}
+	}
+	f.calls = append(f.calls, fakeCall{dir: dir, name: name, args: args})
 	first := ""
 	if len(args) > 0 {
 		first = args[0]
@@ -82,14 +94,21 @@ func (f *fakeArchiver) run(_ context.Context, dir, name string, args ...string) 
 }
 
 // fakeZipOr7z appends "|<tool>:<names>" to the archive argument, the one
-// right before "--".
+// right before "--" or before the list file run recorded as "@[names]".
 func fakeZipOr7z(dir, name string, args []string) error {
 	for i, a := range args {
 		if a == "--" && i > 0 {
 			return appendFile(resolveIn(dir, args[i-1]), "|"+name+":"+strings.Join(args[i+1:], ","))
 		}
 	}
+	if n := len(args); n > 1 && strings.HasPrefix(args[n-1], "@[") {
+		return appendFile(resolveIn(dir, args[n-2]), "|"+name+":"+strings.TrimSuffix(strings.TrimPrefix(args[n-1], "@["), "]"))
+	}
 	return nil
+}
+
+func isSevenZipName(name string) bool {
+	return name == "7z" || name == "7za" || name == "7zr"
 }
 
 // resolveIn is p as a tool running in dir would open it.

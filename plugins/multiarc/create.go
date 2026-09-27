@@ -97,9 +97,10 @@ func planCreateZip(ctx context.Context) (createBuild, error) {
 // path relative to the panel's directory.
 func sevenZipCreate(bin, typeSwitch string) createBuild {
 	return func(ctx context.Context, srcDir string, names []string, workDir, outName string) (string, error) {
-		args := append([]string{"a"}, sevenZipNameSwitches(names, typeSwitch, "-y")...)
-		args = append(append(args, filepath.Join(workDir, outName), "--"), names...)
-		return outName, runToolChecked(ctx, srcDir, bin, args...)
+		return outName, sevenZipNames(names, func(switches, tail []string) error {
+			args := append([]string{"a"}, sevenZipNameSwitches(names, append([]string{typeSwitch, "-y"}, switches...)...)...)
+			return runToolChecked(ctx, srcDir, bin, append(append(args, filepath.Join(workDir, outName)), tail...)...)
+		})
 	}
 }
 

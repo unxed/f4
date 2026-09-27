@@ -31,7 +31,7 @@ import (
 // path it was named by, relative to where they run, and neither has a
 // "change directory first" option of its own the way tar has -C.
 var runToolIn = func(ctx context.Context, dir, name string, args ...string) (stdout, stderr []byte, err error) {
-	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- name is one of our own literals, args are our own literals plus paths under f4's control.
+	cmd := exec.CommandContext(ctx, name, platformToolArgs(ctx, name, args)...) // #nosec G204 -- name is one of our own literals, args are our own literals plus paths under f4's control.
 	cmd.Dir = dir
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out

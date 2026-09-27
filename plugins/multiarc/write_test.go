@@ -72,8 +72,13 @@ func TestRewriteArchiveReplacesAndKeepsMode(t *testing.T) {
 	if err := os.WriteFile(arc, []byte("old"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// What the file system made of 0600: Windows keeps only a read-only bit.
+	before, err := os.Stat(arc)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var workDir string
-	err := rewriteArchive(arc, "copy.tar", func(wd, copyName string) (string, error) {
+	err = rewriteArchive(arc, "copy.tar", func(wd, copyName string) (string, error) {
 		workDir = wd
 		if filepath.Dir(wd) != dir {
 			t.Errorf("work dir %s is not next to the archive", wd)
@@ -91,8 +96,8 @@ func TestRewriteArchiveReplacesAndKeepsMode(t *testing.T) {
 	if err != nil || string(got) != "new" {
 		t.Fatalf("archive = (%q, %v), want new", got, err)
 	}
-	if info, err := os.Stat(arc); err != nil || info.Mode().Perm() != 0o600 {
-		t.Errorf("archive mode = %v (%v), want the original 0600", info.Mode().Perm(), err)
+	if info, err := os.Stat(arc); err != nil || info.Mode().Perm() != before.Mode().Perm() {
+		t.Errorf("archive mode = %v (%v), want the original %v", info.Mode().Perm(), err, before.Mode().Perm())
 	}
 	if _, err := os.Stat(workDir); !os.IsNotExist(err) {
 		t.Errorf("work dir %s was left behind", workDir)

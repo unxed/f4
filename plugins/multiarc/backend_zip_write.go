@@ -44,9 +44,7 @@ func (zipBackend) add(ctx context.Context, localPath, stageDir string, members, 
 		return errNoZipWriter
 	}
 	if sevenZip {
-		head := append([]string{"a"}, sevenZipNameSwitches(members, "-tzip", "-y")...)
-		head = append(head, localPath)
-		return runChunked(ctx, stageDir, bin, head, members)
+		return runSevenZip(ctx, stageDir, bin, []string{"a", "-tzip", "-y"}, localPath, members)
 	}
 	return runChunked(ctx, stageDir, bin, []string{"-q", "-nw", localPath}, members)
 }
@@ -60,10 +58,7 @@ func (zipBackend) remove(ctx context.Context, localPath string, raws []string) e
 		return errNoZipWriter
 	}
 	if sevenZip {
-		names := coveringNames(raws)
-		head := append([]string{"d"}, sevenZipNameSwitches(names, "-y")...)
-		head = append(head, localPath)
-		return runChunked(ctx, "", bin, head, names)
+		return runSevenZip(ctx, "", bin, []string{"d", "-y"}, localPath, coveringNames(raws))
 	}
 	return runChunked(ctx, "", bin, []string{"-q", "-nw", "-d", localPath}, raws)
 }

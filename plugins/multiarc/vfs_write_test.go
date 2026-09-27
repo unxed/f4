@@ -37,7 +37,7 @@ func (w *fakeWriter) list(context.Context, string) ([]entry, error) {
 	return append([]entry(nil), w.entries...), nil
 }
 
-func (*fakeWriter) extractAll(context.Context, string, string) error        { return nil }
+func (*fakeWriter) extractAll(context.Context, string, string) error         { return nil }
 func (*fakeWriter) extractOne(context.Context, string, string, string) error { return nil }
 
 func (w *fakeWriter) checkWrite(_ context.Context, _ string, op writeOp, _ string) error {

@@ -98,5 +98,8 @@ func realToolPath(t *testing.T, name string) string {
 	if err != nil {
 		t.Skipf("%s is not on PATH", name)
 	}
+	if toolCannotStart(p) {
+		t.Skipf("%s is on PATH but cannot start", name)
+	}
 	return p
 }
