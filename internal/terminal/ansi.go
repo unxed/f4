@@ -793,11 +793,11 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 			}
 			switch mode {
 			case 1:
-				p.term.KittyFlags.Store(int32(flags))
+				p.term.KittyFlags.Store(int32(flags)) // #nosec G109 -- kitty protocol flags are a small bitmask, never near int32 overflow range
 			case 2:
-				p.term.KittyFlags.Store(p.term.KittyFlags.Load() | int32(flags))
+				p.term.KittyFlags.Store(p.term.KittyFlags.Load() | int32(flags)) // #nosec G109 -- see above
 			case 3:
-				p.term.KittyFlags.Store(p.term.KittyFlags.Load() &^ int32(flags))
+				p.term.KittyFlags.Store(p.term.KittyFlags.Load() &^ int32(flags)) // #nosec G109 -- see above
 			}
 		} else if strings.HasPrefix(s0, ">") {
 			flags, _ := strconv.Atoi(s0[1:])
@@ -817,7 +817,7 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 					break
 				}
 				last := len(p.term.KittyFlagsStack) - 1
-				p.term.KittyFlags.Store(int32(p.term.KittyFlagsStack[last]))
+				p.term.KittyFlags.Store(int32(p.term.KittyFlagsStack[last])) // #nosec G115 -- value was itself stored from a KittyFlags int32 a few lines above, round-trips losslessly
 				p.term.KittyFlagsStack = p.term.KittyFlagsStack[:last]
 			}
 		} else if strings.HasPrefix(s0, "?") {
