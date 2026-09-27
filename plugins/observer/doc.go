@@ -19,17 +19,21 @@
 //     targets).
 //   - A wazero host module ("observer") with the progress callback import.
 //   - A loader that can instantiate an arbitrary WASI-reactor .wasm module
-//     and drive LoadSubModule/OpenStorage/CloseStorage/GetItem against it,
-//     proving the struct marshaling and the host imports all work -- part 1
-//     proved this against a small test-only module (testdata/stub); part 2
-//     against a real, unmodified upstream module (isoimg, built by
-//     scripts/build_isoimg_test_wasm.sh, see plugins/observer/testdata/
-//     isoimg/compat/); part 3 added GetItem, exercised against both.
+//     and drive LoadSubModule/OpenStorage/CloseStorage/GetItem/ExtractItem
+//     against it, proving the struct marshaling and the host imports all
+//     work -- part 1 proved this against a small test-only module
+//     (testdata/stub); part 2 against a real, unmodified upstream module
+//     (isoimg, built by scripts/build_isoimg_test_wasm.sh, see
+//     plugins/observer/testdata/isoimg/compat/); part 3 added GetItem; part
+//     4 added ExtractItem, all exercised against both.
 //   - Read access to the probed file for the guest, through a WASI
 //     filesystem mount backed by an io.ReaderAt-like view of the parent
 //     VFS, not a real path on the host disk. That is what lets a module
 //     opened on a nested archive member read straight through to wherever
-//     the bytes actually live.
+//     the bytes actually live. A second, real read-write directory mount
+//     (LoadModule's WithExtractDir) gives ExtractItem somewhere to write
+//     extracted files, for now a plain host temp directory -- the same
+//     "extract to a temp file first" approach plugins/multiarc already uses.
 //
 // # The module_cbs indirection
 //
@@ -51,8 +55,14 @@
 //
 // Only ExportOpenStorage and ExportCloseStorage are in LoadModule's required
 // map: a module this package can drive at all must have those two, but
-// ExportGetItem is resolved opportunistically (Module.GetItem errors
-// clearly if a module lacks it) so a module need not implement every
-// trampoline from day one. ExportExtractItem and ExportPrepareFiles remain
-// reserved names, not yet driven by anything in this package.
+// ExportGetItem/ExportExtractItem are resolved opportunistically
+// (Module.GetItem/Module.ExtractItem error clearly if a module lacks the
+// corresponding trampoline) so a module need not implement every trampoline
+// from day one. ExportPrepareFiles remains a reserved name, not yet driven
+// by anything in this package.
+//
+// ExtractItem's ExtractProcessCallbacks.FileProgress is a genuine function
+// pointer, not a struct field the host can just fill in the way it fills in
+// everything else: see ExportProgressTrampoline's own doc comment for how a
+// module hands the host something it actually can put there.
 package observer

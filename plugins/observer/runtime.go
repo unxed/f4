@@ -73,14 +73,57 @@ type Module struct {
 	mallocFn api.Function
 	freeFn   api.Function
 
-	// getItemFn is deliberately not in LoadModule's required map: a module
-	// this package can drive for LoadSubModule/OpenStorage alone (as parts
-	// 1-2 did) need not implement every trampoline from day one. It is
-	// resolved opportunistically instead, and GetItem reports a clear error
-	// if a module lacks it.
-	getItemFn api.Function
+	// getItemFn and extractItemFn are deliberately not in LoadModule's
+	// required map: a module this package can drive for
+	// LoadSubModule/OpenStorage alone (as parts 1-2 did) need not implement
+	// every trampoline from day one. Each is resolved opportunistically
+	// instead, and GetItem/ExtractItem report a clear error if a module
+	// lacks the corresponding trampoline.
+	getItemFn     api.Function
+	extractItemFn api.Function
+
+	// progressTrampoline is the guest's own function-table index for a
+	// small forwarding function it exports the address of (see
+	// ExportProgressTrampoline's doc comment), used to fill in
+	// ExtractOperationParams.Callbacks.FileProgress for ExtractItem. Zero
+	// (an invalid table index/null function pointer) if the module has no
+	// such export; isoimg's own ExtractFile, like the real ABI generally,
+	// treats a null FileProgress as "do not report progress," not an error.
+	progressTrampoline uint32
 
 	fatal *FatalError
+}
+
+// ExtractGuestDir is the guest-visible directory ExtractItem writes
+// extracted files into, when LoadModule is given WithExtractDir. A
+// destination name passed to ExtractItem is joined under this directory to
+// build the guest path the module itself sees (isoimg's own ExtractItem, for
+// instance, opens that path directly with its compat CreateFile).
+const ExtractGuestDir = "/out"
+
+// extractGuestMount is ExtractGuestDir without its leading slash, the form
+// FSConfig.WithDirMount's guestPath parameter itself wants (see fsconfig.go:
+// "All guestPath paths are normalized, specifically removing any leading or
+// trailing slashes").
+const extractGuestMount = "out"
+
+// LoadOption configures optional behavior of LoadModule. See WithExtractDir.
+type LoadOption func(*loadConfig)
+
+type loadConfig struct {
+	extractDir string
+}
+
+// WithExtractDir mounts hostDir read-write at ExtractGuestDir, giving the
+// guest a real destination to extract into via ExtractItem. Without this
+// option the guest has no writable filesystem at all, which is enough for
+// LoadSubModule/OpenStorage/GetItem but not ExtractItem: isoimg's own
+// ExtractFile calls CreateFile(..., GENERIC_WRITE, ...) against whatever
+// path ExtractItem's DestPath names, and that call fails outright (not a
+// trap) against an unmounted guest path, the same way OpenStorage already
+// does for a probed file outside any mount (see TestOpenStorageWithoutMount).
+func WithExtractDir(hostDir string) LoadOption {
+	return func(c *loadConfig) { c.extractDir = hostDir }
 }
 
 // LoadModule compiles wasmBytes and instantiates it as a WASI reactor.
@@ -97,7 +140,12 @@ type Module struct {
 // ctx governs the lifetime of the whole instance: canceling it interrupts
 // any call in progress (wazero.RuntimeConfig.WithCloseOnContextDone) and
 // Close cancels it if the caller has not already done so.
-func LoadModule(ctx context.Context, wasmBytes []byte, mount fs.FS, progress ProgressFunc) (*Module, error) {
+func LoadModule(ctx context.Context, wasmBytes []byte, mount fs.FS, progress ProgressFunc, opts ...LoadOption) (*Module, error) {
+	var cfg loadConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	runCtx, cancel := context.WithCancel(ctx)
 
 	m := &Module{
@@ -132,8 +180,18 @@ func LoadModule(ctx context.Context, wasmBytes []byte, mount fs.FS, progress Pro
 	config := wazero.NewModuleConfig().
 		WithStdout(io.Discard).
 		WithStderr(&stderrWriter{host: m.host})
-	if mount != nil {
-		config = config.WithFSConfig(wazero.NewFSConfig().WithFSMount(mount, ""))
+	if mount != nil || cfg.extractDir != "" {
+		fsConfig := wazero.NewFSConfig()
+		if mount != nil {
+			fsConfig = fsConfig.WithFSMount(mount, "")
+		}
+		if cfg.extractDir != "" {
+			// Longest-guestPath-match wins (fsconfig.go), so this mount at
+			// "out" only ever shadows paths under ExtractGuestDir; mount's
+			// own root-level FS above is untouched for everything else.
+			fsConfig = fsConfig.WithDirMount(cfg.extractDir, extractGuestMount)
+		}
+		config = config.WithFSConfig(fsConfig)
 	}
 
 	mod, err := m.runtime.InstantiateModule(runCtx, compiled, config)
@@ -176,6 +234,18 @@ func LoadModule(ctx context.Context, wasmBytes []byte, mount fs.FS, progress Pro
 	}
 
 	m.getItemFn = mod.ExportedFunction(ExportGetItem)
+	m.extractItemFn = mod.ExportedFunction(ExportExtractItem)
+
+	if fn := mod.ExportedFunction(ExportProgressTrampoline); fn != nil {
+		res, err := m.call(fn, ExportProgressTrampoline)
+		if err != nil {
+			m.shutdown()
+			return nil, err
+		}
+		// #nosec G115 -- res[0] is the guest's own i32 function-table index,
+		// already zero-extended into the uint64 result slot by wazero.
+		m.progressTrampoline = uint32(res[0])
+	}
 
 	return m, nil
 }
@@ -472,6 +542,71 @@ func (m *Module) GetItem(storage uint32, itemIndex int32) (GetItemResult, error)
 	result.Info = decodeStorageItemInfo(infoBytes)
 
 	return result, nil
+}
+
+// ExtractItemParams is the input to Module.ExtractItem.
+type ExtractItemParams struct {
+	// ItemIndex is the same index a prior GetItem call reported this item
+	// under.
+	ItemIndex int32
+	// DestName is a plain file name (no slashes, no leading "/"), joined
+	// under ExtractGuestDir to build the guest path the module itself
+	// writes to. LoadModule must have been given WithExtractDir for this to
+	// resolve to anything the guest can actually open for writing.
+	DestName string
+	// Password, if non-empty, is passed through as the ABI's own
+	// per-extract password (distinct from StorageOpenParams.Password).
+	Password string
+}
+
+// ExtractItem calls the guest's f4observer_extract_item trampoline (see
+// ExportExtractItem and doc.go) to extract one item from a storage handle
+// returned by a prior successful OpenStorage, and returns the SER_* result
+// code (SERSuccess, ...). Progress reporting is wired up automatically
+// whenever the module exports ExportProgressTrampoline (see its own doc
+// comment); there is currently no way for a caller to observe per-file
+// progress from ExtractItem itself, only to cancel the whole Module via ctx
+// the way every other call already can.
+//
+// ExtractItem returns an error, not an ExtractItemParams with a SER_* error
+// code, if the module has no f4observer_extract_item trampoline at all --
+// the same policy GetItem uses for f4observer_get_item.
+func (m *Module) ExtractItem(storage uint32, params ExtractItemParams) (int32, error) {
+	if m.extractItemFn == nil {
+		return SERErrorSystem, fmt.Errorf("observer: module does not export %s", ExportExtractItem)
+	}
+
+	destPathPtr, err := m.allocWChars(ExtractGuestDir + "/" + params.DestName)
+	if err != nil {
+		return SERErrorSystem, err
+	}
+	defer m.free(destPathPtr)
+
+	passwordPtr, err := m.allocBytes(nullTerminate(params.Password))
+	if err != nil {
+		return SERErrorSystem, err
+	}
+	defer m.free(passwordPtr)
+
+	paramsPtr, err := m.alloc(extractOperationParamsSize)
+	if err != nil {
+		return SERErrorSystem, err
+	}
+	defer m.free(paramsPtr)
+
+	buf := make([]byte, extractOperationParamsSize)
+	encodeExtractOperationParams(buf, params.ItemIndex, 0, destPathPtr, passwordPtr, 0, m.progressTrampoline)
+	if err := m.writeMemory(paramsPtr, buf); err != nil {
+		return SERErrorSystem, err
+	}
+
+	res, err := m.call(m.extractItemFn, ExportExtractItem, uint64(storage), uint64(paramsPtr))
+	if err != nil {
+		return SERErrorSystem, err
+	}
+	// #nosec G115 -- res[0] is ExtractItem's i32 SER_* return value, already
+	// zero-extended into the uint64 result slot by wazero.
+	return int32(uint32(res[0])), nil
 }
 
 // CallNoArgInt32 calls a guest export that takes no arguments and returns a

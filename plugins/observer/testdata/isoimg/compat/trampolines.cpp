@@ -30,13 +30,48 @@
 // GetStorageItem (the name isoimg.cpp itself gives the function it assigns
 // to ApiFuncs.GetItem -- ModuleDef.h's GetItemFunc already takes item_info
 // by pointer, so no by-value struct is involved there at all).
-// ExtractItem/PrepareFiles trampolines are still reserved names (doc.go),
-// not added yet.
+// ExtractItem forwards to isoimg.cpp's own ExtractItem the same way, taking
+// ExtractOperationParams by pointer. Its embedded Callbacks.FileProgress is
+// a genuine function pointer isoimg.cpp calls directly
+// (iso_ext.cpp's ExtractFile: "epc->FileProgress(epc->signalContext,
+// cur_size)"), which the host cannot fill in with anything meaningful on its
+// own -- f4observer_progress_trampoline below is what makes that possible;
+// see its own comment and ExportProgressTrampoline in abi.go. PrepareFiles
+// remains a reserved name (doc.go), not added yet.
 //
 // f4's own code (same license as the rest of this repository, see LICENSE).
 
 #include "windows.h"
 #include "ModuleDef.h"
+
+// The same "observer.progress" wazero host import
+// plugins/observer/hostimports.go exposes, imported here under its own name
+// (see f4_progress_trampoline below) rather than through
+// f4observer_open_storage's own use of it inside isoimg.cpp -- isoimg.cpp
+// never calls this import itself, only this file does, on isoimg.cpp's
+// behalf.
+extern "C" __attribute__((import_module("observer"), import_name("progress")))
+int32_t observer_progress(uint32_t signal_context, int64_t bytes_done);
+
+// f4_progress_trampoline is what ExportProgressTrampoline hands the host:
+// a function that lives in isoimg_test.wasm's own function table (address-
+// of a function is always a table index in wasm32) with exactly
+// ModuleDef.h's ExtractProgressFunc signature, so isoimg.cpp's ExtractFile
+// can call it directly through
+// ExtractOperationParams.Callbacks.FileProgress -- no different, from
+// isoimg.cpp's point of view, than a real Windows host handing it a real
+// function pointer of its own.
+static int f4_progress_trampoline(HANDLE signalContext, __int64 bytesDone) {
+    // #nosec G115 -- signalContext is a HANDLE (already a 32-bit value on
+    // wasm32); this reinterprets its bits for the host import's own uint32
+    // parameter, not a narrowing conversion.
+    return observer_progress((uint32_t)(uintptr_t)signalContext, bytesDone);
+}
+
+extern "C" __attribute__((export_name("f4observer_progress_trampoline")))
+uint32_t f4observer_progress_trampoline_export(void) {
+    return (uint32_t)(uintptr_t)&f4_progress_trampoline;
+}
 
 // Declared, not defined, here: these are isoimg.cpp's own functions
 // (isoimg.cpp in the upstream tree fetched at build time by
@@ -50,6 +85,7 @@ extern int OpenStorage(StorageOpenParams params, HANDLE *storage,
 extern void CloseStorage(HANDLE storage);
 extern int GetStorageItem(HANDLE storage, int item_index,
                            StorageItemInfo *item_info);
+extern int ExtractItem(HANDLE storage, ExtractOperationParams params);
 
 extern "C" __attribute__((export_name("LoadSubModule"))) int
 f4_export_LoadSubModule(ModuleLoadParameters *params) {
@@ -76,4 +112,9 @@ extern "C" __attribute__((export_name("f4observer_get_item"))) int
 f4observer_get_item(HANDLE storage, int item_index,
                      StorageItemInfo *item_info) {
     return GetStorageItem(storage, item_index, item_info);
+}
+
+extern "C" __attribute__((export_name("f4observer_extract_item"))) int
+f4observer_extract_item(HANDLE storage, ExtractOperationParams *params) {
+    return ExtractItem(storage, *params);
 }

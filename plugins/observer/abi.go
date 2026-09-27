@@ -16,12 +16,13 @@ package observer
 //     have to bridge that to whatever the module's own C++ source expects.
 //   - __int64 is 8 bytes.
 //
-// Only the structs actually driven by runtime.go in this part
-// (StorageOpenParams, StorageGeneralInfo, ModuleLoadParameters and its
-// nested GUID/ModuleCbs) have read/write helpers below. StorageItemInfo,
-// ExtractOperationParams and ExtractProcessCallbacks are laid out and sized
-// here because item 1 of f4#1563's part-1 plan asks for the whole table, but
-// GetItem/ExtractItem/PrepareFiles marshaling is reserved for a later part.
+// Every struct runtime.go's Module actually drives (StorageOpenParams,
+// StorageGeneralInfo, ModuleLoadParameters and its nested GUID/ModuleCbs,
+// StorageItemInfo, ExtractOperationParams/ExtractProcessCallbacks) has
+// read/write helpers below. PrepareFiles' own parameters need no marshaling
+// at all (HANDLE storage is its only argument) but PrepareFiles itself is
+// still a reserved trampoline name, not yet driven by anything in this
+// package -- see doc.go.
 
 import "encoding/binary"
 
@@ -61,8 +62,11 @@ func MakeModuleVersion(major, minor uint16) uint32 {
 // LoadSubModule and UnloadSubModule exactly as the real Observer ABI names
 // them (LoadSubModuleFunc/UnloadSubModuleFunc in ModuleDef.h), plus the flat
 // trampolines below in place of calling through module_cbs -- see doc.go for
-// why. GetItem/ExtractItem/PrepareFiles are reserved names: this part
-// resolves and requires only the first four.
+// why. LoadModule requires only ExportLoadSubModule/ExportOpenStorage/
+// ExportCloseStorage/ExportMalloc/ExportFree; ExportGetItem/ExportExtractItem
+// are resolved opportunistically (see runtime.go's getItemFn/extractItemFn),
+// and ExportPrepareFiles is still a reserved name, not yet driven by
+// anything in this package.
 const (
 	ExportLoadSubModule   = "LoadSubModule"
 	ExportUnloadSubModule = "UnloadSubModule"
@@ -71,6 +75,22 @@ const (
 	ExportGetItem         = "f4observer_get_item"
 	ExportExtractItem     = "f4observer_extract_item"
 	ExportPrepareFiles    = "f4observer_prepare_files"
+
+	// ExportProgressTrampoline is an optional, no-argument export returning
+	// an i32: the guest's own function-table index for a small function it
+	// defines that forwards to the "observer.progress" host import (see
+	// hostimports.go's ProgressFunc). ModuleDef.h's ExtractProcessCallbacks.
+	// FileProgress is a real function-pointer field a module calls directly
+	// -- unlike OpenStorage/CloseStorage/GetItem, there is no host-callable
+	// trampoline name for it, because the host has no value it could put
+	// there that means anything as a wasm32 function pointer (a table index
+	// local to the guest's own module). Instead, the module exports the
+	// address of a function of its own that IS meaningful in its own table,
+	// and the host reads it once at load time and writes it into
+	// Callbacks.FileProgress on every ExtractItem call. See
+	// plugins/observer/testdata/isoimg/compat/trampolines.cpp for a worked
+	// example.
+	ExportProgressTrampoline = "f4observer_progress_trampoline"
 
 	// ExportMalloc and ExportFree are the allocator the host uses to place
 	// argument structs and strings in the guest's own linear memory before
@@ -232,31 +252,37 @@ func decodeStorageItemInfo(b []byte) StorageItemInfo {
 // --- ExtractProcessCallbacks (8 bytes) ----------------------------------
 
 const (
-	extractProcessCallbacksSignalContextOff = 0 //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractProcessCallbacksFileProgressOff  = 4 //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractProcessCallbacksSize             = 8 //nolint:unused // reserved size; consumed once ExtractItem marshaling lands in a later part of f4#1563.
+	extractProcessCallbacksSignalContextOff = 0
+	extractProcessCallbacksFileProgressOff  = 4
+	extractProcessCallbacksSize             = 8
 )
 
 // --- ExtractOperationParams (24 bytes) ----------------------------------
 
 const (
-	extractOperationParamsItemIndexOff = 0                                                                //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractOperationParamsFlagsOff     = 4                                                                //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractOperationParamsDestPathOff  = 8                                                                //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractOperationParamsPasswordOff  = 12                                                               //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractOperationParamsCallbacksOff = 16                                                               //nolint:unused // reserved offset; consumed once ExtractItem marshaling lands in a later part of f4#1563.
-	extractOperationParamsSize         = extractOperationParamsCallbacksOff + extractProcessCallbacksSize //nolint:unused // reserved size; consumed once ExtractItem marshaling lands in a later part of f4#1563.
+	extractOperationParamsItemIndexOff = 0
+	extractOperationParamsFlagsOff     = 4
+	extractOperationParamsDestPathOff  = 8
+	extractOperationParamsPasswordOff  = 12
+	extractOperationParamsCallbacksOff = 16
+	extractOperationParamsSize         = extractOperationParamsCallbacksOff + extractProcessCallbacksSize
 )
 
-// ExtractOperationParams mirrors ModuleDef.h's ExtractOperationParams. Not
-// yet produced or consumed anywhere in this package; kept here as the
-// documented byte layout a later ExtractItem implementation must use.
-type ExtractOperationParams struct {
-	ItemIndex     int32
-	Flags         int32
-	DestPath      string
-	Password      string
-	SignalContext uint32
+// encodeExtractOperationParams writes ModuleDef.h's ExtractOperationParams.
+// signalContext and fileProgress are the raw Callbacks fields: fileProgress
+// is the guest's own function-table index for its progress trampoline (see
+// ExportProgressTrampoline and Module.progressTrampoline in runtime.go), 0
+// (a null function pointer) if the module has none or the caller wants no
+// progress reporting for this call -- isoimg's own ExtractFile, like the
+// real ABI generally, treats that as "do not report progress," not an
+// error.
+func encodeExtractOperationParams(b []byte, itemIndex, flags int32, destPathPtr, passwordPtr, signalContext, fileProgress uint32) {
+	binary.LittleEndian.PutUint32(b[extractOperationParamsItemIndexOff:], uint32(itemIndex)) //nolint:gosec // G115: reinterprets bits, not a narrowing conversion.
+	binary.LittleEndian.PutUint32(b[extractOperationParamsFlagsOff:], uint32(flags))
+	binary.LittleEndian.PutUint32(b[extractOperationParamsDestPathOff:], destPathPtr)
+	binary.LittleEndian.PutUint32(b[extractOperationParamsPasswordOff:], passwordPtr)
+	binary.LittleEndian.PutUint32(b[extractOperationParamsCallbacksOff+extractProcessCallbacksSignalContextOff:], signalContext)
+	binary.LittleEndian.PutUint32(b[extractOperationParamsCallbacksOff+extractProcessCallbacksFileProgressOff:], fileProgress)
 }
 
 // --- module_cbs (20 bytes) ------------------------------------------------

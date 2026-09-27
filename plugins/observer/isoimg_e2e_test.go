@@ -3,7 +3,9 @@ package observer_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -21,6 +23,10 @@ const (
 	isoimgWasmPath = "testdata/isoimg_test.wasm"
 	isoimgIsoPath  = "testdata/isoimg_test.iso"
 )
+
+// helloTxtContent must match scripts/build_isoimg_test_iso.sh's own HELLO.TXT
+// content exactly.
+const helloTxtContent = "hello from the f4#1563 isoimg end-to-end test\n"
 
 func loadOptionalFixture(t *testing.T, path string) []byte {
 	t.Helper()
@@ -104,30 +110,126 @@ func TestIsoimgOpenStorageEndToEnd(t *testing.T) {
 	// name (possibly with a trailing ";1" ISO9660 version suffix, which
 	// isoimg's non-Joliet path does not strip); do not depend on the exact
 	// spelling or on "." /".." being present or absent.
-	var foundHello bool
-	for index := int32(0); ; index++ {
-		item, err := mod.GetItem(res.Storage, index)
+	helloIndex, err := findHelloItem(mod, res.Storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := mod.GetItem(res.Storage, helloIndex)
+	if err != nil {
+		t.Fatalf("GetItem(%d): %v", helloIndex, err)
+	}
+	if item.Info.Size != int64(len(helloTxtContent)) {
+		t.Errorf("GetItem(%d): Info.Size = %d for %q, want %d", helloIndex, item.Info.Size, item.Info.Path, len(helloTxtContent))
+	}
+
+	if err := mod.CloseStorage(res.Storage); err != nil {
+		t.Fatalf("CloseStorage: %v", err)
+	}
+}
+
+// findHelloItem walks storage's directory tree via GetItem looking for the
+// entry containing "HELLO.TXT" (see TestIsoimgOpenStorageEndToEnd's own
+// comment on why a substring match, not an exact one). Shared by every
+// isoimg end-to-end test that needs HELLO.TXT's item index.
+func findHelloItem(mod *observer.Module, storage uint32) (int32, error) {
+	for index := int32(0); index < 64; index++ {
+		item, err := mod.GetItem(storage, index)
 		if err != nil {
-			t.Fatalf("GetItem(%d): %v", index, err)
+			return 0, fmt.Errorf("GetItem(%d): %w", index, err)
 		}
 		if item.Code == observer.GetItemNoMoreItems {
 			break
 		}
 		if item.Code != observer.GetItemOK {
-			t.Fatalf("GetItem(%d): Code = %d, want GetItemOK or GetItemNoMoreItems", index, item.Code)
+			return 0, fmt.Errorf("GetItem(%d): Code = %d, want GetItemOK or GetItemNoMoreItems", index, item.Code)
 		}
 		if strings.Contains(strings.ToUpper(item.Info.Path), "HELLO.TXT") {
-			foundHello = true
-			if item.Info.Size != int64(len("hello from the f4#1563 isoimg end-to-end test\n")) {
-				t.Errorf("GetItem(%d): Info.Size = %d for %q, want %d", index, item.Info.Size, item.Info.Path, len("hello from the f4#1563 isoimg end-to-end test\n"))
-			}
-		}
-		if index > 64 {
-			t.Fatalf("GetItem did not report GetItemNoMoreItems within %d items", index)
+			return index, nil
 		}
 	}
-	if !foundHello {
-		t.Error("no directory entry containing HELLO.TXT found via GetItem")
+	return 0, errors.New("no directory entry containing HELLO.TXT found via GetItem")
+}
+
+// TestIsoimgExtractItemEndToEnd is f4#1563 part 4's end-to-end run: it
+// extracts HELLO.TXT out of the real genisoimage-built test ISO through
+// isoimg's real ExtractItem (compat/trampolines.cpp's
+// f4observer_extract_item, forwarding to isoimg.cpp's own ExtractItem/
+// ExtractFile), into a real, writable host directory mounted at
+// observer.ExtractGuestDir via observer.WithExtractDir, and checks the
+// extracted file's content byte-for-byte -- not just that ExtractItem
+// returned success.
+//
+// It also proves the ExportProgressTrampoline mechanism (abi.go, doc.go)
+// works end-to-end: isoimg.cpp's ExtractFile calls
+// params.Callbacks.FileProgress once per block it writes
+// (iso_ext.cpp), a real function pointer LoadModule resolved from the
+// module's own f4observer_progress_trampoline export, and this test checks
+// the resulting observer.progress calls actually reached the host's
+// ProgressFunc.
+func TestIsoimgExtractItemEndToEnd(t *testing.T) {
+	wasmBytes := loadOptionalFixture(t, isoimgWasmPath)
+	isoBytes := loadOptionalFixture(t, isoimgIsoPath)
+
+	ctx := context.Background()
+	ra := newMemReaderAt(isoBytes)
+	defer func() { _ = ra.Close() }()
+	mount := observer.NewSingleFileFS(ctx, "target.iso", ra)
+
+	extractDir := t.TempDir()
+
+	var progressCalls int
+	progress := func(_ uint32, bytesDone int64) int32 {
+		progressCalls++
+		if bytesDone <= 0 {
+			t.Errorf("progress bytesDone = %d, want > 0", bytesDone)
+		}
+		return 1
+	}
+
+	mod, err := observer.LoadModule(ctx, wasmBytes, mount, progress, observer.WithExtractDir(extractDir))
+	if err != nil {
+		t.Fatalf("LoadModule: %v", err)
+	}
+	defer func() { _ = mod.Close() }()
+
+	if _, err := mod.LoadSubModule(""); err != nil {
+		t.Fatalf("LoadSubModule: %v", err)
+	}
+
+	res, err := mod.OpenStorage(observer.StorageOpenParams{FilePath: "/target.iso"})
+	if err != nil {
+		t.Fatalf("OpenStorage: %v", err)
+	}
+	if res.Code != observer.SORSuccess {
+		t.Fatalf("Code = %d, want SORSuccess (%d)", res.Code, observer.SORSuccess)
+	}
+
+	helloIndex, err := findHelloItem(mod, res.Storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, err := mod.ExtractItem(res.Storage, observer.ExtractItemParams{
+		ItemIndex: helloIndex,
+		DestName:  "HELLO.TXT",
+	})
+	if err != nil {
+		t.Fatalf("ExtractItem: %v", err)
+	}
+	if code != observer.SERSuccess {
+		t.Fatalf("ExtractItem: code = %d, want SERSuccess (%d)", code, observer.SERSuccess)
+	}
+
+	got, err := os.ReadFile(filepath.Join(extractDir, "HELLO.TXT"))
+	if err != nil {
+		t.Fatalf("reading extracted file: %v", err)
+	}
+	if string(got) != helloTxtContent {
+		t.Errorf("extracted content = %q, want %q", got, helloTxtContent)
+	}
+
+	if progressCalls == 0 {
+		t.Error("progress was never called during ExtractItem, want at least one call")
 	}
 
 	if err := mod.CloseStorage(res.Storage); err != nil {
