@@ -398,7 +398,7 @@ func ToggleHelpZoom(frame vtui.Frame) bool {
 		return false
 	}
 	x1, y1, x2, y2 := frame.GetPosition()
-	target := helpWindowBounds{}
+	var target helpWindowBounds
 	if currentHelpZoom != nil && currentHelpZoom.frame == frame {
 		target = fitHelpBounds(currentHelpZoom.saved)
 		currentHelpZoom = nil
