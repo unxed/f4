@@ -140,6 +140,16 @@ type procListPanel struct {
 	stop      chan struct{}
 	done      chan struct{}
 	stopOnce  sync.Once
+
+	// suspended tracks which pids this panel itself has SIGSTOPped, so
+	// Ctrl+F8 (toggleSuspend, actions.go) knows whether to suspend or
+	// resume next. It is not a read of the process's real state: a process
+	// another tool stopped independently is not reflected here, and
+	// collect() has no portable, privilege-free way to read "is this pid
+	// currently stopped" back from the OS either (unlike priority, which
+	// changePriority in actions_unix.go/actions_windows.go does read back
+	// before every change) -- see actions.go's own note on the same gap.
+	suspended map[int]bool
 }
 
 func newProcListPanel(ctx vfs.PanelContext) (vfs.PanelController, error) {
@@ -171,6 +181,7 @@ func newProcListPanel(ctx vfs.PanelContext) (vfs.PanelController, error) {
 		collector: newCollector(),
 		stop:      make(chan struct{}),
 		done:      make(chan struct{}),
+		suspended: make(map[int]bool),
 	}
 	p.SetFocus(false)
 	p.SetPosition(ctx.Bounds[0], ctx.Bounds[1], ctx.Bounds[2], ctx.Bounds[3])
@@ -217,10 +228,20 @@ func (p *procListPanel) runOnUI(fn func()) {
 // goroutine.
 func (p *procListPanel) applySamples(samples []sample) {
 	rows := make([]vtui.TableRow, len(samples))
+	seen := make(map[int]bool, len(samples))
 	for i, s := range samples {
 		rows[i] = procRow{s: s}
+		seen[s.pid] = true
 	}
 	p.table.SetRows(rows)
+	// Forget a suspended pid once it is gone (exited, or simply not seen in
+	// this snapshot): a reused pid must not inherit a stale "resume" toggle
+	// meant for the process that used to have it.
+	for pid := range p.suspended {
+		if !seen[pid] {
+			delete(p.suspended, pid)
+		}
+	}
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.Redraw()
 	}
@@ -256,22 +277,63 @@ func (p *procListPanel) SetFocus(focused bool) {
 
 func (p *procListPanel) IsFocused() bool { return p.table.IsFocused() }
 
-func (p *procListPanel) ProcessKey(e *vtinput.InputEvent) bool { return p.table.ProcessKey(e) }
+// ProcessKey adds f4#312 part 3's process management on top of the table's
+// own navigation/sort/quick-search handling: F8 kill (with confirmation,
+// confirmKill in actions.go), Shift+F1/F2 lower/raise priority (FAR3's own
+// bindings for the same thing), and Ctrl+F8 suspend/resume toggle -- new in
+// f4, not in FAR3, and only offered where suspendResumeSupported is true
+// (linux/darwin; not Windows, which has no supported API for it). Unmatched
+// keys, including Ctrl+F8 where unsupported, fall through to the table
+// exactly as before this change.
+func (p *procListPanel) ProcessKey(e *vtinput.InputEvent) bool {
+	if e != nil && e.Type == vtinput.KeyEventType && e.KeyDown {
+		ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
+		alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
+		shift := e.ControlKeyState&vtinput.ShiftPressed != 0
+		switch {
+		case e.VirtualKeyCode == vtinput.VK_F8 && !ctrl && !alt && !shift:
+			p.confirmKill()
+			return true
+		case e.VirtualKeyCode == vtinput.VK_F8 && ctrl && !alt && !shift && suspendResumeSupported:
+			p.toggleSuspend()
+			return true
+		case e.VirtualKeyCode == vtinput.VK_F1 && shift && !ctrl && !alt:
+			p.adjustPriority(false)
+			return true
+		case e.VirtualKeyCode == vtinput.VK_F2 && shift && !ctrl && !alt:
+			p.adjustPriority(true)
+			return true
+		}
+	}
+	return p.table.ProcessKey(e)
+}
 
 func (p *procListPanel) ProcessMouse(e *vtinput.InputEvent) bool { return p.table.ProcessMouse(e) }
+
+// selectedSample returns the sample under the cursor. It backs
+// GetSelectedName below and, from actions.go, every F8/Shift+F1/Shift+F2/
+// Ctrl+F8 handler: all of them act on "the process under the cursor" and
+// none can do anything useful with an empty table.
+func (p *procListPanel) selectedSample() (sample, bool) {
+	idx := p.table.RowAt(p.table.SelectPos)
+	if idx < 0 || idx >= len(p.table.Rows) {
+		return sample{}, false
+	}
+	row, ok := p.table.Rows[idx].(procRow)
+	if !ok {
+		return sample{}, false
+	}
+	return row.s, true
+}
 
 // GetSelectedName reports the name of the process under the cursor, the
 // closest thing a process list has to a file panel's selected file name.
 func (p *procListPanel) GetSelectedName() string {
-	idx := p.table.RowAt(p.table.SelectPos)
-	if idx < 0 || idx >= len(p.table.Rows) {
-		return ""
-	}
-	row, ok := p.table.Rows[idx].(procRow)
+	s, ok := p.selectedSample()
 	if !ok {
 		return ""
 	}
-	return row.s.name
+	return s.name
 }
 
 func (p *procListPanel) SetContext(vfs.PanelContext) {}

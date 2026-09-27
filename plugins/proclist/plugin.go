@@ -8,10 +8,13 @@
 // GetProcessTimes, no WMI) and macOS (collector_darwin.go, sysctl
 // kern.proc.all + libproc's proc_pidinfo). The BSDs stayed on the
 // collector_other.go stub for part 2 -- see that file's comment for why.
-// FAR3's ProcList also offers process management (F8 kill, Shift-F1/F2
-// priority; f4#312 part 3) and rich metrics/handles/remote view built on
-// WMI and undocumented NT APIs that have no portable equivalent; the owner
-// confirmed (f4#312) this plugin should not attempt those at all.
+// Part 3 (actions.go, actions_unix.go, actions_windows.go) added process
+// management: F8 kill (with confirmation), Shift-F1/F2 priority, and a
+// Ctrl+F8 suspend/resume toggle the owner asked for on *nix only, since
+// Windows has no supported API for it. FAR3's ProcList also offers rich
+// metrics/handles/remote view built on WMI and undocumented NT APIs that
+// have no portable equivalent; the owner confirmed (f4#312) this plugin
+// should not attempt those at all.
 //
 // It is also f4's first consumer of vfs.PanelProvider/PanelController
 // (vfs/contributions.go, internal/plughost/panel_providers.go): a plugin

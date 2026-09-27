@@ -1,7 +1,8 @@
 # ProcList
 
 A live list of running processes, shown as a panel. f4#312: part 1 shipped
-Linux, part 2 (this update) added Windows and macOS. View-only throughout.
+Linux (view-only), part 2 added Windows and macOS (still view-only), part 3
+(this update) added process management: kill, priority and suspend/resume.
 
 ## What it does
 
@@ -31,6 +32,43 @@ Linux, part 2 (this update) added Windows and macOS. View-only throughout.
   automatically by `RegisterPanelProvider`) and from **Commands -> Process
   list** / **Ctrl+Alt+R**, on every platform `Supported()` reports `true`
   for.
+
+## Process management (f4#312 part 3 of 4)
+
+The FAR3 ProcList reference (`Plist.cpp`/`Pclass.cpp`) has F8 kill and
+Shift-F1/F2 priority; this plugin adds the same two, plus a third gesture
+FAR3 does not have at all:
+
+- **F8 -- kill.** Shows a confirmation dialog styled the same way
+  `internal/app/actions.go`'s permanent-delete dialog is (`IsWarning`, Cancel
+  focused by default, "this action cannot be undone"), then sends an
+  unconditional kill on confirmation: `SIGKILL` on Linux/macOS,
+  `TerminateProcess` on Windows -- never a graceful request, matching what F8
+  does in FAR3. A failure (no permission, already gone) reaches the user as
+  a toast; success shows nothing extra -- the process simply drops out of
+  the next refresh, the same way any other exit does.
+- **Shift+F1 / Shift+F2 -- lower/raise priority.** Both platforms expose the
+  same six-rung ladder (Idle, Below normal, Normal, Above normal, High,
+  Realtime) FAR3's Windows-only Shift-F1/F2 already cycles through
+  (`SetPriorityClass`); `collector_linux.go`/`collector_darwin.go`'s
+  platform, `actions_unix.go`, maps it onto nice values (19, 10, 0, -5, -10,
+  -20) since *nix has no named priority classes. There is no priority
+  column in the table (a part 4/detail-view candidate), so every change --
+  success or failure -- gets a toast.
+- **Ctrl+F8 -- suspend/resume (toggle).** Not a FAR3 gesture -- its ProcList
+  has no suspend/resume at all -- added because `SIGSTOP`/`SIGCONT` make it
+  essentially free on Linux/macOS. **Not available on Windows**: it has no
+  supported, documented API for suspending an arbitrary process (the
+  undocumented NT `NtSuspendProcess` is exactly the kind of API this plugin
+  already refuses to use elsewhere, see "What it deliberately does not do"
+  below), so the owner's guidance for this part was not to force it through
+  one. The toggle direction is remembered per pid by this panel itself
+  (which pid it last suspended), not read back from the OS -- there is no
+  portable, privilege-free way to read "is this process currently stopped"
+  either, the same gap that keeps this out of the table as a column.
+
+None of the three needs a setting to turn off: kill's confirmation is
+unconditional, matching how narrowly this plugin scopes everything else.
 
 ## Platform support
 
@@ -67,8 +105,9 @@ Linux, part 2 (this update) added Windows and macOS. View-only throughout.
 
 ## What it deliberately does not do
 
-- **Process management.** No kill (FAR3's F8), no priority/nice (FAR3's
-  Shift-F1/F2). That's part 3.
+- **Suspend/resume on Windows.** See "Process management" above -- no
+  supported API, so Ctrl+F8 does nothing there rather than reaching for an
+  undocumented one.
 - **Anything else FAR3's ProcList shows**: PPID, thread count, command line,
   start time, environment, open file handles, WMI performance counters,
   remote/network process lists. Some of those are candidates for part 4
@@ -83,6 +122,14 @@ Linux, part 2 (this update) added Windows and macOS. View-only throughout.
   real collector per supported platform, each defining the same
   package-private shape: `Supported`, `sample`, `collector`/`newCollector`,
   and `(*collector).collect`.
+- `actions.go` -- the platform-agnostic process-management handlers (F8 kill
+  confirmation dialog, Shift+F1/F2 priority, Ctrl+F8 suspend/resume toggle),
+  built on top of the platform-specific primitives below. Shares
+  `panel.go`'s build tag (`linux || windows || darwin`).
+- `actions_unix.go`, `actions_windows.go` -- one real implementation per
+  platform of `killProcess`, `changePriority`, `suspendProcess`,
+  `resumeProcess` and the `suspendResumeSupported` constant, the same
+  per-platform split the collectors already use.
 - `collector_other.go` -- the fallback stub for everything else:
   `Supported() == false`, and a `newProcListPanel` that only exists so this
   file has the same shape as the real collectors' (it is never actually
