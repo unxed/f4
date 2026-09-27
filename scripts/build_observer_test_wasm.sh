@@ -57,6 +57,7 @@ echo "Building: $SRC -> $OUT"
     -Wl,--export=UnloadSubModule \
     -Wl,--export=f4observer_open_storage \
     -Wl,--export=f4observer_close_storage \
+    -Wl,--export=f4observer_get_item \
     -Wl,--export=f4observer_close_count \
     -Wl,--export=f4observer_last_data_size \
     -Wl,--export=f4observer_last_data_first_byte \

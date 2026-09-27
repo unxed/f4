@@ -260,3 +260,72 @@ func TestOpenStorageWithoutMount(t *testing.T) {
 		t.Fatalf("Code = %d, want SORInvalidFile (%d): open() on an unmounted guest must fail, not fall back to Data", res.Code, observer.SORInvalidFile)
 	}
 }
+
+// TestGetItem exercises Module.GetItem (f4#1563, part 3) against
+// testdata/stub's f4observer_get_item, proving StorageItemInfo's marshaling
+// (including its two wchar_t[] fields and the FILETIME-shaped Creation/
+// ModificationTime pairs) round-trips correctly, independent of the isoimg
+// end-to-end test in isoimg_e2e_test.go.
+func TestGetItem(t *testing.T) {
+	wasmBytes := loadFixture(t)
+	ctx := context.Background()
+
+	magic := []byte("F4OBSV01")
+	ra := newMemReaderAt(magic)
+	defer func() { _ = ra.Close() }()
+	mount := observer.NewSingleFileFS(ctx, "target.bin", ra)
+
+	mod, err := observer.LoadModule(ctx, wasmBytes, mount, nil)
+	if err != nil {
+		t.Fatalf("LoadModule: %v", err)
+	}
+	defer func() { _ = mod.Close() }()
+
+	if _, err := mod.LoadSubModule(""); err != nil {
+		t.Fatalf("LoadSubModule: %v", err)
+	}
+
+	res, err := mod.OpenStorage(observer.StorageOpenParams{FilePath: "/target.bin"})
+	if err != nil {
+		t.Fatalf("OpenStorage: %v", err)
+	}
+	if res.Code != observer.SORSuccess {
+		t.Fatalf("Code = %d, want SORSuccess (%d)", res.Code, observer.SORSuccess)
+	}
+
+	item, err := mod.GetItem(res.Storage, 0)
+	if err != nil {
+		t.Fatalf("GetItem(0): %v", err)
+	}
+	if item.Code != observer.GetItemOK {
+		t.Fatalf("Code = %d, want GetItemOK (%d)", item.Code, observer.GetItemOK)
+	}
+	if item.Info.Path != "stub-item.txt" {
+		t.Errorf("Info.Path = %q, want %q", item.Info.Path, "stub-item.txt")
+	}
+	if item.Info.Size != 42 {
+		t.Errorf("Info.Size = %d, want 42", item.Info.Size)
+	}
+	if item.Info.PackedSize != 42 {
+		t.Errorf("Info.PackedSize = %d, want 42", item.Info.PackedSize)
+	}
+	if item.Info.NumHardlinks != 1 {
+		t.Errorf("Info.NumHardlinks = %d, want 1", item.Info.NumHardlinks)
+	}
+	if want := (observer.FileTime{Low: 0x11111111, High: 0x22222222}); item.Info.CreationTime != want {
+		t.Errorf("Info.CreationTime = %+v, want %+v", item.Info.CreationTime, want)
+	}
+	if want := (observer.FileTime{Low: 0x33333333, High: 0x44444444}); item.Info.ModificationTime != want {
+		t.Errorf("Info.ModificationTime = %+v, want %+v", item.Info.ModificationTime, want)
+	}
+
+	if next, err := mod.GetItem(res.Storage, 1); err != nil {
+		t.Fatalf("GetItem(1): %v", err)
+	} else if next.Code != observer.GetItemNoMoreItems {
+		t.Errorf("Code = %d, want GetItemNoMoreItems (%d)", next.Code, observer.GetItemNoMoreItems)
+	}
+
+	if err := mod.CloseStorage(res.Storage); err != nil {
+		t.Fatalf("CloseStorage: %v", err)
+	}
+}

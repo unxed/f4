@@ -184,27 +184,27 @@ func encodeStorageOpenParams(b []byte, filePathPtr, passwordPtr, dataPtr, dataSi
 
 // --- StorageItemInfo (4390 bytes) ---------------------------------------
 //
-// Laid out for completeness (item 1 of the part-1 plan); GetItem marshaling
-// itself is reserved for a later part.
+// Laid out in part 1 (f4#1563) for completeness; GetItem marshaling itself
+// (decodeStorageItemInfo, Module.GetItem in runtime.go) lands in part 3.
 
 const (
-	storageItemNameMaxLen = 64   //nolint:unused // documents the layout below; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemPathMaxLen = 1024 //nolint:unused // documents the layout below; consumed once GetItem marshaling lands in a later part of f4#1563.
+	storageItemNameMaxLen = 64
+	storageItemPathMaxLen = 1024
 
-	storageItemInfoSizeOff             = 0                                                         //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoPackedSizeOff       = storageItemInfoSizeOff + 8                                //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoAttributesOff       = storageItemInfoPackedSizeOff + 8                          //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoCreationTimeOff     = storageItemInfoAttributesOff + 4                          //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoModificationTimeOff = storageItemInfoCreationTimeOff + fileTimeSize             //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoNumHardlinksOff     = storageItemInfoModificationTimeOff + fileTimeSize         //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoOwnerOff            = storageItemInfoNumHardlinksOff + 2                        //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoPathOff             = storageItemInfoOwnerOff + storageItemNameMaxLen*wcharSize //nolint:unused // reserved offset; consumed once GetItem marshaling lands in a later part of f4#1563.
-	storageItemInfoSize                = storageItemInfoPathOff + storageItemPathMaxLen*wcharSize  //nolint:unused // reserved size; consumed once GetItem marshaling lands in a later part of f4#1563.
+	storageItemInfoSizeOff             = 0
+	storageItemInfoPackedSizeOff       = storageItemInfoSizeOff + 8
+	storageItemInfoAttributesOff       = storageItemInfoPackedSizeOff + 8
+	storageItemInfoCreationTimeOff     = storageItemInfoAttributesOff + 4
+	storageItemInfoModificationTimeOff = storageItemInfoCreationTimeOff + fileTimeSize
+	storageItemInfoNumHardlinksOff     = storageItemInfoModificationTimeOff + fileTimeSize
+	storageItemInfoOwnerOff            = storageItemInfoNumHardlinksOff + 2
+	storageItemInfoPathOff             = storageItemInfoOwnerOff + storageItemNameMaxLen*wcharSize
+	storageItemInfoSize                = storageItemInfoPathOff + storageItemPathMaxLen*wcharSize
 )
 
-// StorageItemInfo mirrors ModuleDef.h's StorageItemInfo. Not yet produced or
-// consumed anywhere in this package; kept here as the documented byte
-// layout a later GetItem implementation must use.
+// StorageItemInfo mirrors ModuleDef.h's StorageItemInfo, decoded into Go
+// strings and FileTime values the way decodeStorageGeneralInfo already does
+// for StorageGeneralInfo.
 type StorageItemInfo struct {
 	Size             int64
 	PackedSize       int64
@@ -214,6 +214,19 @@ type StorageItemInfo struct {
 	NumHardlinks     uint16
 	Owner            string
 	Path             string
+}
+
+func decodeStorageItemInfo(b []byte) StorageItemInfo {
+	return StorageItemInfo{
+		Size:             int64(binary.LittleEndian.Uint64(b[storageItemInfoSizeOff:])), //nolint:gosec // G115: reinterprets bits, not a narrowing conversion.
+		PackedSize:       int64(binary.LittleEndian.Uint64(b[storageItemInfoPackedSizeOff:])),
+		Attributes:       binary.LittleEndian.Uint32(b[storageItemInfoAttributesOff:]),
+		CreationTime:     decodeFileTime(b[storageItemInfoCreationTimeOff : storageItemInfoCreationTimeOff+fileTimeSize]),
+		ModificationTime: decodeFileTime(b[storageItemInfoModificationTimeOff : storageItemInfoModificationTimeOff+fileTimeSize]),
+		NumHardlinks:     binary.LittleEndian.Uint16(b[storageItemInfoNumHardlinksOff:]),
+		Owner:            decodeWCharField(b[storageItemInfoOwnerOff : storageItemInfoOwnerOff+storageItemNameMaxLen*wcharSize]),
+		Path:             decodeWCharField(b[storageItemInfoPathOff : storageItemInfoPathOff+storageItemPathMaxLen*wcharSize]),
+	}
 }
 
 // --- ExtractProcessCallbacks (8 bytes) ----------------------------------

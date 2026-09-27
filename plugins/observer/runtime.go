@@ -73,6 +73,13 @@ type Module struct {
 	mallocFn api.Function
 	freeFn   api.Function
 
+	// getItemFn is deliberately not in LoadModule's required map: a module
+	// this package can drive for LoadSubModule/OpenStorage alone (as parts
+	// 1-2 did) need not implement every trampoline from day one. It is
+	// resolved opportunistically instead, and GetItem reports a clear error
+	// if a module lacks it.
+	getItemFn api.Function
+
 	fatal *FatalError
 }
 
@@ -167,6 +174,8 @@ func LoadModule(ctx context.Context, wasmBytes []byte, mount fs.FS, progress Pro
 		m.shutdown()
 		return nil, fmt.Errorf("observer: module does not export %v", missing)
 	}
+
+	m.getItemFn = mod.ExportedFunction(ExportGetItem)
 
 	return m, nil
 }
@@ -412,6 +421,55 @@ func (m *Module) OpenStorage(params StorageOpenParams) (OpenResult, error) {
 		return OpenResult{}, err
 	}
 	result.Info = decodeStorageGeneralInfo(infoBytes)
+
+	return result, nil
+}
+
+// GetItemResult is the decoded return of the module's f4observer_get_item
+// trampoline: the GET_ITEM_* code, and, only when Code == GetItemOK, the
+// StorageItemInfo the module filled in.
+type GetItemResult struct {
+	Code int32
+	Info StorageItemInfo
+}
+
+// GetItem calls the guest's f4observer_get_item trampoline (see doc.go) for
+// itemIndex within a storage handle returned by a prior successful
+// OpenStorage. itemIndex walks 0, 1, 2, ... until Code is GetItemNoMoreItems
+// (ModuleDef.h names no other way to learn how many items a storage has).
+//
+// GetItem returns an error, not a GetItemResult with Code ==
+// observer.GetItemError, if the module has no f4observer_get_item trampoline
+// at all -- a module this package can otherwise drive is not required to
+// implement every trampoline (see the getItemFn field's doc comment).
+func (m *Module) GetItem(storage uint32, itemIndex int32) (GetItemResult, error) {
+	if m.getItemFn == nil {
+		return GetItemResult{}, fmt.Errorf("observer: module does not export %s", ExportGetItem)
+	}
+
+	infoOutPtr, err := m.alloc(storageItemInfoSize)
+	if err != nil {
+		return GetItemResult{}, err
+	}
+	defer m.free(infoOutPtr)
+
+	// #nosec G115 -- itemIndex is the ABI's own signed int item_index,
+	// reinterpreted bit-for-bit into the uint64 call slot, not narrowed.
+	res, err := m.call(m.getItemFn, ExportGetItem, uint64(storage), uint64(uint32(itemIndex)), uint64(infoOutPtr))
+	if err != nil {
+		return GetItemResult{}, err
+	}
+
+	result := GetItemResult{Code: int32(uint32(res[0]))}
+	if result.Code != GetItemOK {
+		return result, nil
+	}
+
+	infoBytes, err := m.readMemory(infoOutPtr, storageItemInfoSize)
+	if err != nil {
+		return GetItemResult{}, err
+	}
+	result.Info = decodeStorageItemInfo(infoBytes)
 
 	return result, nil
 }

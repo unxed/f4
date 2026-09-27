@@ -43,18 +43,19 @@ func loadOptionalFixture(t *testing.T, path string) []byte {
 // testdata/stub/observer_stub.c fixture TestLoadSubModule and friends use to
 // exercise the ABI in isolation.
 //
-// It proves LoadSubModule and OpenStorage both work against real isoimg
-// code: struct marshaling into wasm32 linear memory, the WASI filesystem
-// mount serving the probed file's actual bytes to isoimg's own
-// CreateFile/ReadFile/SetFilePointer(Ex) calls (via
+// It proves LoadSubModule, OpenStorage and (f4#1563 part 3) GetItem all work
+// against real isoimg code: struct marshaling into wasm32 linear memory, the
+// WASI filesystem mount serving the probed file's actual bytes to isoimg's
+// own CreateFile/ReadFile/SetFilePointer(Ex) calls (via
 // plugins/observer/testdata/isoimg/compat/windows.h), and the
-// f4observer_open_storage/f4observer_close_storage trampolines
-// (compat/trampolines.cpp) forwarding to isoimg.cpp's real OpenStorage/
-// CloseStorage -- the same functions a real Windows Observer host would
-// reach through module_cbs (see ../../doc.go's "module_cbs indirection").
+// f4observer_open_storage/f4observer_close_storage/f4observer_get_item
+// trampolines (compat/trampolines.cpp) forwarding to isoimg.cpp's real
+// OpenStorage/CloseStorage/GetStorageItem -- the same functions a real
+// Windows Observer host would reach through module_cbs (see ../../doc.go's
+// "module_cbs indirection").
 //
-// GetItem/ExtractItem/PrepareFiles are not driven here: they remain
-// reserved, exactly as doc.go describes for this part.
+// ExtractItem/PrepareFiles are not driven here: they remain reserved,
+// exactly as doc.go describes.
 func TestIsoimgOpenStorageEndToEnd(t *testing.T) {
 	wasmBytes := loadOptionalFixture(t, isoimgWasmPath)
 	isoBytes := loadOptionalFixture(t, isoimgIsoPath)
@@ -93,6 +94,40 @@ func TestIsoimgOpenStorageEndToEnd(t *testing.T) {
 	// volume label itself came from build_isoimg_test_iso.sh's -V flag.
 	if got := strings.TrimRight(res.Info.Comment, " "); got != "F4TESTVOL" {
 		t.Errorf("Info.Comment = %q, want %q", got, "F4TESTVOL")
+	}
+
+	// f4#1563 part 3: walk the real directory tree isoimg built for this
+	// storage handle via GetItem, proving GetItem's StorageItemInfo
+	// marshaling against a real module too, not just testdata/stub's fixed
+	// fake item (see TestGetItem in observer_test.go). genisoimage's plain
+	// ISO9660 output is expected to include HELLO.TXT under some 8.3-style
+	// name (possibly with a trailing ";1" ISO9660 version suffix, which
+	// isoimg's non-Joliet path does not strip); do not depend on the exact
+	// spelling or on "." /".." being present or absent.
+	var foundHello bool
+	for index := int32(0); ; index++ {
+		item, err := mod.GetItem(res.Storage, index)
+		if err != nil {
+			t.Fatalf("GetItem(%d): %v", index, err)
+		}
+		if item.Code == observer.GetItemNoMoreItems {
+			break
+		}
+		if item.Code != observer.GetItemOK {
+			t.Fatalf("GetItem(%d): Code = %d, want GetItemOK or GetItemNoMoreItems", index, item.Code)
+		}
+		if strings.Contains(strings.ToUpper(item.Info.Path), "HELLO.TXT") {
+			foundHello = true
+			if item.Info.Size != int64(len("hello from the f4#1563 isoimg end-to-end test\n")) {
+				t.Errorf("GetItem(%d): Info.Size = %d for %q, want %d", index, item.Info.Size, item.Info.Path, len("hello from the f4#1563 isoimg end-to-end test\n"))
+			}
+		}
+		if index > 64 {
+			t.Fatalf("GetItem did not report GetItemNoMoreItems within %d items", index)
+		}
+	}
+	if !foundHello {
+		t.Error("no directory entry containing HELLO.TXT found via GetItem")
 	}
 
 	if err := mod.CloseStorage(res.Storage); err != nil {

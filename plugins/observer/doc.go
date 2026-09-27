@@ -4,12 +4,12 @@
 // internal/plughost/transport_wazero.go runs a wasm plugin and colorer4go
 // (github.com/unxed/colorer4go) runs a wasm C++ library.
 //
-// # Scope of this part (f4#1563, part 1 of N)
+// # Scope so far (f4#1563)
 //
-// This package is infrastructure only. It has no notion of any real archive
-// format, is not registered as a vfs.VFSProvider, and is not reachable from
-// Enter on a panel. What it does provide, and what its tests exercise
-// end-to-end against a small test-only module (see testdata/stub), is:
+// This package is still infrastructure only: it has no notion of a
+// directory tree beyond one GetItem call at a time, is not registered as a
+// vfs.VFSProvider, and is not reachable from Enter on a panel. What it does
+// provide is:
 //
 //   - Go types and constants for the Observer module ABI (API v6, see
 //     src/common/ModuleDef.h in lazyhamster/Observer), laid out the way a
@@ -19,13 +19,17 @@
 //     targets).
 //   - A wazero host module ("observer") with the progress callback import.
 //   - A loader that can instantiate an arbitrary WASI-reactor .wasm module
-//     and drive LoadSubModule/OpenStorage/CloseStorage against it, proving
-//     the struct marshaling and the host imports both work.
+//     and drive LoadSubModule/OpenStorage/CloseStorage/GetItem against it,
+//     proving the struct marshaling and the host imports all work -- part 1
+//     proved this against a small test-only module (testdata/stub); part 2
+//     against a real, unmodified upstream module (isoimg, built by
+//     scripts/build_isoimg_test_wasm.sh, see plugins/observer/testdata/
+//     isoimg/compat/); part 3 added GetItem, exercised against both.
 //   - Read access to the probed file for the guest, through a WASI
 //     filesystem mount backed by an io.ReaderAt-like view of the parent
-//     VFS, not a real path on the host disk. That is what will eventually
-//     let a module opened on a nested archive member read straight through
-//     to wherever the bytes actually live.
+//     VFS, not a real path on the host disk. That is what lets a module
+//     opened on a nested archive member read straight through to wherever
+//     the bytes actually live.
 //
 // # The module_cbs indirection
 //
@@ -45,7 +49,10 @@
 // caller (or a test) can confirm the module actually populated its table --
 // f4 never calls through those values itself.
 //
-// Only the trampolines this part actually drives -- ExportOpenStorage and
-// ExportCloseStorage -- are required of testdata/stub's module; GetItem,
-// ExtractItem and PrepareFiles are reserved names for a later part.
+// Only ExportOpenStorage and ExportCloseStorage are in LoadModule's required
+// map: a module this package can drive at all must have those two, but
+// ExportGetItem is resolved opportunistically (Module.GetItem errors
+// clearly if a module lacks it) so a module need not implement every
+// trampoline from day one. ExportExtractItem and ExportPrepareFiles remain
+// reserved names, not yet driven by anything in this package.
 package observer

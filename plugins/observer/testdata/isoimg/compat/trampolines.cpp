@@ -26,9 +26,12 @@
 // pointers plugins/observer/runtime.go's OpenStorage already calls
 // (paramsPtr, storageOutPtr, infoOutPtr) -- independent of whatever ABI
 // clang happens to choose for passing a >8-byte struct by value, which this
-// file never has to rely on. GetItem/ExtractItem/PrepareFiles trampolines
-// are reserved names (doc.go) and not added yet; this part only drives
-// LoadSubModule and OpenStorage.
+// file never has to rely on. GetItem forwards to isoimg.cpp's own
+// GetStorageItem (the name isoimg.cpp itself gives the function it assigns
+// to ApiFuncs.GetItem -- ModuleDef.h's GetItemFunc already takes item_info
+// by pointer, so no by-value struct is involved there at all).
+// ExtractItem/PrepareFiles trampolines are still reserved names (doc.go),
+// not added yet.
 //
 // f4's own code (same license as the rest of this repository, see LICENSE).
 
@@ -45,6 +48,8 @@ extern void UnloadSubModule(void);
 extern int OpenStorage(StorageOpenParams params, HANDLE *storage,
                         StorageGeneralInfo *info);
 extern void CloseStorage(HANDLE storage);
+extern int GetStorageItem(HANDLE storage, int item_index,
+                           StorageItemInfo *item_info);
 
 extern "C" __attribute__((export_name("LoadSubModule"))) int
 f4_export_LoadSubModule(ModuleLoadParameters *params) {
@@ -65,4 +70,10 @@ f4observer_open_storage(StorageOpenParams *params, HANDLE *storage,
 extern "C" __attribute__((export_name("f4observer_close_storage"))) void
 f4observer_close_storage(HANDLE storage) {
     CloseStorage(storage);
+}
+
+extern "C" __attribute__((export_name("f4observer_get_item"))) int
+f4observer_get_item(HANDLE storage, int item_index,
+                     StorageItemInfo *item_info) {
+    return GetStorageItem(storage, item_index, item_info);
 }

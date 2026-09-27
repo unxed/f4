@@ -1,14 +1,15 @@
 // observer_stub.c is f4's own, from-scratch test fixture for
-// plugins/observer (f4#1563, part 1 of N). It is not a port of any real
-// Observer module, is licensed the same as the rest of f4 (see LICENSE, not
-// Observer's LGPL/GPL), and knows no archive format: it exists only to
-// answer the Observer API v6 ABI slice plugins/observer drives
+// plugins/observer (f4#1563, parts 1 and 3 of N). It is not a port of any
+// real Observer module, is licensed the same as the rest of f4 (see
+// LICENSE, not Observer's LGPL/GPL), and knows no archive format: it exists
+// only to answer the Observer API v6 ABI slice plugins/observer drives
 // (LoadSubModule/UnloadSubModule and the f4observer_open_storage /
-// f4observer_close_storage trampolines, see ../../doc.go) in a fixed,
-// checkable way, so plugins/observer's tests can prove that
+// f4observer_close_storage / f4observer_get_item trampolines, see
+// ../../doc.go) in a fixed, checkable way, so plugins/observer's tests can
+// prove that
 //   - struct marshaling into and out of wasm32 linear memory is correct
-//     (LoadSubModule's ModuleLoadParameters round trip, and the Data/
-//     DataSize fields of StorageOpenParams);
+//     (LoadSubModule's ModuleLoadParameters round trip, the Data/DataSize
+//     fields of StorageOpenParams, and GetItem's StorageItemInfo);
 //   - the WASI filesystem mount plugins/observer builds over an
 //     io.ReaderAt-backed parent VFS (fsbridge.go) really does let a module
 //     read the probed file's actual bytes, not just trust whatever the host
@@ -24,7 +25,7 @@
 // Built only in CI by scripts/build_observer_test_wasm.sh (wasi-sdk); see
 // that script for the exact compiler flags this file depends on
 // (-mexec-model=reactor and the --export list for LoadSubModule,
-// UnloadSubModule, the two f4observer_* trampolines, the four
+// UnloadSubModule, the f4observer_* trampolines, the four
 // f4observer_last_*/close_count accessors below, and libc's malloc/free).
 
 #include <fcntl.h>
@@ -83,6 +84,22 @@ typedef struct {
 	uint32_t ApiVersion;
 	ModuleCbs ApiFuncs;
 } ModuleLoadParameters;
+
+// Mirrors ModuleDef.h's StorageItemInfo the same way the structs above
+// mirror their own real counterparts; see abi.go's storageItemInfo* offset
+// constants for the byte layout this must match.
+typedef struct {
+	int64_t Size;
+	int64_t PackedSize;
+	uint32_t Attributes;
+	uint32_t CreationTimeLow;
+	uint32_t CreationTimeHigh;
+	uint32_t ModificationTimeLow;
+	uint32_t ModificationTimeHigh;
+	uint16_t NumHardlinks;
+	uint32_t Owner[64];
+	uint32_t Path[1024];
+} StorageItemInfo;
 
 #pragma pack(pop)
 
@@ -194,6 +211,45 @@ __attribute__((export_name("f4observer_close_storage")))
 void f4observer_close_storage(uint32_t storage) {
 	(void)storage;
 	g_close_count++;
+}
+
+// GET_ITEM_* result codes, mirrored from ModuleDef.h (see abi.go's own
+// GetItemOK/GetItemNoMoreItems constants).
+#define GET_ITEM_OK 1
+#define GET_ITEM_NOMOREITEMS 2
+
+// f4observer_get_item answers exactly one fixed, fake item at index 0 --
+// enough for observer_test.go to prove GetItem's StorageItemInfo marshaling
+// round-trips (including the nested FILETIME-shaped fields and both
+// wchar_t[] fields), the same way f4observer_open_storage above proves
+// StorageOpenParams's. index 0's own OpenStorage-returned storage handle is
+// not checked against storage: this fixture, like the real ABI itself,
+// treats storage as an opaque token the module chose, not something the
+// caller can construct meaning from.
+__attribute__((export_name("f4observer_get_item")))
+int32_t f4observer_get_item(uint32_t storage, int32_t index, uint32_t info_ptr) {
+	(void)storage;
+	if (index != 0) {
+		return GET_ITEM_NOMOREITEMS;
+	}
+
+	StorageItemInfo *info = (StorageItemInfo *)(uintptr_t)info_ptr;
+	memset(info, 0, sizeof(*info));
+	info->Size = 42;
+	info->PackedSize = 42;
+	info->Attributes = 0;
+	info->CreationTimeLow = 0x11111111u;
+	info->CreationTimeHigh = 0x22222222u;
+	info->ModificationTimeLow = 0x33333333u;
+	info->ModificationTimeHigh = 0x44444444u;
+	info->NumHardlinks = 1;
+
+	static const char kPath[] = "stub-item.txt";
+	for (size_t i = 0; i < sizeof(kPath); i++) {
+		info->Path[i] = (uint32_t)(unsigned char)kPath[i];
+	}
+
+	return GET_ITEM_OK;
 }
 
 __attribute__((export_name("f4observer_close_count")))
