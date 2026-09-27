@@ -31,8 +31,10 @@ tools/icons/icons.exe
 tools/wine_syscall_probe/wineprobe
 tools/wine_syscall_probe/wineprobe.exe
 
-# plugins/observer test fixture: built by scripts/build_observer_test_wasm.sh
-# in CI (wasi-sdk), never checked in -- see that script and
-# plugins/observer/testdata/stub/observer_stub.c.
+# plugins/observer test fixtures: built by scripts/build_observer_test_wasm.sh
+# and scripts/build_isoimg_test_wasm.sh in CI (wasi-sdk), never checked in --
+# see those scripts, plugins/observer/testdata/stub/observer_stub.c and
+# plugins/observer/testdata/isoimg/compat/.
 plugins/observer/testdata/observer_stub.wasm
+plugins/observer/testdata/isoimg_test.wasm
 

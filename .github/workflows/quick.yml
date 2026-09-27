@@ -82,5 +82,41 @@ jobs:
       - name: Build plugins/observer test fixture
         run: WASI_SDK_PATH=/opt/wasi-sdk ./scripts/build_observer_test_wasm.sh
 
+      # plugins/observer's isoimg end-to-end test (f4#1563, part 2) builds a
+      # real upstream Observer module -- not the from-scratch stub above --
+      # with the same wasi-sdk, plus a tiny genisoimage-built ISO9660 image
+      # to probe it against. See scripts/build_isoimg_test_wasm.sh,
+      # scripts/build_isoimg_test_iso.sh and
+      # plugins/observer/testdata/isoimg/compat/.
+      - name: Install genisoimage
+        run: sudo apt-get update && sudo apt-get install -y genisoimage
+
+      - name: Build plugins/observer isoimg test fixture (wasm)
+        run: WASI_SDK_PATH=/opt/wasi-sdk ./scripts/build_isoimg_test_wasm.sh
+
+      - name: Build plugins/observer isoimg test fixture (iso)
+        run: ./scripts/build_isoimg_test_iso.sh
+
+      # Confirms isoimg_test.wasm is spec-valid wasm and reports what
+      # wasm-opt -Oz would shrink it to (f4#1563, part 2 open question 2),
+      # using Binaryen's own prebuilt release, never built from source here.
+      - name: Cache Binaryen
+        id: cache-binaryen
+        uses: actions/cache@v4
+        with:
+          path: /opt/binaryen
+          key: binaryen-133-x86_64-linux
+
+      - name: Install Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o /tmp/binaryen.tar.gz \
+            https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          sudo mkdir -p /opt/binaryen
+          sudo tar -xzf /tmp/binaryen.tar.gz --strip-components=1 -C /opt/binaryen
+
+      - name: Check isoimg wasm fixture with Binaryen
+        run: BINARYEN_PATH=/opt/binaryen ./scripts/check_isoimg_wasm.sh plugins/observer/testdata/isoimg_test.wasm
+
       - name: Test
         run: go test ./...
