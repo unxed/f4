@@ -139,18 +139,20 @@ func writeMember(t *testing.T, v *MultiArcVFS, p, content string) {
 // holding just the named tools, each a symlink to the real binary found on
 // the current PATH under the target name (so "tar": "bsdtar" puts bsdtar on
 // PATH as tar). Name lookup only ever sees that directory, so a tool this
-// map leaves out stays unreachable. Windows also walks PATH, last, to find
-// a loaded module's own DLLs, and GetModuleFileName on a symlinked exe
-// reports the symlink's directory, not the real one, which has no copy of
-// the companion DLL; each target's real directory is appended after bin so
-// that fallback search still finds it, while name resolution keeps picking
-// bin's symlink first. It skips the test when a tool is missing, cannot
-// start, or symlinks cannot be made (Windows without the privilege).
+// map leaves out stays unreachable -- appending the real directories to
+// PATH instead of replacing it would defeat that: on a typical Linux or
+// macOS box zip, unzip, tar and 7z all live in the same /usr/bin. Windows
+// is different in one respect: GetModuleFileName on a symlinked exe reports
+// the symlink's own directory, not the real one, so a companion DLL beside
+// the real binary would otherwise not be found next to the "loaded" module,
+// and the narrowed PATH gives Windows' last-resort DLL search nowhere else
+// to look either. So every *.dll beside a target also gets a symlink into
+// bin (a glob that matches nothing anywhere else, so this is a no-op there).
+// It skips the test when a tool is missing, cannot start, or symlinks
+// cannot be made (Windows without the privilege).
 func pathOnly(t *testing.T, tools map[string]string) {
 	t.Helper()
 	bin := t.TempDir()
-	dirs := []string{bin}
-	seen := map[string]bool{}
 	for name, target := range tools {
 		real, err := exec.LookPath(target)
 		if err != nil {
@@ -163,12 +165,16 @@ func pathOnly(t *testing.T, tools map[string]string) {
 		if err := os.Symlink(real, link); err != nil {
 			t.Skipf("cannot symlink %s: %v", real, err)
 		}
-		if dir := filepath.Dir(real); !seen[dir] {
-			seen[dir] = true
-			dirs = append(dirs, dir)
+		dlls, _ := filepath.Glob(filepath.Join(filepath.Dir(real), "*.dll"))
+		for _, dll := range dlls {
+			dst := filepath.Join(bin, filepath.Base(dll))
+			if _, err := os.Lstat(dst); err == nil {
+				continue // another target already carried this one over
+			}
+			_ = os.Symlink(dll, dst)
 		}
 	}
-	t.Setenv("PATH", strings.Join(dirs, string(os.PathListSeparator)))
+	t.Setenv("PATH", bin)
 }
 
 // realTarFlavor is what the tar on the real PATH is.
