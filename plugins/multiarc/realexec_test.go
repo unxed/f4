@@ -148,6 +148,9 @@ func pathOnly(t *testing.T, tools map[string]string) {
 		if err != nil {
 			t.Skipf("%s is not on PATH", target)
 		}
+		if toolCannotStart(real) {
+			t.Skipf("%s is on PATH but cannot start", target)
+		}
 		link := filepath.Join(bin, name+filepath.Ext(real))
 		if err := os.Symlink(real, link); err != nil {
 			t.Skipf("cannot symlink %s: %v", real, err)
