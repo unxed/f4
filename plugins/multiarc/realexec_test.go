@@ -138,11 +138,19 @@ func writeMember(t *testing.T, v *MultiArcVFS, p, content string) {
 // pathOnly replaces PATH, for the rest of the test, with a directory
 // holding just the named tools, each a symlink to the real binary found on
 // the current PATH under the target name (so "tar": "bsdtar" puts bsdtar on
-// PATH as tar). It skips the test when a tool is missing or symlinks cannot
-// be made (Windows without the privilege).
+// PATH as tar). Name lookup only ever sees that directory, so a tool this
+// map leaves out stays unreachable. Windows also walks PATH, last, to find
+// a loaded module's own DLLs, and GetModuleFileName on a symlinked exe
+// reports the symlink's directory, not the real one, which has no copy of
+// the companion DLL; each target's real directory is appended after bin so
+// that fallback search still finds it, while name resolution keeps picking
+// bin's symlink first. It skips the test when a tool is missing, cannot
+// start, or symlinks cannot be made (Windows without the privilege).
 func pathOnly(t *testing.T, tools map[string]string) {
 	t.Helper()
 	bin := t.TempDir()
+	dirs := []string{bin}
+	seen := map[string]bool{}
 	for name, target := range tools {
 		real, err := exec.LookPath(target)
 		if err != nil {
@@ -155,8 +163,12 @@ func pathOnly(t *testing.T, tools map[string]string) {
 		if err := os.Symlink(real, link); err != nil {
 			t.Skipf("cannot symlink %s: %v", real, err)
 		}
+		if dir := filepath.Dir(real); !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
 	}
-	t.Setenv("PATH", bin)
+	t.Setenv("PATH", strings.Join(dirs, string(os.PathListSeparator)))
 }
 
 // realTarFlavor is what the tar on the real PATH is.
