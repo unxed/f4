@@ -45,6 +45,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <strings.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,8 +69,13 @@ typedef uint32_t ULONG;
 typedef unsigned int UINT;
 typedef int INT;
 typedef int BOOL;
-typedef long long __int64;
-typedef unsigned long long __uint64;
+// __int64 is a macro, not a typedef: clang recognizes __int64 specially
+// (its MS sized-integer keyword extension) even without -fms-extensions, so
+// a plain "typedef long long __int64;" collides with that -- iso.h's own
+// "typedef unsigned __int64 Uint64;" only parses as "unsigned long long" if
+// __int64 is textually replaced by the preprocessor before the parser ever
+// sees it as an identifier.
+#define __int64 long long
 typedef long long LONGLONG;
 typedef unsigned long long ULONGLONG;
 typedef wchar_t WCHAR;
@@ -325,6 +331,19 @@ static inline BOOL DeleteFile(const wchar_t *path) {
 
 #define ZeroMemory(dst, size) memset((dst), 0, (size))
 #define CopyMemory(dst, src, size) memcpy((dst), (src), (size))
+
+// min/max: real WinDef.h defines these function-like macros unless the
+// including code defines NOMINMAX first, which isoimg/iso_ext/iso_tc do not.
+#ifndef max
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+#ifndef min
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
+// _strnicmp: MSVC CRT name for a case-insensitive, length-bounded compare;
+// wasi-sdk's libc has the POSIX name instead.
+#define _strnicmp strncasecmp
 
 // --- codepage conversion --------------------------------------------------
 // GetACP: the real call returns the process's configured ANSI codepage.

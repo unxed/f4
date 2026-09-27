@@ -70,7 +70,8 @@ git -C "$WORKDIR" checkout -q FETCH_HEAD
 
 SRC="$WORKDIR/src/modules/isoimg"
 COMMON="$WORKDIR/src/common"
-MODULECRT="$WORKDIR/src/depends/modulecrt"
+DEPENDS="$WORKDIR/src/depends"
+MODULECRT="$DEPENDS/modulecrt"
 
 echo "Using WASI SDK: $WASI_SDK_PATH"
 echo "Building: isoimg ($SRC) -> $OUT"
@@ -83,8 +84,9 @@ echo "Building: isoimg ($SRC) -> $OUT"
 # -I order matters: COMPAT_DIR first so every quote-include of "StdAfx.h"
 # (see compat/StdAfx.h) and <windows.h> (see compat/windows.h) resolves to
 # f4's shim rather than failing to find upstream's differently-cased or
-# nonexistent file, ahead of SRC/COMMON/MODULECRT for isoimg's own headers
-# and ModuleDef.h/OptionsParser.h.
+# nonexistent file, ahead of SRC/COMMON/DEPENDS for isoimg's own headers,
+# ModuleDef.h, and isoimg.cpp's own "modulecrt/OptionsParser.h" (DEPENDS is
+# modulecrt's parent, matching that quote-include's own subpath).
 #
 # -fno-exceptions/-fno-rtti: isoimg has no throw/catch of its own (confirmed
 # during f4#1563's recon -- only false positives on "entry"/"entries"), so it
@@ -101,7 +103,7 @@ echo "Building: isoimg ($SRC) -> $OUT"
     -I "$COMPAT_DIR" \
     -I "$SRC" \
     -I "$COMMON" \
-    -I "$MODULECRT" \
+    -I "$DEPENDS" \
     -Wl,--export=LoadSubModule \
     -Wl,--export=UnloadSubModule \
     -Wl,--export=f4observer_open_storage \
