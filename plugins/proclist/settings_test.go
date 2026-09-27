@@ -130,7 +130,7 @@ func TestSettingsStoreSaveIsAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if filepath.Ext(e.Name()) != ".json" || e.Name() == "proclist.json" {
+		if e.Name() != "proclist.json" {
 			t.Fatalf("save left a stray file behind: %s", e.Name())
 		}
 	}
