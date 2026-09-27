@@ -65,4 +65,29 @@
 // pointer, not a struct field the host can just fill in the way it fills in
 // everything else: see ExportProgressTrampoline's own doc comment for how a
 // module hands the host something it actually can put there.
+//
+// # No random access to an item's own content
+//
+// The container file a module is opened on gets full random access already
+// (see "Read access to the probed file" above): the WASI mount serves
+// fd_pread/fd_seek straight off the parent VFS's own ReadAt, at whatever
+// offset the module's own CreateFile/ReadFile/SetFilePointer(Ex) calls ask
+// for, no different from a real file on disk.
+//
+// An individual *item* inside that container is a different matter. API v6
+// (ModuleDef.h, unchanged since 2016) has exactly one way to get an item's
+// bytes out: ExtractFunc, which always writes the whole item to a
+// caller-chosen DestPath on a real filesystem -- there is no
+// OpenItemStream/ReadItem/Seek in the ABI, and no flag in
+// ExtractOperationParams that asks for one. So an Observer-backed item can
+// never be opened for random-access reads the way vfs.ReadAtCloser
+// generally allows: Module.ExtractItem's only option, and this package's
+// only option in turn, is what LoadModule's WithExtractDir already does --
+// extract the whole item to a real file first (the same "extract to a temp
+// file" fallback plugins/archive already uses for solid 7z/RAR), then hand
+// out a ReadAtCloser over *that* file. This is an ABI limitation, not
+// something a smarter host implementation could work around; it also means
+// f4#1563's own item 5 (partial-decompression zran-style ReadAt for nested
+// archives) has no Observer-side equivalent to build -- only plugins/archive
+// zip/deflate members can ever get that treatment.
 package observer
