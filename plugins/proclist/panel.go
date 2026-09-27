@@ -5,6 +5,7 @@ package proclist
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,14 +16,12 @@ import (
 	"github.com/unxed/vtui"
 )
 
-// procListRefreshInterval controls how often the background collector takes
-// a new /proc snapshot. A few times a second is enough to watch CPU% move
-// without turning the process list itself into a meaningful background load.
-const procListRefreshInterval = 500 * time.Millisecond
-
-// Column indices into procListColumns/procRow.GetCellText, also used by
-// compareSamples so sorting stays numeric on PID/Mem/CPU% instead of the
-// lexical order a Table falls back to for column text.
+// Column indices into procRow.GetCellText, also used by compareSamples so
+// sorting stays numeric on PID/Mem/CPU% instead of the lexical order a Table
+// falls back to for column text. These are stable identities across a
+// restart -- allColumnSpecs' own key field, not this int, is what
+// ProcList.Config (settings.go, f4#312 part 4 of 4) actually persists to
+// disk, so renumbering these later stays safe.
 const (
 	colPID = iota
 	colName
@@ -30,31 +29,101 @@ const (
 	colCPU
 )
 
-func procListColumns() []vtui.TableColumn {
-	return []vtui.TableColumn{
-		{Title: i18n.Msg("ProcList.ColumnPID"), Width: 8, Alignment: vtui.AlignRight},
-		{Title: i18n.Msg("ProcList.ColumnName"), MinWidth: 12},
-		{Title: i18n.Msg("ProcList.ColumnMem"), Width: 10, Alignment: vtui.AlignRight},
-		{Title: i18n.Msg("ProcList.ColumnCPU"), Width: 7, Alignment: vtui.AlignRight},
-	}
+// columnSpec is a self-contained definition of one table column: its
+// identity (id, for compareSamples; key, for Settings.VisibleColumns), its
+// header (titleKey) and how to render one sample's cell. procListColumns and
+// procRow both key off allColumnSpecs instead of hardcoding each column's
+// header/format logic in two places, so ProcList.Config's visible-columns
+// setting only has to filter *which* columns exist, not duplicate how each
+// one renders.
+type columnSpec struct {
+	id       int
+	key      string // stable settings.json identifier; see columnSpecsForKeys/columnKeysValid.
+	titleKey string
+	width    int
+	minWidth int
+	align    vtui.Alignment
+	cellText func(sample) string
 }
 
-// procRow adapts one sample to vtui.Table's TableRow contract.
-type procRow struct{ s sample }
+// allColumnSpecs is also defaultColumnKeys' own order, and the fixed
+// left-to-right order any subset of it is shown in: this plugin lets a user
+// hide a column (ProcList.Config), not reorder the rest, matching how
+// narrowly it scopes everything else (plugin.go's own package doc).
+var allColumnSpecs = []columnSpec{
+	{id: colPID, key: "pid", titleKey: "ProcList.ColumnPID", width: 8, align: vtui.AlignRight,
+		cellText: func(s sample) string { return strconv.Itoa(s.pid) }},
+	{id: colName, key: "name", titleKey: "ProcList.ColumnName", minWidth: 12,
+		cellText: func(s sample) string { return s.name }},
+	{id: colMem, key: "mem", titleKey: "ProcList.ColumnMem", width: 10, align: vtui.AlignRight,
+		cellText: func(s sample) string { return formatRSSKiB(s.rssKiB) }},
+	{id: colCPU, key: "cpu", titleKey: "ProcList.ColumnCPU", width: 7, align: vtui.AlignRight,
+		cellText: func(s sample) string { return formatCPUPercent(s.cpuPercent) }},
+}
+
+// columnSpecsForKeys resolves Settings.VisibleColumns to the columnSpecs
+// procListColumns/procRow use, in allColumnSpecs' fixed order and silently
+// dropping any key it does not recognize. An empty or entirely-unrecognized
+// result falls back to every column instead of an unusable, columnless
+// table -- newProcListPanel calls this on every Open, so a settings.json
+// this build cannot make sense of at all degrades to v1's own fixed layout
+// rather than failing to open the panel.
+func columnSpecsForKeys(keys []string) []columnSpec {
+	want := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		want[strings.ToLower(strings.TrimSpace(k))] = true
+	}
+	specs := make([]columnSpec, 0, len(allColumnSpecs))
+	for _, c := range allColumnSpecs {
+		if want[c.key] {
+			specs = append(specs, c)
+		}
+	}
+	if len(specs) == 0 {
+		return append([]columnSpec(nil), allColumnSpecs...)
+	}
+	return specs
+}
+
+// defaultSortDisplayIndex locates CPU% (v1's own default sort column) among
+// specs' display positions. specs is Settings-filtered, so CPU% may not be
+// there at all -- ProcList.Config let the user hide it -- in which case this
+// falls back to whatever ended up first, still a deterministic sort rather
+// than none.
+func defaultSortDisplayIndex(specs []columnSpec) (idx int, ok bool) {
+	for i, c := range specs {
+		if c.id == colCPU {
+			return i, true
+		}
+	}
+	return 0, len(specs) > 0
+}
+
+func procListColumns(specs []columnSpec) []vtui.TableColumn {
+	cols := make([]vtui.TableColumn, len(specs))
+	for i, c := range specs {
+		cols[i] = vtui.TableColumn{Title: i18n.Msg(c.titleKey), Width: c.width, MinWidth: c.minWidth, Alignment: c.align}
+	}
+	return cols
+}
+
+// procRow adapts one sample to vtui.Table's TableRow contract. specs is the
+// same slice every row of one table snapshot shares (set by applySamples
+// from procListPanel.specs), so GetCellText's col is a *display* column
+// index, resolved through specs rather than the fixed colPID..colCPU
+// constants directly -- those still identify a column's meaning
+// (compareSamples, columnSpecsForKeys), just not its position once some
+// columns are hidden.
+type procRow struct {
+	s     sample
+	specs []columnSpec
+}
 
 func (r procRow) GetCellText(col int) string {
-	switch col {
-	case colPID:
-		return strconv.Itoa(r.s.pid)
-	case colName:
-		return r.s.name
-	case colMem:
-		return formatRSSKiB(r.s.rssKiB)
-	case colCPU:
-		return formatCPUPercent(r.s.cpuPercent)
-	default:
+	if col < 0 || col >= len(r.specs) {
 		return ""
 	}
+	return r.specs[col].cellText(r.s)
 }
 
 func formatRSSKiB(kb uint64) string {
@@ -135,8 +204,10 @@ func compareFloat64(a, b float64) int {
 type procListPanel struct {
 	frame *vtui.BorderedFrame
 	table *vtui.Table
+	specs []columnSpec
 
 	collector *collector
+	store     *settingsStore
 	stop      chan struct{}
 	done      chan struct{}
 	stopOnce  sync.Once
@@ -152,13 +223,26 @@ type procListPanel struct {
 	suspended map[int]bool
 }
 
-func newProcListPanel(ctx vfs.PanelContext) (vfs.PanelController, error) {
+// newProcListPanel builds one panel instance. store is ProcList.Config's
+// settings (settings.go, f4#312 part 4 of 4); a nil store (every existing
+// test, and any future caller that does not care) falls back to
+// DefaultSettings() through settingsStore.snapshot's own nil-safe zero
+// value, so this never needs its own separate "no settings" branch.
+// Visible columns are resolved once, here -- unlike RefreshInterval (below),
+// which loop() re-reads every tick, rebuilding vtui.Table's columns live
+// while the panel is open is a bigger change than this ticket asked for, so
+// a changed column selection only takes effect the next time the panel is
+// opened.
+func newProcListPanel(ctx vfs.PanelContext, store *settingsStore) (vfs.PanelController, error) {
+	settings := store.snapshot()
+	specs := columnSpecsForKeys(settings.VisibleColumns)
+
 	frame := vtui.NewBorderedFrame(0, 0, 1, 1, vtui.SingleBox, "")
 	frame.ColorBoxIdx = theme.ColPanelBox
 	frame.ColorTitleIdx = theme.ColPanelTitle
 	frame.ColorBackgroundIdx = theme.ColPanelText
 
-	table := vtui.NewTable(0, 0, 1, 1, procListColumns())
+	table := vtui.NewTable(0, 0, 1, 1, procListColumns(specs))
 	table.Sortable = true
 	table.QuickSearch = true
 	table.ColorBoxIdx = theme.ColPanelBox
@@ -168,17 +252,21 @@ func newProcListPanel(ctx vfs.PanelContext) (vfs.PanelController, error) {
 	table.SortCompare = func(a, b vtui.TableRow, col int) int {
 		ra, aok := a.(procRow)
 		rb, bok := b.(procRow)
-		if !aok || !bok {
+		if !aok || !bok || col < 0 || col >= len(ra.specs) {
 			return 0
 		}
-		return compareSamples(ra.s, rb.s, col)
+		return compareSamples(ra.s, rb.s, ra.specs[col].id)
 	}
-	table.SetSort(colCPU, false)
+	if idx, ok := defaultSortDisplayIndex(specs); ok {
+		table.SetSort(idx, false)
+	}
 
 	p := &procListPanel{
 		frame:     frame,
 		table:     table,
+		specs:     specs,
 		collector: newCollector(),
+		store:     store,
 		stop:      make(chan struct{}),
 		done:      make(chan struct{}),
 		suspended: make(map[int]bool),
@@ -194,19 +282,33 @@ func newProcListPanel(ctx vfs.PanelContext) (vfs.PanelController, error) {
 	return p, nil
 }
 
+// refreshInterval re-reads Settings.RefreshInterval on every tick (loop,
+// below), so a change made through ProcList.Config while this panel is
+// already open takes effect within one refresh cycle -- unlike the
+// visible-columns half of the same setting, which newProcListPanel captures
+// once at Open time (see its own comment). store.snapshot is nil-safe, so
+// this needs no separate guard for a panel built with a nil store.
+func (p *procListPanel) refreshInterval() time.Duration {
+	if d := p.store.snapshot().refreshInterval(); d > 0 {
+		return d
+	}
+	return defaultRefreshInterval
+}
+
 func (p *procListPanel) loop() {
 	defer close(p.done)
-	ticker := time.NewTicker(procListRefreshInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(p.refreshInterval())
+	defer timer.Stop()
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
 			samples, err := p.collector.collect()
 			if err != nil {
 				vtui.DebugLog("PROCLIST: collect failed: %v", err)
-				continue
+			} else {
+				p.runOnUI(func() { p.applySamples(samples) })
 			}
-			p.runOnUI(func() { p.applySamples(samples) })
+			timer.Reset(p.refreshInterval())
 		case <-p.stop:
 			return
 		}
@@ -230,7 +332,7 @@ func (p *procListPanel) applySamples(samples []sample) {
 	rows := make([]vtui.TableRow, len(samples))
 	seen := make(map[int]bool, len(samples))
 	for i, s := range samples {
-		rows[i] = procRow{s: s}
+		rows[i] = procRow{s: s, specs: p.specs}
 		seen[s.pid] = true
 	}
 	p.table.SetRows(rows)
@@ -277,20 +379,25 @@ func (p *procListPanel) SetFocus(focused bool) {
 
 func (p *procListPanel) IsFocused() bool { return p.table.IsFocused() }
 
-// ProcessKey adds f4#312 part 3's process management on top of the table's
-// own navigation/sort/quick-search handling: F8 kill (with confirmation,
-// confirmKill in actions.go), Shift+F1/F2 lower/raise priority (FAR3's own
-// bindings for the same thing), and Ctrl+F8 suspend/resume toggle -- new in
-// f4, not in FAR3, and only offered where suspendResumeSupported is true
-// (linux/darwin; not Windows, which has no supported API for it). Unmatched
-// keys, including Ctrl+F8 where unsupported, fall through to the table
-// exactly as before this change.
+// ProcessKey adds f4#312 part 3's process management, and part 4's F3
+// details view (showDetails, details.go), on top of the table's own
+// navigation/sort/quick-search handling: F3 details (a read-only snapshot,
+// FAR3's own F3 gesture), F8 kill (with confirmation, confirmKill in
+// actions.go), Shift+F1/F2 lower/raise priority (FAR3's own bindings for the
+// same thing), and Ctrl+F8 suspend/resume toggle -- new in f4, not in FAR3,
+// and only offered where suspendResumeSupported is true (linux/darwin; not
+// Windows, which has no supported API for it). Unmatched keys, including
+// Ctrl+F8 where unsupported, fall through to the table exactly as before
+// this change.
 func (p *procListPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	if e != nil && e.Type == vtinput.KeyEventType && e.KeyDown {
 		ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
 		alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
 		shift := e.ControlKeyState&vtinput.ShiftPressed != 0
 		switch {
+		case e.VirtualKeyCode == vtinput.VK_F3 && !ctrl && !alt && !shift:
+			p.showDetails()
+			return true
 		case e.VirtualKeyCode == vtinput.VK_F8 && !ctrl && !alt && !shift:
 			p.confirmKill()
 			return true

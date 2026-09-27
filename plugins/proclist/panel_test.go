@@ -4,7 +4,9 @@ package proclist
 
 import (
 	"testing"
+	"time"
 
+	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -63,7 +65,7 @@ func TestCompareSamplesOrdersNameLexically(t *testing.T) {
 }
 
 func TestProcListPanelWiring(t *testing.T) {
-	controller, err := newProcListPanel(vfs.PanelContext{Bounds: [4]int{0, 0, 39, 19}})
+	controller, err := newProcListPanel(vfs.PanelContext{Bounds: [4]int{0, 0, 39, 19}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,5 +105,87 @@ func TestProcListPanelWiring(t *testing.T) {
 
 	if err := controller.Close(); err != nil {
 		t.Fatalf("Close returned an error: %v", err)
+	}
+}
+
+// TestF3OpensDetailsDialog covers f4#312 part 4 of 4's F3 gesture: it must
+// be claimed by ProcessKey (not fall through to the table) and push a
+// dialog, the same "claimed, and a dialog appeared" level of coverage F8's
+// own confirmKill gets no more of anywhere else in this package either.
+func TestF3OpensDetailsDialog(t *testing.T) {
+	t.Cleanup(testutil.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	controller, err := newProcListPanel(vfs.PanelContext{Bounds: [4]int{0, 0, 39, 19}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = controller.Close() }()
+	controller.Show(vtui.NewSilentScreenBuf())
+
+	if !controller.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F3}) {
+		t.Fatal("F3 was not claimed")
+	}
+	if _, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); !ok {
+		t.Fatalf("top frame after F3 = %T, want a dialog", vtui.FrameManager.GetTopFrame())
+	}
+}
+
+func TestColumnSpecsForKeysFiltersAndFallsBackToAll(t *testing.T) {
+	specs := columnSpecsForKeys([]string{"cpu", " PID ", "bogus"})
+	if len(specs) != 2 || specs[0].id != colPID || specs[1].id != colCPU {
+		t.Fatalf("columnSpecsForKeys([cpu, PID, bogus]) = %#v, want [pid, cpu] in allColumnSpecs order", specs)
+	}
+
+	all := columnSpecsForKeys(nil)
+	if len(all) != len(allColumnSpecs) {
+		t.Fatalf("columnSpecsForKeys(nil) = %d columns, want all %d", len(all), len(allColumnSpecs))
+	}
+
+	unknown := columnSpecsForKeys([]string{"bogus"})
+	if len(unknown) != len(allColumnSpecs) {
+		t.Fatalf("columnSpecsForKeys([bogus]) = %d columns, want the all-columns fallback", len(unknown))
+	}
+}
+
+func TestColumnKeysValid(t *testing.T) {
+	if !columnKeysValid([]string{"bogus", "Mem"}) {
+		t.Error("columnKeysValid should accept a mix of one known and one unknown key")
+	}
+	if columnKeysValid([]string{"bogus"}) {
+		t.Error("columnKeysValid should reject a set with no known key")
+	}
+	if columnKeysValid(nil) {
+		t.Error("columnKeysValid should reject an empty set")
+	}
+}
+
+func TestDefaultSortDisplayIndexFallsBackWhenCPUIsHidden(t *testing.T) {
+	if idx, ok := defaultSortDisplayIndex(columnSpecsForKeys(defaultColumnKeys())); !ok || idx != 3 {
+		t.Fatalf("defaultSortDisplayIndex(all columns) = %d,%v, want 3,true", idx, ok)
+	}
+	withoutCPU := columnSpecsForKeys([]string{"pid", "name", "mem"})
+	if idx, ok := defaultSortDisplayIndex(withoutCPU); !ok || idx != 0 {
+		t.Fatalf("defaultSortDisplayIndex(without cpu) = %d,%v, want 0,true", idx, ok)
+	}
+	if _, ok := defaultSortDisplayIndex(nil); ok {
+		t.Fatal("defaultSortDisplayIndex(nil) should report ok=false")
+	}
+}
+
+func TestRefreshIntervalFallsBackToDefaultOnANonPositiveSetting(t *testing.T) {
+	p := &procListPanel{store: &settingsStore{current: Settings{RefreshIntervalMS: 0}}}
+	if got := p.refreshInterval(); got != defaultRefreshInterval {
+		t.Fatalf("refreshInterval() = %v, want the default %v", got, defaultRefreshInterval)
+	}
+
+	p = &procListPanel{store: &settingsStore{current: Settings{RefreshIntervalMS: 250}}}
+	if got := p.refreshInterval(); got != 250*time.Millisecond {
+		t.Fatalf("refreshInterval() = %v, want 250ms", got)
+	}
+
+	p = &procListPanel{store: nil}
+	if got := p.refreshInterval(); got != defaultRefreshInterval {
+		t.Fatalf("refreshInterval() with a nil store = %v, want the default %v", got, defaultRefreshInterval)
 	}
 }

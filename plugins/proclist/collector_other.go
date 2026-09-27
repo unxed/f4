@@ -29,11 +29,17 @@ import (
 // explicit owner decision to accept that risk.
 func Supported() bool { return false }
 
-// newProcListPanel is unreachable in practice: Plugin.Init checks
-// Supported() before ever registering it as a panel provider's Open
-// callback. It still needs a real, correctly-typed body so this file
-// satisfies the same shape as collector_windows.go/collector_darwin.go's,
-// the way plugins/ios/core_access_stub.go mirrors core_access_supported.go.
-func newProcListPanel(vfs.PanelContext) (vfs.PanelController, error) {
+// newProcListPanel and (*Plugin).configure below are unreachable in
+// practice: Plugin.Init (plugin.go, which has no build tag of its own and
+// so must compile here too) checks Supported() before ever registering
+// either as a panel provider's Open callback or a plugin command's Run
+// handler. They still need real, correctly-typed bodies -- newProcListPanel
+// matching panel.go's real one (f4#312 part 4 of 4 added the *settingsStore
+// parameter to both), and configure matching config_dialog.go's -- so this
+// file satisfies the same shape those do, the way
+// plugins/ios/core_access_stub.go mirrors core_access_supported.go.
+func newProcListPanel(vfs.PanelContext, *settingsStore) (vfs.PanelController, error) {
 	return nil, errors.New("ProcList: the process list is not available on this platform yet")
 }
+
+func (p *Plugin) configure(vfs.App) {}

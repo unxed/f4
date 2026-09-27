@@ -154,7 +154,7 @@ func (pm *PluginManager) loadInternal() {
 		&id3editor.ID3EditorPlugin{},
 		envman.NewPlugin(config.GetF4ConfigDir()),
 		mediainfo.NewPlugin(config.GetF4ConfigDir()),
-		proclist.NewPlugin(),
+		proclist.NewPlugin(config.GetF4ConfigDir()),
 	}
 	// cloudfox (cloud services), android (ADB device browsing), iOS (Apple
 	// mobile devices over usbmuxd) and sqlite (SQLite database browsing)

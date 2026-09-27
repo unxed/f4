@@ -2,7 +2,9 @@
 
 A live list of running processes, shown as a panel. f4#312: part 1 shipped
 Linux (view-only), part 2 added Windows and macOS (still view-only), part 3
-(this update) added process management: kill, priority and suspend/resume.
+added process management (kill, priority, suspend/resume), and part 4 (this
+update, the ticket's last) added an F3 process-details view and ProcList.Config,
+an F9 "Plugin configuration" entry for visible columns and refresh interval.
 
 ## What it does
 
@@ -70,6 +72,38 @@ FAR3 does not have at all:
 None of the three needs a setting to turn off: kill's confirmation is
 unconditional, matching how narrowly this plugin scopes everything else.
 
+## Process details and configuration (f4#312 part 4 of 4)
+
+- **F3 -- process details.** A read-only snapshot dialog (`details.go`),
+  FAR3's own F3 gesture: command line, environment and open files, each
+  independently readable or not (`procDetailsSection`) -- a process whose
+  environment this user cannot read still shows its command line and open
+  files. Content comes from `collectProcDetails`, one real implementation per
+  platform (`details_linux.go`/`details_windows.go`/`details_darwin.go`),
+  cheaply-available-only, not necessarily on par with Linux:
+  - **Linux**: the real thing, straight out of `/proc/[pid]/cmdline`,
+    `/proc/[pid]/environ` and `/proc/[pid]/fd` (each entry's symlink target).
+  - **Windows**: only the executable's own full path
+    (`QueryFullProcessImageName`) -- the true command line and any open
+    handle listing both need undocumented NT APIs this plugin already
+    refuses elsewhere (see "What it deliberately does not do").
+  - **macOS**: also only the executable's own full path (libproc's
+    `proc_pidpath`) -- environment and open files would need a hand-parsed
+    `sysctl KERN_PROCARGS2` buffer or a second libproc struct
+    (`vnode_fdinfowithpath`), the same "no CI-executed verification" risk
+    `collector_other.go` already declined for the BSDs in part 2.
+- **ProcList.Config -- F9 "Plugin configuration".** A checkbox per table
+  column (`Settings.VisibleColumns`) and a refresh-interval field in
+  milliseconds (`Settings.RefreshIntervalMS`, 100..60000), persisted to
+  `<configDir>/plugins/proclist.json` the same atomic-JSON way
+  `plugins/mediainfo/settings.go` persists its own settings
+  (`settings.go`/`config_dialog.go`). A changed refresh interval applies to
+  an already-open panel within one refresh cycle; a changed column selection
+  applies the next time the panel is opened (rebuilding the table's columns
+  live is more than this ticket asked for). At least one column must always
+  stay visible -- `Settings.validate` refuses to save a configuration that
+  would leave none.
+
 ## Platform support
 
 - **Linux** (`collector_linux.go`): every readable `/proc/[pid]` entry --
@@ -108,16 +142,23 @@ unconditional, matching how narrowly this plugin scopes everything else.
 - **Suspend/resume on Windows.** See "Process management" above -- no
   supported API, so Ctrl+F8 does nothing there rather than reaching for an
   undocumented one.
-- **Anything else FAR3's ProcList shows**: PPID, thread count, command line,
-  start time, environment, open file handles, WMI performance counters,
-  remote/network process lists. Some of those are candidates for part 4
-  (the FAR3 F3 details view); WMI-perf-counters and the handle viewer are
-  Windows/NT-specific and not planned to be ported at all.
+- **A true command line, environment or open-handle list on Windows/macOS.**
+  See "Process details" above -- both would need an undocumented NT API
+  (Windows) or a hand-parsed, CI-unverifiable buffer layout (macOS), the same
+  class of risk this plugin already declines elsewhere.
+- **Anything else FAR3's ProcList shows**: PPID, thread count, start time,
+  WMI performance counters, remote/network process lists. WMI-perf-counters
+  and the handle viewer are Windows/NT-specific and not planned to be ported
+  at all; PPID/thread count/start time are simply not asked for by f4#312's
+  four parts.
 
 ## Layout
 
 - `plugin.go` -- `Plugin` (`Init`/`Close`/`GetName`), registers the panel
-  provider. No build tag: it defers to `Supported()`.
+  provider and, where the host supports it, `ProcList.Config`'s F9 entry. No
+  build tag: it defers to `Supported()`, and it (and `settings.go`, below)
+  must build on every platform this module targets, not only the three
+  `Supported()` can return true for -- see `settings.go`'s own comment.
 - `collector_linux.go`, `collector_windows.go`, `collector_darwin.go` -- one
   real collector per supported platform, each defining the same
   package-private shape: `Supported`, `sample`, `collector`/`newCollector`,
@@ -130,12 +171,29 @@ unconditional, matching how narrowly this plugin scopes everything else.
   platform of `killProcess`, `changePriority`, `suspendProcess`,
   `resumeProcess` and the `suspendResumeSupported` constant, the same
   per-platform split the collectors already use.
+- `details.go` -- F3's dialog (`showDetails`) and the `procDetails`/
+  `procDetailsSection` shape `collectProcDetails` fills in per platform.
+  Shares `panel.go`'s build tag.
+- `details_linux.go`, `details_windows.go`, `details_darwin.go` -- one real
+  `collectProcDetails` per supported platform, the same per-platform split
+  the collectors and process-management primitives already use.
+- `settings.go` -- `Settings`/`DefaultSettings`/`settingsStore`
+  (load/validate/save, atomic JSON at `<configDir>/plugins/proclist.json`),
+  and `validColumnKeys`/`defaultColumnKeys`/`columnKeysValid`. No build tag
+  (see its own comment) -- `columns_sync_test.go` (which does have `panel.go`'s
+  build tag) keeps `validColumnKeys` in lockstep with `panel.go`'s own,
+  richer `allColumnSpecs`.
+- `config_dialog.go` -- `ProcList.Config`'s dialog (`(*Plugin).configure`):
+  one checkbox per `allColumnSpecs` entry plus a refresh-interval field.
+  Shares `panel.go`'s build tag.
 - `collector_other.go` -- the fallback stub for everything else:
-  `Supported() == false`, and a `newProcListPanel` that only exists so this
-  file has the same shape as the real collectors' (it is never actually
-  called; `Plugin.Init` checks `Supported()` first).
-- `panel.go` -- the panel itself: table columns, formatting, numeric sort
-  comparator, and the refresh ticker. Entirely platform-agnostic (it only
+  `Supported() == false`, and a `newProcListPanel`/`(*Plugin).configure` that
+  only exist so this file has the same shape as the real ones' (neither is
+  ever actually called; `Plugin.Init` checks `Supported()` first).
+- `panel.go` -- the panel itself: table columns (`allColumnSpecs`,
+  filtered by `Settings.VisibleColumns` through `columnSpecsForKeys`),
+  formatting, numeric sort comparator, and the refresh ticker (re-reading
+  `Settings.RefreshInterval` every tick). Entirely platform-agnostic (it only
   names the collector's shape above), so it builds and runs on every
   platform that has a real collector (`//go:build linux || windows ||
   darwin`) without change from part 1.
