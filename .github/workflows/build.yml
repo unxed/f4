@@ -2584,11 +2584,15 @@ jobs:
     permissions:
       contents: write
     steps:
+    # The release check below is a Go tool of this repository. It is checked
+    # out first: checkout empties a directory that is not a repository yet,
+    # which would take dist/ with it.
+    - name: Checkout code
+      uses: actions/checkout@v7
+
     # dist/, for the same reason as the nightly job below: artifacts/ is a
     # tracked directory of audit evidence, so publishing a glob over it ties
-    # the release assets to whatever happens to be checked out. This job does
-    # not check the repository out today, and this keeps that from mattering
-    # if it ever does.
+    # the release assets to whatever happens to be checked out.
     - name: Download all artifacts
       uses: actions/download-artifact@v8
       with:
@@ -2604,6 +2608,20 @@ jobs:
     # outright (you cannot POST a directory as a single asset).
     - name: Prune non-file artifacts (e.g. wine-logs) before publishing
       run: find dist -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+    # Every f4 installed anywhere reads this release with the updater it was
+    # built with, and a shipped updater cannot be fixed (#1656: plugin and
+    # lite archives sorted before f4's own and were installed in its place).
+    # Replay all of them over dist/ and unpack what they would install; on
+    # any problem nothing is published and the previous release stays.
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.6'
+        cache-dependency-path: go.sum
+
+    - name: Check the release against installed updaters
+      run: go run ./tools/releasecheck dist
+
     - name: Publish Release
       uses: softprops/action-gh-release@v3
       with:
@@ -2737,6 +2755,20 @@ jobs:
     # fail outright (you cannot POST a directory as a single asset).
     - name: Prune non-file artifacts (e.g. wine-logs) before publishing
       run: find dist -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+
+    # Every f4 installed anywhere reads this release with the updater it was
+    # built with, and a shipped updater cannot be fixed (#1656: plugin and
+    # lite archives sorted before f4's own and were installed in its place).
+    # Replay all of them over dist/ and unpack what they would install; on
+    # any problem nothing is published and the previous nightly stays.
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: '1.26.6'
+        cache-dependency-path: go.sum
+
+    - name: Check the release against installed updaters
+      run: go run ./tools/releasecheck dist
 
     # The Releases page is sorted by each release's created_at, and GitHub
     # sets that to the date of the tagged commit, not to the moment the

@@ -472,6 +472,13 @@ func Install(data []byte, archiveKind string) error {
 	if err != nil {
 		return err
 	}
+	return installOver(exePath, data, archiveKind)
+}
+
+// installOver is Install for the executable at exePath. The release check
+// (CheckReleaseArchive) runs it over a stand-in, so a release is unpacked
+// by the same code before anyone installs it.
+func installOver(exePath string, data []byte, archiveKind string) error {
 	exeDir := filepath.Dir(exePath)
 	before, err := statExecutable(exePath)
 	if err != nil {
@@ -614,12 +621,17 @@ const releaseAssetPrefix = "f4-"
 func pickAsset(assets []Asset, suffixes []string) (url, updatedAt, kind string) {
 	for _, suffix := range suffixes {
 		for _, a := range assets {
-			if strings.HasPrefix(a.Name, releaseAssetPrefix) && strings.HasSuffix(a.Name, suffix) && !strings.HasSuffix(a.Name, "-lite"+suffix) {
+			if takesAsset(a.Name, suffix) {
 				return a.BrowserDownloadURL, a.UpdatedAt, archiveKindForSuffix(suffix)
 			}
 		}
 	}
 	return "", "", ""
+}
+
+// takesAsset says whether pickAsset takes the asset name for suffix.
+func takesAsset(name, suffix string) bool {
+	return strings.HasPrefix(name, releaseAssetPrefix) && strings.HasSuffix(name, suffix) && !strings.HasSuffix(name, "-lite"+suffix)
 }
 
 func archiveKindForSuffix(suffix string) string {
