@@ -185,7 +185,14 @@ type ReleaseAudit struct {
 // edition; taking anything else, or nothing where the current code finds an
 // archive, is a problem.
 func AuditRelease(names []string) ReleaseAudit {
-	names = slices.Sorted(slices.Values(names))
+	return AuditListedRelease(slices.Sorted(slices.Values(names)))
+}
+
+// AuditListedRelease is AuditRelease over names in the order given, for a
+// published release read back from the GitHub API: the order by name is
+// what the API does, not what it promises, and the builds take the first
+// match in whatever order it is.
+func AuditListedRelease(names []string) ReleaseAudit {
 	flavors := slices.Clone(installedFlavors)
 	for _, name := range names {
 		if f, ok := publishedFlavor(name); ok && !slices.Contains(flavors, f) {
@@ -228,7 +235,7 @@ func AuditRelease(names []string) ReleaseAudit {
 	return audit
 }
 
-// pick is the generation's choice among names, which are sorted.
+// pick is the generation's choice among names, in the order the API lists them.
 func (g generation) pick(names, suffixes []string) (name, kind string) {
 	for _, suffix := range suffixes {
 		for _, n := range names {

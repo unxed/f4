@@ -2633,6 +2633,23 @@ jobs:
         files: dist/*
         generate_release_notes: true
 
+    # The check before publishing replays installed builds over the names
+    # sorted the way the GitHub API lists assets today, which the API does
+    # not promise. Read the release back as the updaters will and replay it
+    # in that order; if they would misread it, turn it back into a draft,
+    # which no updater sees, and fail.
+    - name: Check the published release as the API lists it
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        set -euo pipefail
+        gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' > published-assets.txt
+        if ! go run ./tools/releasecheck -listed published-assets.txt; then
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true
+          exit 1
+        fi
+
   # Эта джоба обновляет Homebrew tap при пуше тэгов v*.*.*,
   # чтобы под macOS можно было поставить f4 одной командой:
   #   brew install <owner>/tap/f4
@@ -2817,3 +2834,20 @@ jobs:
           --title "Continuous Build (Nightly)" \
           --notes "Automated pre-release build of the latest main branch. Commit: $SHORT_SHA. Built on: $BUILD_TIME" \
           --prerelease
+
+    # The check before publishing replays installed builds over the names
+    # sorted the way the GitHub API lists assets today, which the API does
+    # not promise. Read the release back as the updaters will and replay it
+    # in that order; if they would misread it, turn it back into a draft,
+    # which no updater sees, and fail.
+    - name: Check the published release as the API lists it
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: nightly
+      run: |
+        set -euo pipefail
+        gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' > published-assets.txt
+        if ! go run ./tools/releasecheck -listed published-assets.txt; then
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true
+          exit 1
+        fi

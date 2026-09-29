@@ -226,3 +226,21 @@ func TestCheckBuildReadsWhatTheExecutableIs(t *testing.T) {
 		t.Error("a file without build information passed")
 	}
 }
+
+// The API lists assets by name today, and the check before publishing
+// assumes it. Read back in another order, the same release can be misread:
+// v0.1.x takes the first "-linux-amd64.tar.gz" and has no lite check.
+func TestAuditListedReleaseFollowsTheGivenOrder(t *testing.T) {
+	names := slices.Sorted(slices.Values(fixedLayout()))
+	if problems := AuditListedRelease(names).Problems; len(problems) != 0 {
+		t.Fatalf("the release in name order was refused:\n%s", strings.Join(problems, "\n"))
+	}
+	slices.Reverse(names)
+	problems := strings.Join(AuditListedRelease(names).Problems, "\n")
+	if !strings.Contains(problems, "f4 v0.1.2-alpha and v0.1.3-alpha on linux/amd64 would install f4-lite-linux-amd64.tar.gz") {
+		t.Errorf("reversed order was not replayed as listed:\n%s", problems)
+	}
+	if problems := AuditRelease(names).Problems; len(problems) != 0 {
+		t.Errorf("AuditRelease depends on the order it is given:\n%s", strings.Join(problems, "\n"))
+	}
+}

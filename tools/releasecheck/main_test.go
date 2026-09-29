@@ -71,3 +71,27 @@ func TestRunRefusesAnArchiveWithoutTheExecutable(t *testing.T) {
 		t.Errorf("an archive without f4 passed:\n%s", out.String())
 	}
 }
+
+// -listed replays a published release in the order the API returned it.
+func TestRunListedReplaysTheAPIOrder(t *testing.T) {
+	listed := filepath.Join(t.TempDir(), "assets.txt")
+	if err := os.WriteFile(listed, []byte("f4-lite-linux-amd64.tar.gz\nf4-linux-amd64.tar.gz\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if got := run([]string{"-listed", listed}, &out); got != 1 {
+		t.Fatalf("run(-listed) = %d, want 1\n%s", got, out.String())
+	}
+	if !strings.Contains(out.String(), "on linux/amd64 would install f4-lite-linux-amd64.tar.gz") {
+		t.Errorf("the listed order was not replayed:\n%s", out.String())
+	}
+}
+
+func TestRunRejectsBadArguments(t *testing.T) {
+	for _, args := range [][]string{nil, {"a", "b"}, {"-listed", "x", "dir"}, {"-nope"}} {
+		var out bytes.Buffer
+		if got := run(args, &out); got != 2 {
+			t.Errorf("run(%q) = %d, want 2", args, got)
+		}
+	}
+}
