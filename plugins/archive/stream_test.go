@@ -112,7 +112,7 @@ func TestArchiveVFSReaderBackedNestedZipAndTarGzip(t *testing.T) {
 	requireReaderBacked(t, innerArchive, "ZIP inside tar.gz")
 	t.Cleanup(func() { _ = inner.Close() })
 
-	got := readArchiveMember(t, inner, inner.Join(innerPath, "leaf.txt"))
+	got := readArchiveMember(t, innerArchive, inner.Join(innerPath, "leaf.txt"))
 	if !bytes.Equal(got, leaf) {
 		t.Fatalf("nested content = %q, want %q", got, leaf)
 	}
