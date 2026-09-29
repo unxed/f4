@@ -333,6 +333,24 @@ func TestRunCLIInstallsF4RatherThanAPluginArchive(t *testing.T) {
 // LastVersion is what later checks trust, and it kept #1656's old binary
 // "already up to date" for good.
 func TestRunCLIDoesNotRecordAnArchiveThatLeftF4(t *testing.T) {
+	exe := cliUpdateFixture(t, targz(t, map[string]string{"README": "no binary here"}))
+
+	saves := 0
+	if got := RunCLI("", Settings{Channel: ChannelNightly}, Build{}, func(Settings) { saves++ }); got != 1 {
+		t.Fatalf("RunCLI() = %d, want 1", got)
+	}
+	if saves != 0 {
+		t.Errorf("settings saved %d times, want none", saves)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != "old f4" {
+		t.Errorf("binary = %q, want it untouched", got)
+	}
+}
+
+// cliUpdateFixture serves a nightly whose only archive is archive, and
+// installs an "old f4" for RunCLI to update.
+func cliUpdateFixture(t *testing.T, archive []byte) string {
+	t.Helper()
 	oldAPI, oldOS, oldArch, oldProxy := APIURL, CurrentOS, CurrentArch, netproxy.Global()
 	t.Cleanup(func() {
 		APIURL, CurrentOS, CurrentArch = oldAPI, oldOS, oldArch
@@ -340,9 +358,8 @@ func TestRunCLIDoesNotRecordAnArchiveThatLeftF4(t *testing.T) {
 	})
 	CurrentOS, CurrentArch = "linux", "amd64"
 	netproxy.SetGlobal(netproxy.Settings{Mode: netproxy.ModeDirect})
-	installFixture(t)
+	exe := installFixture(t)
 
-	archive := targz(t, map[string]string{"README": "no binary here"})
 	archiveURL := ""
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/archive" {
@@ -354,15 +371,8 @@ func TestRunCLIDoesNotRecordAnArchiveThatLeftF4(t *testing.T) {
 			Assets:  []Asset{{Name: "f4-linux-amd64.tar.gz", BrowserDownloadURL: archiveURL, UpdatedAt: "2026-09-29T00:23:13Z"}},
 		})
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
 	archiveURL = server.URL + "/archive"
 	APIURL = server.URL
-
-	saves := 0
-	if got := RunCLI("", Settings{Channel: ChannelNightly}, Build{}, func(Settings) { saves++ }); got != 1 {
-		t.Fatalf("RunCLI() = %d, want 1", got)
-	}
-	if saves != 0 {
-		t.Errorf("settings saved %d times, want none", saves)
-	}
+	return exe
 }

@@ -114,9 +114,11 @@ func installFixture(t *testing.T) string {
 	if err := os.WriteFile(exe, []byte("old f4"), 0o755); err != nil { // #nosec G306 -- the fixture stands for an executable binary.
 		t.Fatal(err)
 	}
-	oldExecutable := Executable
+	oldExecutable, oldCheck := Executable, CheckInstalled
 	Executable = func() (string, error) { return exe, nil }
-	t.Cleanup(func() { Executable = oldExecutable })
+	// The archives here hold text, not a program to start.
+	CheckInstalled = func() error { return nil }
+	t.Cleanup(func() { Executable, CheckInstalled = oldExecutable, oldCheck })
 	return exe
 }
 

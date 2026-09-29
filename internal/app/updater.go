@@ -218,6 +218,13 @@ func performUpdate(pf *panel.PanelsFrame, cand update.Candidate) {
 			return fmt.Errorf("failed to extract/install update: %w\n(Close other f4 instances, check Task Manager for ghost f4 processes, or try running as admin/root)", err)
 		}
 
+		// A build that does not start here is not kept: the error path below
+		// puts this one back, which can still fetch the fix.
+		updateProgress("Checking the new build...", -1)
+		if err := update.CheckInstalled(); err != nil {
+			return fmt.Errorf("%w\nThe previous build has been put back.", err)
+		}
+
 		return nil
 	}, func(err error) {
 		if err != nil {

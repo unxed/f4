@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"github.com/unxed/f4/internal/panel"
 	"net/http"
 	"net/http/httptest"
@@ -447,11 +448,13 @@ func TestUpdater_PerformUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	origExeFunc := update.Executable
+	origExeFunc, origCheck := update.Executable, update.CheckInstalled
 	update.Executable = func() (string, error) {
 		return mockExe, nil
 	}
-	defer func() { update.Executable = origExeFunc }()
+	// The archive holds text, not a program to start.
+	update.CheckInstalled = func() error { return nil }
+	defer func() { update.Executable, update.CheckInstalled = origExeFunc, origCheck }()
 
 	var tgzBuf bytes.Buffer
 	gw := gzip.NewWriter(&tgzBuf)
@@ -514,6 +517,80 @@ Loop:
 
 	if string(content) != "new_binary" {
 		t.Errorf("Executable replacement failed. Got %q, want 'new_binary'", string(content))
+	}
+}
+
+// A new build that does not start is not kept: the update fails and the
+// previous build, which can still fetch a fix, is put back.
+func TestUpdater_PerformUpdatePutsBackABuildThatDoesNotStart(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	mockExe := filepath.Join(t.TempDir(), "f4")
+	if err := os.WriteFile(mockExe, []byte("old_binary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	origExeFunc, origCheck := update.Executable, update.CheckInstalled
+	update.Executable = func() (string, error) { return mockExe, nil }
+	update.CheckInstalled = func() error { return errors.New("the new build does not start: exit status 127") }
+	defer func() { update.Executable, update.CheckInstalled = origExeFunc, origCheck }()
+
+	var tgzBuf bytes.Buffer
+	gw := gzip.NewWriter(&tgzBuf)
+	tw := tar.NewWriter(gw)
+	if err := tw.WriteHeader(&tar.Header{Name: "f4", Size: int64(len("new_binary")), Mode: 0o755}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("new_binary")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(tgzBuf.Bytes())
+	}))
+	defer ts.Close()
+
+	pf := panel.NewPanelsFrame()
+	defer pf.Close()
+	oldLastVersion := config.App.LastUpdateVersion
+	t.Cleanup(func() { config.App.LastUpdateVersion = oldLastVersion })
+	config.App.LastUpdateVersion = "before"
+	performUpdate(pf, update.Candidate{DownloadURL: ts.URL, ArchiveKind: "targz", UpdateKey: "v9.9.9", NeedsUpdate: true})
+
+	failed := false
+	timeout := time.After(5 * time.Second)
+Loop:
+	for {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+			top := vtui.FrameManager.GetTopFrame()
+			if top == nil {
+				continue
+			}
+			if top.GetTitle() == " Update Successful " {
+				t.Fatal("a build that does not start was reported as installed")
+			}
+			if top.GetTitle() == " Update Failed " {
+				failed = true
+				break Loop
+			}
+		case <-timeout:
+			break Loop
+		}
+	}
+	if !failed {
+		t.Fatal("the failed start was not reported")
+	}
+	if got, _ := os.ReadFile(mockExe); string(got) != "old_binary" {
+		t.Errorf("executable = %q, want the previous build back", got)
+	}
+	if config.App.LastUpdateVersion != "before" {
+		t.Errorf("LastUpdateVersion = %q, want it unchanged", config.App.LastUpdateVersion)
 	}
 }
 

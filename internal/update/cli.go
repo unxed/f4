@@ -101,10 +101,20 @@ func RunCLI(channelArg string, cfg Settings, b Build, save func(Settings)) int {
 		return 1
 	}
 
-	if err := Install(data, cand.ArchiveKind); err != nil {
-		fmt.Printf("f4: install failed: %v\n", err)
+	// The backup is what puts this build back when the new one does not
+	// install, or installs and does not start.
+	backup, err := BackupExecutable()
+	if err != nil {
+		fmt.Printf("f4: %v\n", err)
 		return 1
 	}
+	if err := Install(data, cand.ArchiveKind); err != nil {
+		return rollBack(backup, fmt.Errorf("install failed: %w", err))
+	}
+	if err := CheckInstalled(); err != nil {
+		return rollBack(backup, err)
+	}
+	_ = RemoveExecutableBackup(backup)
 
 	cfg.LastVersion = cand.UpdateKey
 	cfg.LastCheck = time.Now().Unix()
@@ -112,4 +122,15 @@ func RunCLI(channelArg string, cfg Settings, b Build, save func(Settings)) int {
 
 	fmt.Printf("Installed %s. Restart f4 to use it.\n", cand.DisplayVersion)
 	return 0
+}
+
+// rollBack puts the previous build back after a failed update and reports
+// both, returning the exit code.
+func rollBack(backup string, cause error) int {
+	if err := RestoreExecutable(backup); err != nil {
+		fmt.Printf("f4: %v\nf4: putting the previous build back failed as well: %v\n", cause, err)
+		return 1
+	}
+	fmt.Printf("f4: %v\nf4: the previous build is back in place.\n", cause)
+	return 1
 }
