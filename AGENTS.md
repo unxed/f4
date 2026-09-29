@@ -77,8 +77,9 @@ plugins/         # one package per plugin: archive, cloudfox, netfox, mediainfo,
                  # envman, ios, android, sqlite, visren, id3editor, chroma
                  # dummy_internal / dummy_rpc / dummy_lua are transport fixtures
 sdk/             # plugin API: f4plugin, f4rpc, lua, extui
-tools/           # developer tooling, incl. the ttytest terminal harness
-docs/            # 53 subsystem documents — read the relevant one before editing
+tools/           # developer tooling, incl. the ttytest terminal harness and
+                 # releasecheck, the release gate (docs/UPDATER.md)
+docs/            # 56 subsystem documents — read the relevant one before editing
 packaging/       # distribution packaging and the Nix Home Manager module
 artifacts/       # build artifacts
 .ai-factory/     # AI Factory context: config, description, rules, plans
@@ -105,7 +106,8 @@ artifacts/       # build artifacts
 | Document | Path | Description |
 | --- | --- | --- |
 | README | `README.md` | Project overview, downloads, backends, philosophy |
-| Subsystem docs | `docs/*.md` | 53 documents: VFS, PLUGINS, MACROS, KEYMAP, TERMINAL, CONPTY, WINCON, UX_GUIDELINES and others |
+| Subsystem docs | `docs/*.md` | 56 documents: VFS, PLUGINS, MACROS, KEYMAP, TERMINAL, CONPTY, WINCON, UX_GUIDELINES and others |
+| Updater | `docs/UPDATER.md` | Release asset names as an interface with every installed f4, the release check, the rollback |
 | Archive libraries | `docs/ARCHIVE_DEPENDENCIES.md` | The chain of archive libraries (zipper, zip, tar, xz, sevenzip, archives, rardecode) and the rules for updating them |
 | Issue reviews | `docs/ISSUES/` | Per-issue solution reviews |
 | Spreadsheet | `docs/SPREADSHEET.md` | Spreadsheet mode specification |
