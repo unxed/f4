@@ -1,6 +1,7 @@
 package update
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -246,6 +247,8 @@ func TestPickAssetTakesF4NotAPluginArchive(t *testing.T) {
 		{name: "windows", goos: "windows", goarch: "amd64", want: "f4-windows-amd64.zip"},
 		// The legacy build's own archive is named apart, and still found.
 		{name: "legacy windows 386", goos: "windows", goarch: "386", want: "f4-legacy-windows-386.zip"},
+		// The Windows 7/8/8.1 build asks for its own archive (releaseOS).
+		{name: "windows 7", goos: "windows7", goarch: "amd64", want: "f4-windows7-amd64.zip"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -262,5 +265,27 @@ func TestPickAssetRefusesAPluginOnlyRelease(t *testing.T) {
 	assets := []Asset{{Name: "cloudfox-plugin-linux-amd64.tar.gz", BrowserDownloadURL: "https://example/cloudfox"}}
 	if url, _, _ := pickAsset(assets, assetSuffixes("linux", "amd64", "")); url != "" {
 		t.Errorf("picked %q from a release without f4", url)
+	}
+}
+
+// The regular Windows build does not start on Windows 7/8/8.1, and the
+// Windows 7 build is the only one that does: each asks for its own archive,
+// and neither name ends with the other's suffix (#1656).
+func TestWindows7BuildAsksForItsOwnArchive(t *testing.T) {
+	if releaseOS("windows") != "windows" || releaseOS("linux") != "linux" {
+		t.Fatalf("releaseOS renames a platform outside the win7 build")
+	}
+	if got := assetSuffixes("windows7", "amd64", ""); !slices.Equal(got, []string{"-windows7-amd64.7z", "-windows7-amd64.zip"}) {
+		t.Errorf("windows7 suffixes = %v", got)
+	}
+	for _, suffix := range assetSuffixes("windows", "amd64", "") {
+		if takesAsset("f4-windows7-amd64.zip", suffix) {
+			t.Errorf("the regular Windows build takes the Windows 7 archive for %q", suffix)
+		}
+	}
+	for _, suffix := range assetSuffixes("windows7", "amd64", "") {
+		if takesAsset("f4-windows-amd64.zip", suffix) || takesAsset("f4-windows-amd64.7z", suffix) {
+			t.Errorf("the Windows 7 build takes the regular archive for %q", suffix)
+		}
 	}
 }

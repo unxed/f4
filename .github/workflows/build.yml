@@ -1295,9 +1295,14 @@ jobs:
           APP_LDFLAGS="$APP_LDFLAGS -X $VERSION_SYMBOL=$GITHUB_REF_NAME"
         fi
 
-        go build -trimpath -ldflags="$APP_LDFLAGS" -o build/f4.exe ./cmd/f4
+        # -tags win7 tells the updater it is this build, so it updates to
+        # f4-windows7-amd64.zip. Without it, it asked for the regular Windows
+        # archive like any windows/amd64 f4, and installed a build that
+        # does not start on Windows 7/8/8.1 (#1656). The release check reads
+        # the tag back from the archive.
+        go build -tags win7 -trimpath -ldflags="$APP_LDFLAGS" -o build/f4.exe ./cmd/f4
         # GUI-only binary (no console flash), same as in the main matrix.
-        go build -trimpath -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui.exe ./cmd/f4
+        go build -tags win7 -trimpath -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui.exe ./cmd/f4
 
         cp -r internal/i18n/lang internal/dialog/help build/
         cp f4.example.ini build/

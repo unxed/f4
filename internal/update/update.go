@@ -178,7 +178,7 @@ func Check(ctx context.Context, cfg Settings, b Build) (Candidate, error) {
 		return Candidate{}, fmt.Errorf("failed to parse API response: %w", err)
 	}
 
-	downloadURL, assetUpdated, archiveKind := pickAsset(release.Assets, editionAssetSuffixes(liteEdition, CurrentOS, CurrentArch, currentLibc))
+	downloadURL, assetUpdated, archiveKind := pickAsset(release.Assets, editionAssetSuffixes(liteEdition, releaseOS(CurrentOS), CurrentArch, currentLibc))
 	if downloadURL == "" {
 		return Candidate{}, fmt.Errorf("no suitable build found for your OS/Arch")
 	}
@@ -558,8 +558,9 @@ func extract(data []byte, archiveKind, destDir string) error {
 // true, and does not happen, because a musl asset name ends in
 // "-musl-<arch>.tar.gz" and so never matches a glibc build's suffix.
 func assetSuffixes(goos, goarch, libc string) []string {
-	if goos == "windows" {
-		// Windows: priority order .7z, then .zip.
+	if goos == "windows" || goos == "windows7" {
+		// Windows: priority order .7z, then .zip. "windows7" is the
+		// Windows 7/8/8.1 build's own archive (releaseOS).
 		return []string{
 			fmt.Sprintf("-%s-%s.7z", goos, goarch),
 			fmt.Sprintf("-%s-%s.zip", goos, goarch),

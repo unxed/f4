@@ -54,6 +54,7 @@ func TestAuditReleaseAcceptsTheFixedLayout(t *testing.T) {
 		"f4-windows-amd64.zip":         {Name: "f4-windows-amd64.zip", Kind: "zip", Executable: "f4.exe"},
 		"f4-lite-windows-amd64.tar.gz": {Name: "f4-lite-windows-amd64.tar.gz", Kind: "targz", Executable: "f4.exe"},
 		"f4-legacy-windows-386.zip":    {Name: "f4-legacy-windows-386.zip", Kind: "zip", Executable: "f4-legacy.exe"},
+		"f4-windows7-amd64.zip":        {Name: "f4-windows7-amd64.zip", Kind: "zip", Executable: "f4.exe"},
 		"f4-termux-arm64.tar.gz":       {Name: "f4-termux-arm64.tar.gz", Kind: "targz", Executable: "f4"},
 	}
 	for _, a := range audit.Archives {
@@ -122,7 +123,7 @@ func TestPublishedFlavor(t *testing.T) {
 		"f4-windows-arm64.7z":          "windows/arm64",
 		"f4-darwin-arm64.app.zip":      "",
 		"f4-termux-arm64.deb":          "",
-		"f4-windows7-amd64.zip":        "",
+		"f4-windows7-amd64.zip":        "windows7/amd64",
 		"ios-plugin-linux-amd64.tgz":   "",
 	}
 	for name, want := range tests {

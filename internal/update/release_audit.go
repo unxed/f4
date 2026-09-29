@@ -55,12 +55,19 @@ type generation struct {
 // one whenever pickAsset or editionAssetSuffixes changes what it picks: the
 // builds released before the change keep the old rule for good. The last one
 // is the current code.
+//
+// Only the current code knows the Windows 7/8/8.1 build ("windows7"). Every
+// earlier one of those builds (published from 2026-08-20) asks for the
+// regular windows/amd64 archive, exactly as a regular build does, so no
+// asset name can serve them their own; they are the regular windows/amd64
+// flavor here, and they install a build that does not start on their system
+// until reinstalled by hand.
 var generations = []generation{
 	{
 		// No .7z, no Termux name, no musl, no lite edition.
 		who: "f4 v0.1.2-alpha and v0.1.3-alpha",
 		suffixes: func(f flavor) []string {
-			if f.lite || f.libc != "" || f.goos == "android" {
+			if f.lite || f.libc != "" || f.goos == "android" || f.goos == "windows7" {
 				return nil
 			}
 			if f.goos == "windows" {
@@ -72,7 +79,7 @@ var generations = []generation{
 	{
 		who: "f4 v0.2.0-beta to v0.3.0-beta and nightlies before 2026-09-27",
 		suffixes: func(f flavor) []string {
-			if f.lite {
+			if f.lite || f.goos == "windows7" {
 				return nil
 			}
 			return assetSuffixes(f.goos, f.goarch, f.libc)
@@ -86,7 +93,7 @@ var generations = []generation{
 		// builds say "no suitable build found" until reinstalled by hand.
 		who: "f4 nightlies from 2026-09-27 to the #1656 fix",
 		suffixes: func(f flavor) []string {
-			if f.lite && f.goos == "windows" {
+			if (f.lite && f.goos == "windows") || f.goos == "windows7" {
 				return nil
 			}
 			return editionAssetSuffixes(f.lite, f.goos, f.goarch, f.libc)
@@ -130,6 +137,8 @@ var installedFlavors = []flavor{
 	// The legacy (ReactOS/XP) build; f4-legacy-windows-386.zip is its own.
 	{goos: "windows", goarch: "386"},
 	{goos: "windows", goarch: "amd64", lite: true},
+	// The Windows 7/8/8.1 build, f4-windows7-amd64.zip (see releaseOS).
+	{goos: "windows7", goarch: "amd64"},
 	{goos: "darwin", goarch: "amd64"},
 	{goos: "darwin", goarch: "arm64"},
 	{goos: "freebsd", goarch: "amd64"},
@@ -248,7 +257,8 @@ func acceptedArchives(names, suffixes []string) []string {
 // publishedFlavor reads the platform from the name of an archive of f4, so a
 // platform added to the release is checked without being listed above.
 // Names that are not "f4-[lite-]<os>-[musl-]<arch>.<tar.gz|zip|7z>" -- the
-// macOS .app.zip, the Termux .deb, f4-windows7-amd64.zip -- say nothing.
+// macOS .app.zip, the Termux .deb -- say nothing. <os> is the name releaseOS
+// gives: a GOOS, "termux" for Android, or "windows7".
 func publishedFlavor(name string) (flavor, bool) {
 	rest, ok := strings.CutPrefix(name, releaseAssetPrefix)
 	if !ok {
@@ -282,17 +292,17 @@ func publishedFlavor(name string) (flavor, bool) {
 	case "legacy-windows":
 		f.goos = "windows"
 	}
-	if !knownGOOS[f.goos] || !knownGOARCH[f.goarch] {
+	if !knownAssetOS[f.goos] || !knownGOARCH[f.goarch] {
 		return flavor{}, false
 	}
 	return f, true
 }
 
 var (
-	knownGOOS = map[string]bool{
+	knownAssetOS = map[string]bool{
 		"aix": true, "android": true, "darwin": true, "dragonfly": true, "freebsd": true,
 		"illumos": true, "ios": true, "linux": true, "netbsd": true, "openbsd": true,
-		"plan9": true, "solaris": true, "windows": true,
+		"plan9": true, "solaris": true, "windows": true, "windows7": true,
 	}
 	knownGOARCH = map[string]bool{
 		"386": true, "amd64": true, "arm": true, "arm64": true, "loong64": true,
@@ -307,7 +317,7 @@ func archiveExecutable(name string, f flavor) string {
 	switch {
 	case strings.HasPrefix(name, releaseAssetPrefix+"legacy-"):
 		return "f4-legacy.exe"
-	case f.goos == "windows":
+	case f.goos == "windows" || f.goos == "windows7":
 		return "f4.exe"
 	}
 	return "f4"
