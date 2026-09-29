@@ -174,12 +174,14 @@ func TestUpdateAssetSuffixes_EditionsDoNotCross(t *testing.T) {
 	}
 }
 
-// A lite build cannot unpack .7z (internal/unpack's formats_lite.go), so on
-// Windows it looks for the .zip asset only.
-func TestUpdateAssetSuffixes_LiteWindowsIsZipOnly(t *testing.T) {
+// #1656: a lite Windows .zip is what f4 up to v0.1.3-alpha takes for the
+// regular edition's update, so lite is published, and looked for, as a
+// .tar.gz on Windows too. A lite build cannot unpack .7z either
+// (internal/unpack's formats_lite.go).
+func TestUpdateAssetSuffixes_LiteWindowsIsTarGz(t *testing.T) {
 	got := editionAssetSuffixes(true, "windows", "amd64", "")
-	if len(got) != 1 || got[0] != "-lite-windows-amd64.zip" {
-		t.Errorf("lite windows suffixes = %v, want [-lite-windows-amd64.zip]", got)
+	if len(got) != 1 || got[0] != "-lite-windows-amd64.tar.gz" {
+		t.Errorf("lite windows suffixes = %v, want [-lite-windows-amd64.tar.gz]", got)
 	}
 }
 

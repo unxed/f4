@@ -352,11 +352,25 @@ jobs:
           bash scripts/check_release_version.sh docker run "${run_args[@]}" "$image" /mnt/f4 --version
         done
 
+    # Windows is published as .7z as well as .zip (#1656). f4 from v0.2.0-beta
+    # to v0.3.0-beta asks for .7z first and otherwise takes the first .zip by
+    # name that ends with "-windows-<arch>.zip", and f4-lite-windows-amd64.zip
+    # used to sort before f4-windows-amd64.zip: without the .7z those builds
+    # updated themselves into the lite edition. The .7z holds exactly what the
+    # .zip does; filters are off (-mf=off) so any 7z reader f4 ever shipped
+    # decodes it.
     - name: Package
       if: steps.affected.outputs.build == 'yes'
       run: |
         if [ "${{ matrix.goos }}" = "windows" ]; then
           (cd build && zip -r "../$ASSET.zip" .)
+          SEVENZIP=$(command -v 7z || command -v 7zz || command -v 7za || true)
+          if [ -z "$SEVENZIP" ]; then
+            sudo apt-get update -qq </dev/null
+            sudo apt-get install -y -qq 7zip </dev/null
+            SEVENZIP=$(command -v 7zz || command -v 7z)
+          fi
+          (cd build && "$SEVENZIP" a -t7z -mx=9 -mf=off -bd "../$ASSET.7z" . </dev/null)
         else
           # Создаем архив в корне, упаковывая содержимое build (без самой папки build)
           tar -czvf "$ASSET.tar.gz" -C build .
@@ -746,13 +760,14 @@ jobs:
         sudo apt-get install -y -qq qemu-user-static </dev/null
         bash scripts/check_release_version.sh "qemu-$QEMU-static" ./build/f4 --version </dev/null
 
+    # Every lite archive is a .tar.gz, the Windows one included (#1656). A
+    # lite .zip ends with "-windows-amd64.zip", and f4 up to v0.1.3-alpha
+    # takes the first asset by name with that suffix: f4-lite-windows-amd64.zip
+    # sorts before f4-windows-amd64.zip, so the regular edition would update
+    # itself into lite. No regular Windows updater looks for a .tar.gz, and
+    # the lite updater unpacks one on every OS.
     - name: Package
-      run: |
-        if [ "$GOOS" = "windows" ]; then
-          (cd build && zip -r "../$ASSET.zip" .)
-        else
-          tar -czvf "$ASSET.tar.gz" -C build .
-        fi
+      run: tar -czvf "$ASSET.tar.gz" -C build .
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v7

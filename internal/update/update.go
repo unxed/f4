@@ -577,13 +577,16 @@ func assetSuffixes(goos, goarch, libc string) []string {
 // A lite build updates to the lite asset only: f4-lite-linux-amd64.tar.gz
 // ends with "-linux-amd64.tar.gz" as well, and the regular asset the plain
 // suffix would also match is a different program. There is no musl lite
-// flavor, and no .7z, which a lite build cannot unpack.
+// flavor.
+//
+// Lite is a .tar.gz on Windows too (#1656). A lite .zip ends with
+// "-windows-amd64.zip", and f4 up to v0.1.3-alpha takes the first .zip by
+// name with that suffix -- f4-lite-windows-amd64.zip, before
+// f4-windows-amd64.zip -- so the regular edition updated itself into lite.
+// No regular Windows updater asks for a .tar.gz.
 func editionAssetSuffixes(lite bool, goos, goarch, libc string) []string {
 	if !lite {
 		return assetSuffixes(goos, goarch, libc)
-	}
-	if goos == "windows" {
-		return []string{fmt.Sprintf("-lite-%s-%s.zip", goos, goarch)}
 	}
 	return []string{fmt.Sprintf("-lite-%s-%s.tar.gz", goos, goarch)}
 }
