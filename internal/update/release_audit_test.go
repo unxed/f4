@@ -3,6 +3,9 @@ package update
 import (
 	"archive/zip"
 	"bytes"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -49,13 +52,13 @@ func TestAuditReleaseAcceptsTheFixedLayout(t *testing.T) {
 		t.Error(p)
 	}
 	want := map[string]ReleaseArchive{
-		"f4-linux-amd64.tar.gz":        {Name: "f4-linux-amd64.tar.gz", Kind: "targz", Executable: "f4"},
-		"f4-windows-amd64.7z":          {Name: "f4-windows-amd64.7z", Kind: "7z", Executable: "f4.exe"},
-		"f4-windows-amd64.zip":         {Name: "f4-windows-amd64.zip", Kind: "zip", Executable: "f4.exe"},
-		"f4-lite-windows-amd64.tar.gz": {Name: "f4-lite-windows-amd64.tar.gz", Kind: "targz", Executable: "f4.exe"},
-		"f4-legacy-windows-386.zip":    {Name: "f4-legacy-windows-386.zip", Kind: "zip", Executable: "f4-legacy.exe"},
-		"f4-windows7-amd64.zip":        {Name: "f4-windows7-amd64.zip", Kind: "zip", Executable: "f4.exe"},
-		"f4-termux-arm64.tar.gz":       {Name: "f4-termux-arm64.tar.gz", Kind: "targz", Executable: "f4"},
+		"f4-linux-amd64.tar.gz":        {Name: "f4-linux-amd64.tar.gz", Kind: "targz", Executable: "f4", GOOS: "linux", GOARCH: "amd64"},
+		"f4-windows-amd64.7z":          {Name: "f4-windows-amd64.7z", Kind: "7z", Executable: "f4.exe", GOOS: "windows", GOARCH: "amd64"},
+		"f4-windows-amd64.zip":         {Name: "f4-windows-amd64.zip", Kind: "zip", Executable: "f4.exe", GOOS: "windows", GOARCH: "amd64"},
+		"f4-lite-windows-amd64.tar.gz": {Name: "f4-lite-windows-amd64.tar.gz", Kind: "targz", Executable: "f4.exe", GOOS: "windows", GOARCH: "amd64", Edition: "lite"},
+		"f4-legacy-windows-386.zip":    {Name: "f4-legacy-windows-386.zip", Kind: "zip", Executable: "f4-legacy.exe", GOOS: "windows", GOARCH: "386", Edition: "go2xp"},
+		"f4-windows7-amd64.zip":        {Name: "f4-windows7-amd64.zip", Kind: "zip", Executable: "f4.exe", GOOS: "windows", GOARCH: "amd64", Edition: "win7"},
+		"f4-termux-arm64.tar.gz":       {Name: "f4-termux-arm64.tar.gz", Kind: "targz", Executable: "f4", GOOS: "android", GOARCH: "arm64"},
 	}
 	for _, a := range audit.Archives {
 		if w, ok := want[a.Name]; ok {
@@ -165,5 +168,61 @@ func TestCheckReleaseArchive(t *testing.T) {
 	}
 	if err := CheckReleaseArchive(buf.Bytes(), ReleaseArchive{Name: "f4-legacy-windows-386.zip", Kind: "zip", Executable: "f4-legacy.exe"}); err == nil {
 		t.Error("an archive without f4-legacy.exe was accepted for the legacy build")
+	}
+}
+
+// The executable in an archive has to be the build its name promises: the
+// wrong platform does not start, and the wrong edition moves its users to
+// another update channel. This test binary stands in for one.
+func TestCheckBuildReadsWhatTheExecutableIs(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edition := ""
+	switch {
+	case liteEdition:
+		edition = "lite"
+	case windows7Build:
+		edition = "win7"
+	}
+	a := ReleaseArchive{Executable: "f4", GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Edition: edition}
+	if err := checkBuild(self, a); err != nil {
+		t.Fatalf("the build as it is was refused: %v", err)
+	}
+
+	wrongArch := a
+	wrongArch.GOARCH = "mips64le"
+	if runtime.GOARCH == "mips64le" {
+		wrongArch.GOARCH = "amd64"
+	}
+	if err := checkBuild(self, wrongArch); err == nil || !strings.Contains(err.Error(), "is built for") {
+		t.Errorf("a build for another architecture passed: %v", err)
+	}
+
+	for _, other := range editionTags {
+		if other == edition {
+			continue
+		}
+		wrongEdition := a
+		wrongEdition.Edition = other
+		if err := checkBuild(self, wrongEdition); err == nil {
+			t.Errorf("a build without -tags %s passed as that edition", other)
+		}
+	}
+	if edition != "" {
+		regular := a
+		regular.Edition = ""
+		if err := checkBuild(self, regular); err == nil {
+			t.Errorf("a %s build passed as the regular edition", edition)
+		}
+	}
+
+	notGo := filepath.Join(t.TempDir(), "f4")
+	if err := os.WriteFile(notGo, []byte("not a program"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkBuild(notGo, a); err == nil {
+		t.Error("a file without build information passed")
 	}
 }

@@ -1,6 +1,7 @@
 package update
 
 import (
+	"debug/buildinfo"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -162,6 +163,12 @@ type ReleaseArchive struct {
 	Kind string
 	// Executable is the file it has to replace.
 	Executable string
+	// GOOS and GOARCH are what the executable must be built for, and Edition
+	// the build tag of the edition its name promises ("lite", "win7",
+	// "go2xp" for the legacy build), empty for the regular edition. The
+	// release check reads them back from the executable's build information;
+	// an empty GOOS skips that.
+	GOOS, GOARCH, Edition string
 }
 
 // ReleaseAudit is what AuditRelease found.
@@ -214,7 +221,7 @@ func AuditRelease(names []string) ReleaseAudit {
 			}
 			if !seen[name] {
 				seen[name] = true
-				audit.Archives = append(audit.Archives, ReleaseArchive{Name: name, Kind: kind, Executable: archiveExecutable(name, f)})
+				audit.Archives = append(audit.Archives, releaseArchive(name, kind, f))
 			}
 		}
 	}
@@ -311,6 +318,31 @@ var (
 	}
 )
 
+// releaseArchive describes an archive a build of flavor f takes. What the
+// executable in it must be built for comes from the archive's own name: a
+// musl build may take the regular Linux archive.
+func releaseArchive(name, kind string, f flavor) ReleaseArchive {
+	a := ReleaseArchive{Name: name, Kind: kind, Executable: archiveExecutable(name, f)}
+	own, ok := publishedFlavor(name)
+	if !ok {
+		return a
+	}
+	a.GOOS, a.GOARCH = own.goos, own.goarch
+	switch {
+	case own.lite:
+		a.Edition = "lite"
+	case own.goos == "windows7":
+		a.GOOS, a.Edition = "windows", "win7"
+	case strings.HasPrefix(name, releaseAssetPrefix+"legacy-"):
+		a.Edition = "go2xp"
+	}
+	return a
+}
+
+// editionTags are the build tags that make an edition. A build carries the
+// one its archive's name promises, and none of the others.
+var editionTags = []string{"lite", "win7", "go2xp"}
+
 // archiveExecutable is the file an archive has to replace: f4, f4.exe, and
 // for the legacy Windows build the f4-legacy.exe its archive holds.
 func archiveExecutable(name string, f flavor) string {
@@ -325,7 +357,8 @@ func archiveExecutable(name string, f flavor) string {
 
 // CheckReleaseArchive unpacks a release archive the way the updater does,
 // over a stand-in for the executable it names, and fails unless the
-// executable was replaced.
+// executable was replaced by a build for the platform and edition the
+// archive's name promises.
 func CheckReleaseArchive(data []byte, a ReleaseArchive) error {
 	dir, err := os.MkdirTemp("", "f4-release-check-*")
 	if err != nil {
@@ -336,5 +369,39 @@ func CheckReleaseArchive(data []byte, a ReleaseArchive) error {
 	if err := os.WriteFile(exe, []byte("installed f4"), 0o755); err != nil { // #nosec G306 -- the stand-in is an executable the archive must replace.
 		return err
 	}
-	return installOver(exe, data, a.Kind)
+	if err := installOver(exe, data, a.Kind); err != nil {
+		return err
+	}
+	if a.GOOS == "" {
+		return nil
+	}
+	return checkBuild(exe, a)
+}
+
+// checkBuild compares the executable's build information with what the
+// archive promises: the wrong platform does not start, and the wrong edition
+// takes its users with it into another update channel.
+func checkBuild(exe string, a ReleaseArchive) error {
+	info, err := buildinfo.ReadFile(exe)
+	if err != nil {
+		return fmt.Errorf("%s carries no Go build information: %w", a.Executable, err)
+	}
+	settings := map[string]string{}
+	for _, s := range info.Settings {
+		settings[s.Key] = s.Value
+	}
+	if settings["GOOS"] != a.GOOS || settings["GOARCH"] != a.GOARCH {
+		return fmt.Errorf("%s is built for %s/%s, not %s/%s", a.Executable, settings["GOOS"], settings["GOARCH"], a.GOOS, a.GOARCH)
+	}
+	tags := strings.Split(settings["-tags"], ",")
+	for _, tag := range editionTags {
+		if slices.Contains(tags, tag) != (tag == a.Edition) {
+			want := "the regular edition"
+			if a.Edition != "" {
+				want = "-tags " + a.Edition
+			}
+			return fmt.Errorf("%s is built with -tags %q, the archive's name wants %s", a.Executable, settings["-tags"], want)
+		}
+	}
+	return nil
 }
