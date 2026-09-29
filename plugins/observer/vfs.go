@@ -133,7 +133,7 @@ func newObserverVFS(ctx context.Context, parent vfs.VFS, arcPath string, wasmByt
 		guestName = "target"
 	}
 
-	ra, err := parent.Open(ctx, arcPath)
+	ra, err := parent.Open(vfs.WithStreamRead(ctx), arcPath)
 	if err != nil {
 		return nil, err
 	}

@@ -252,8 +252,11 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 	}
 
 	v.mu.Lock()
+	parent := v.parent
+	arcPath := v.arcPath
 	localPath := v.activePath()
 	displayName := v.displayName
+	readerBacked := v.readerBacked
 	failedGen := v.passwordGen
 	v.mu.Unlock()
 
@@ -284,6 +287,23 @@ func (v *ArchiveVFS) openWithPassword(ctx context.Context, cause error) error {
 		password, err := promptArchivePasswordUntilProvided(ctx, displayName)
 		if err != nil {
 			return err
+		}
+		if readerBacked {
+			lease, leaseErr := acquireArchiveMaterialization(ctx, parent, arcPath, displayName)
+			if leaseErr != nil {
+				return leaseErr
+			}
+			fsys, cleanupTransferred, openErr := openArchiveFSWithContext(ctx, lease.Path(), displayName, lease, password)
+			if openErr != nil {
+				if !cleanupTransferred {
+					_ = lease.Close()
+				}
+				if isArchivePasswordRetryError(openErr) {
+					continue
+				}
+				return openErr
+			}
+			return v.installPasswordFSWithBacking(fsys, password, lease, lease.Path())
 		}
 		fsys, _, err := openArchiveFSWithContext(ctx, localPath, displayName, nil, password)
 		if err != nil {
@@ -330,6 +350,33 @@ func (v *ArchiveVFS) installPasswordFS(fsys zipperarchive.FileSystem, password s
 	v.mu.Unlock()
 	if oldFS != nil {
 		_ = oldFS.Close()
+	}
+	return nil
+}
+
+func (v *ArchiveVFS) installPasswordFSWithBacking(fsys zipperarchive.FileSystem, password string, backing io.Closer, backingPath string) error {
+	v.mu.Lock()
+	if v.isClosed {
+		v.mu.Unlock()
+		_ = fsys.Close()
+		_ = backing.Close()
+		return errors.New("archive VFS is closed")
+	}
+	v.cancelCleanupLocked()
+	oldFS := v.fsys
+	oldCloser := v.closer
+	v.fsys = fsys
+	v.closer = backing
+	v.backingPath = backingPath
+	v.readerBacked = false
+	v.password = password
+	v.passwordGen++
+	v.mu.Unlock()
+	if oldFS != nil {
+		_ = oldFS.Close()
+	}
+	if oldCloser != nil {
+		_ = oldCloser.Close()
 	}
 	return nil
 }

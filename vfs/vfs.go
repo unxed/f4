@@ -16,6 +16,29 @@ import (
 
 var CustomConfigDir string
 
+type streamReadContextKey struct{}
+
+// WithStreamRead asks a VFS provider to preserve a member as a
+// reader-backed handle when that is possible. Providers may ignore the hint
+// and keep their existing materialization or format-specific path.
+func WithStreamRead(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, streamReadContextKey{}, true)
+}
+
+// StreamReadRequested reports whether a VFS open is part of a reader-backed
+// provider composition. It is a hint, not a guarantee that the returned
+// handle has cheap random access.
+func StreamReadRequested(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	requested, _ := ctx.Value(streamReadContextKey{}).(bool)
+	return requested
+}
+
 // App defines the interface for plugin-to-core UI interactions.
 type App interface {
 	GetActivePanelVFS() VFS

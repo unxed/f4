@@ -114,4 +114,15 @@
 // f4#1563's own item 5 (partial-decompression zran-style ReadAt for nested
 // archives) has no Observer-side equivalent to build -- only plugins/archive
 // zip/deflate members can ever get that treatment.
+//
+// # Nested archive composition (f4#1653)
+//
+// The input side of ObserverVFS already uses the parent's ReadAt-backed WASI
+// mount, so an Observer container can participate in the generic
+// reader-backed archive composition path in plugins/archive. That path avoids
+// copying an archive intermediary before the next provider opens it. The
+// output side has the ABI limit described above: opening an Observer item
+// still calls ExtractItem and materializes the complete item in the temporary
+// extraction directory. This is intentional and documented; it is not a
+// claim that Observer items have random-access streams.
 package observer
