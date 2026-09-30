@@ -14,8 +14,7 @@ TERMUX_PKG_MAINTAINER="@unxed"
 _UPSTREAM_TAG="v0.3.0-beta"
 TERMUX_PKG_VERSION="0.3.0~beta"
 TERMUX_PKG_SRCURL="https://github.com/unxed/f4/archive/refs/tags/${_UPSTREAM_TAG}.tar.gz"
-# Fill in with `sha256sum` of the tarball above when the recipe is submitted.
-TERMUX_PKG_SHA256=SKIP_CHECKSUM
+TERMUX_PKG_SHA256=ca7b2c711cc3d4dc14e63a0b08b0098e58e0c40b75441e44f828a8ec7ae1b4be
 TERMUX_PKG_AUTO_UPDATE=false
 TERMUX_PKG_BUILD_IN_SRC=true
 
