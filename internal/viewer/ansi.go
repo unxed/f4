@@ -1,6 +1,9 @@
 package viewer
 
 import (
+	"path"
+	"strings"
+
 	"github.com/unxed/vtui"
 )
 
@@ -224,4 +227,14 @@ func applySGR(attr, base uint64, args []int, i int) (uint64, int) {
 		return attr, len(args) - i
 	}
 	return attr, 1
+}
+
+// isANSIFileName reports whether the name says the file is ANSI art or a
+// terminal capture: far2l opens *.ans and *.ansi in its colour mode.
+func isANSIFileName(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".ans", ".ansi":
+		return true
+	}
+	return false
 }

@@ -127,3 +127,13 @@ func TestANSIRowCellsCarryColoursAcrossRows(t *testing.T) {
 		t.Errorf("next row starts with fg %d, want 2", vtui.GetIndexFore(next[0].Attributes))
 	}
 }
+
+func TestIsANSIFileName(t *testing.T) {
+	for name, want := range map[string]bool{
+		"art.ans": true, "/a/b/ART.ANSI": true, "boot.log": false, "ans": false, "x.ans.txt": false,
+	} {
+		if got := isANSIFileName(name); got != want {
+			t.Errorf("isANSIFileName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
