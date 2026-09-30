@@ -139,6 +139,18 @@ can be made before the shell is started.
 there is nothing to synchronize; skipping it when the paths already match
 cannot change the behaviour the owner wants kept.
 
+*Change made (2026-09-30, unxed/f4#1673; not yet confirmed by the reporter,
+untested on Windows).* The first directory sync of a local cmd.exe shell is now
+skipped when the panel shows the directory the shell was started in
+(`PanelsFrame.localShellAlreadyIn`: f4's working directory, which the shell
+inherits, against the active local panel's path, compared case-insensitively).
+No line is typed, so there is no echo, no second prompt and no erase-line on
+the row of prompt 1 before the first resize. Every later sync, other VFSes,
+POSIX shells and a start with different directories in f4's working directory
+and the panel are unchanged. The way of synchronizing is not changed (section 1,
+point 2). If the stray path still shows up after this, the cause is somewhere
+else in the startup sequence (look at the erase-line and the first resize again).
+
 ## 5. Tickets with the same family of problem (for the trail)
 
 | Ticket | State | What it was |

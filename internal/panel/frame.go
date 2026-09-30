@@ -381,8 +381,13 @@ type PanelsFrame struct {
 	CommandLineFocused bool
 
 	LastPtyPath string
-	LastPtyVFS  vfs.VFS
-	Closed      bool
+	// localShellStartDir is the directory the local shell was started in (f4's
+	// own working directory, which the shell inherits); guarded by PtyMutex.
+	// The first directory sync is skipped when the panel is already there
+	// (docs/TERMINAL_JUNK_LOG.md, section 4).
+	localShellStartDir string
+	LastPtyVFS         vfs.VFS
+	Closed             bool
 
 	ShellMode             terminal.ShellMode
 	HostConsoleActive     bool
@@ -1496,6 +1501,7 @@ func (pf *PanelsFrame) InitPTY() {
 				return
 			}
 			pf.Pty = p
+			pf.localShellStartDir, _ = os.Getwd()
 			pf.localReflow = pf.ShellMode == terminal.ShellModeOwn && terminal.PreservesLogicalLines(p)
 			vtui.DebugLog("PTY: local shell started; reflow %v", pf.localReflow)
 			serializedPTY := &processEnvironmentSerializedPTY{owner: pf, Backend: p}
@@ -5283,6 +5289,10 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 		return true
 	}
 
+	if isWindowsShell && !uncertain && pf.localShellAlreadyIn(path, v, activePty) {
+		return true
+	}
+
 	if isWindowsShell {
 		_, _ = pf.WritePTY(activePty, []byte(fmt.Sprintf("cd /d \"%s\" & rem f4_sync\r", path)))
 		pf.NoteLocalShellLineSent(activePty)
@@ -5295,6 +5305,40 @@ func (pf *PanelsFrame) syncPTYDirectory(path string, v vfs.VFS) bool {
 		_, _ = pf.WritePTY(activePty, []byte(fmt.Sprintf(" cd '%s' && true f4_sync\r", sqPath)))
 	}
 	return !uncertain
+}
+
+// localShellAlreadyIn reports that the very first directory sync of a local
+// shell has nothing to do: the shell starts in f4's working directory, and when
+// the active panel shows that same local directory, typing "cd" only puts an
+// echo, a blank line and a second prompt into a console that is still at its
+// startup size, where they are the stray path at the top of the console
+// (unxed/f4#1673, docs/TERMINAL_JUNK_LOG.md section 4). Later syncs are never
+// skipped. Only for cmd.exe, where the stray path was seen; a POSIX shell's
+// startup files may move it elsewhere, so it is always told.
+func (pf *PanelsFrame) localShellAlreadyIn(path string, v vfs.VFS, pty terminal.PtyBackend) bool {
+	if pf.LastPtyPath != "" || pf.LastPtyVFS != nil {
+		return false
+	}
+	if _, local := v.(*vfs.OSVFS); !local || !pf.isLocalPTY(pty) {
+		return false
+	}
+	pf.PtyMutex.Lock()
+	start := pf.localShellStartDir
+	pf.PtyMutex.Unlock()
+	return samePanelDir(start, path)
+}
+
+// samePanelDir compares two local directory paths the way the host file
+// system does: case-insensitively on Windows.
+func samePanelDir(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 func vfsHasRemotePTY(v vfs.VFS) bool {
