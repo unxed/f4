@@ -273,3 +273,96 @@ func farConstants(L *lua.LState, namespace *lua.LTable) {
 		return lua.LString(fmt.Sprintf("%x-%x-%x-%x-%x", sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16]))
 	}))
 }
+
+// postponedCall is a function mf.postmacro left for after the macro.
+type postponedCall struct {
+	fn   lua.LValue
+	args []lua.LValue
+}
+
+// runPostponed calls what mf.postmacro queued, in order; a call may queue more.
+func (e *LuaMacroEngine) runPostponed(L *lua.LState) error {
+	for len(e.postponed) > 0 {
+		call := e.postponed[0]
+		e.postponed = e.postponed[1:]
+		L.Push(call.fn)
+		for _, a := range call.args {
+			L.Push(a)
+		}
+		if err := L.PCall(len(call.args), 0, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// luaPostMacro is mf.postmacro(fn, ...): run fn after the macro that called it.
+func (e *LuaMacroEngine) luaPostMacro(L *lua.LState) int {
+	fn := L.CheckFunction(1)
+	call := postponedCall{fn: fn}
+	for i := 2; i <= L.GetTop(); i++ {
+		call.args = append(call.args, L.Get(i))
+	}
+	e.postponed = append(e.postponed, call)
+	L.Push(lua.LTrue)
+	return 1
+}
+
+// macroFsplit is mf.fsplit(path, flags): parts of a path, joined - 1 the drive,
+// 2 the directory (with its closing slash), 4 the name, 8 the extension (with
+// its dot); flags 0 keeps them all.
+func macroFsplit(L *lua.LState) int {
+	path := L.CheckString(1)
+	flags := 15
+	if L.GetTop() >= 2 {
+		if f := L.CheckInt(2); f != 0 {
+			flags = f
+		}
+	}
+	rest, drive := path, ""
+	if len(rest) >= 2 && rest[1] == ':' {
+		drive, rest = rest[:2], rest[2:]
+	}
+	dir := ""
+	if i := strings.LastIndexAny(rest, `/\`); i >= 0 {
+		dir, rest = rest[:i+1], rest[i+1:]
+	}
+	name, ext := rest, ""
+	if i := strings.LastIndex(rest, "."); i > 0 {
+		name, ext = rest[:i], rest[i:]
+	}
+	var out strings.Builder
+	for _, part := range []struct {
+		flag int
+		text string
+	}{{1, drive}, {2, dir}, {4, name}, {8, ext}} {
+		if flags&part.flag != 0 {
+			out.WriteString(part.text)
+		}
+	}
+	L.Push(lua.LString(out.String()))
+	return 1
+}
+
+// installClipboard adds far.CopyToClipboard / far.PasteFromClipboard.
+func (e *LuaMacroEngine) installClipboard(namespace *lua.LTable, L *lua.LState) {
+	L.SetFuncs(namespace, map[string]lua.LGFunction{
+		"CopyToClipboard": func(L *lua.LState) int {
+			host, ok := e.host.(MacroClipboardHost)
+			if ok {
+				host.SetClipboard(lua.LVAsString(L.Get(1)))
+			}
+			L.Push(lua.LBool(ok))
+			return 1
+		},
+		"PasteFromClipboard": func(L *lua.LState) int {
+			host, ok := e.host.(MacroClipboardHost)
+			if !ok {
+				L.Push(lua.LNil)
+				return 1
+			}
+			L.Push(lua.LString(host.Clipboard()))
+			return 1
+		},
+	})
+}
