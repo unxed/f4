@@ -260,8 +260,8 @@ func TestPanelActionsNeedAService(t *testing.T) {
 	if len(ctl.calls) != 0 || p.hasSelected() {
 		t.Errorf("an empty list ran %v", ctl.calls)
 	}
-	if got := len(p.PanelKeys()); got != 9 {
-		t.Errorf("panel keys = %d, want 9", got)
+	if got := len(p.PanelKeys()); got != 10 { // the nine actions and F1, the help
+		t.Errorf("panel keys = %d, want 10", got)
 	}
 }
 
