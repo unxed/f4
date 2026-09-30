@@ -90,6 +90,13 @@ type MacroEditorHost interface {
 	EditorInfo() (info MacroEditorInfo, ok bool)
 }
 
+// MacroClipboardHost is what a host adds to let macros use the clipboard
+// (far.CopyToClipboard, far.PasteFromClipboard).
+type MacroClipboardHost interface {
+	SetClipboard(text string)
+	Clipboard() string
+}
+
 // MacroConfigHost is what a host adds to let far.GetConfig read its settings.
 type MacroConfigHost interface {
 	// ConfigValue answers a setting by name: a number, a bool or a string.

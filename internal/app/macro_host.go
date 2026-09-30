@@ -12,6 +12,7 @@ import (
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/macro"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/toast"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
@@ -249,6 +250,10 @@ func (f4MacroHost) SetPanelName(active bool, name string) bool {
 		return false
 	})
 }
+
+// SetClipboard and Clipboard are macro.MacroClipboardHost.
+func (f4MacroHost) SetClipboard(text string) { terminal.SetF4Clipboard(text) }
+func (f4MacroHost) Clipboard() string        { return vtui.GetClipboard() }
 
 // ConfigValue is macro.MacroConfigHost: the few settings far.GetConfig reads.
 func (f4MacroHost) ConfigValue(key string) (any, bool) {

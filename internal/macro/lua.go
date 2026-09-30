@@ -90,7 +90,10 @@ type LuaMacroEngine struct {
 	// The fields below belong to the interpreter's worker goroutine while a
 	// macro is running, and are read by the caller once it has finished.
 	pendingKeys []*vtinput.InputEvent
-	invokedKey  string
+	// postponed are the calls mf.postmacro asked for, run when the macro that
+	// asked has returned.
+	postponed  []postponedCall
+	invokedKey string
 }
 
 // NewLuaMacroEngine starts an engine with no macros loaded.
@@ -595,6 +598,7 @@ func (e *LuaMacroEngine) execute(macro *LuaMacro, key string, original *vtinput.
 	err := e.rt.Do(func(L *lua.LState) error {
 		e.invokedKey = key
 		e.pendingKeys = nil
+		e.postponed = nil
 
 		if macro.condition != nil {
 			L.Push(macro.condition)
@@ -628,7 +632,7 @@ func (e *LuaMacroEngine) execute(macro *LuaMacro, key string, original *vtinput.
 			}
 			return err
 		}
-		return nil
+		return e.runPostponed(L)
 	})
 
 	keys := e.pendingKeys

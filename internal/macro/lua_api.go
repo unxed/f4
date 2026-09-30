@@ -511,6 +511,7 @@ func (e *LuaMacroEngine) newFarNamespace(L *lua.LState) *lua.LTable {
 		"GetConfig": e.luaFarGetConfig,
 	})
 	farConstants(L, namespace)
+	e.installClipboard(namespace, L)
 	return namespace
 }
 
@@ -692,15 +693,17 @@ func (e *LuaMacroEngine) newMFTable(L *lua.LState) *lua.LTable {
 			L.Push(lua.LString(strings.ToUpper(L.CheckString(1))))
 			return 1
 		},
-		"trim":    macroTrim,
-		"itoa":    macroItoa,
-		"atoi":    macroAtoi,
-		"mod":     macroMod,
-		"date":    macroDate,
-		"substr":  macroSubstr,
-		"index":   macroIndex,
-		"rindex":  macroRIndex,
-		"replace": macroReplace,
+		"trim":      macroTrim,
+		"itoa":      macroItoa,
+		"atoi":      macroAtoi,
+		"mod":       macroMod,
+		"date":      macroDate,
+		"substr":    macroSubstr,
+		"index":     macroIndex,
+		"rindex":    macroRIndex,
+		"replace":   macroReplace,
+		"fsplit":    macroFsplit,
+		"postmacro": e.luaPostMacro,
 		"asc": func(L *lua.LState) int {
 			runes := []rune(L.CheckString(1))
 			if len(runes) == 0 {

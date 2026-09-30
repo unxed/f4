@@ -1053,3 +1053,47 @@ func TestMacroEditorGetInfo(t *testing.T) {
 		t.Error("a host with no editors answered")
 	}
 }
+
+type clipHost struct {
+	*fakeMacroHost
+	text string
+}
+
+func (h *clipHost) SetClipboard(t string) { h.text = t }
+func (h *clipHost) Clipboard() string     { return h.text }
+
+func TestMacroClipboardFsplitAndPostmacro(t *testing.T) {
+	host := &clipHost{fakeMacroHost: newFakeMacroHost()}
+	Engine := newTestMacroEngine(t, host, `
+		Macro { area = "Shell"; key = "CtrlT"; action = function()
+			__copied = far.CopyToClipboard("hello")
+			__pasted = far.PasteFromClipboard()
+			__name = mf.fsplit("C:\\dir\\sub\\file.tar.gz", 4 + 8)
+			__dir = mf.fsplit("/a/b/c.txt", 2)
+			__all = mf.fsplit("D:/x/y.z")
+			__bare = mf.fsplit("noext", 4 + 8)
+			__order = ""
+			mf.postmacro(function(a, b) __order = __order .. "P" .. a .. b end, 1, 2)
+			__order = __order .. "M"
+		end }
+	`)
+	fireMacro(t, Engine, "CtrlT")
+	Engine.WaitIdle(5 * time.Second)
+	v := macroGlobals(t, Engine, "__copied", "__pasted", "__name", "__dir", "__all", "__bare", "__order")
+	if v["__copied"] != lua.LTrue || lua.LVAsString(v["__pasted"]) != "hello" || host.text != "hello" {
+		t.Errorf("clipboard: %v %v %q", v["__copied"], v["__pasted"], host.text)
+	}
+	if lua.LVAsString(v["__name"]) != "file.tar.gz" || lua.LVAsString(v["__dir"]) != "/a/b/" ||
+		lua.LVAsString(v["__all"]) != "D:/x/y.z" || lua.LVAsString(v["__bare"]) != "noext" {
+		t.Errorf("fsplit: %v %v %v %v", v["__name"], v["__dir"], v["__all"], v["__bare"])
+	}
+	if lua.LVAsString(v["__order"]) != "MP12" {
+		t.Errorf("postmacro ran %q, want the macro first (M) then the posted call (P12)", lua.LVAsString(v["__order"]))
+	}
+
+	plain := newTestMacroEngine(t, newFakeMacroHost(), `__c = far.CopyToClipboard("x"); __p = far.PasteFromClipboard()`)
+	pv := macroGlobals(t, plain, "__c", "__p")
+	if pv["__c"] != lua.LFalse || pv["__p"] != lua.LNil {
+		t.Errorf("a host with no clipboard: %v %v", pv["__c"], pv["__p"])
+	}
+}
