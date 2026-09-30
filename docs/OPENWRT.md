@@ -188,7 +188,7 @@ share of the function tables along) and says what was decided.
 | function tables (`.gopclntab`) | 9.8 | kept | the price of the Go runtime for all the code below |
 | `go:func` metadata | 1.6 | kept | same |
 | core UI and file operations (`internal/app`, `panel`, `dialog`, `settings`, `config`, `cmdline`, `fileops`, `vfs`, `plughost`, `keymap`) | 3.2 | kept | this is the file manager |
-| terminal UI and GUI loader (`vtui`, `purego`, `goffi`, `xgb`, `xkb-go`, wayland, freetype, `x/image`) | 2.3 | kept | the X11/Wayland window of the lite family; mc has no window, so this is the first candidate if the profile is split into a console-only one |
+| terminal UI and drawing code (`vtui`, `purego`, `goffi`, `xgb`, `xkb-go`, wayland, freetype, `x/image`) | 2.3 | kept | measured: the `noffi` tag (the console-only configuration the release uses for 386, mips and the like) changes the extralite size by 40 KB only (32 092 425 against 32 129 289 bytes), because `vtui_noebiten` and `vtui_nogogpu` already leave the GPU backends out; what remains is the terminal UI itself and the X11/Wayland loader code that a console-only split would still have to keep or rewrite |
 | runtime, `reflect`, generic instantiations | 1.1 | kept | Go itself |
 | `net/http`, `crypto/tls`, `crypto/x509`, `net` | 0.75 | kept | updater, PlugRing catalog, AI provider, proxy setting import them: seven packages, removing them takes those features away |
 | editor, viewer, disassembler, Markdown (`editor`, `viewer`, `x/arch/x86asm`, `goldmark`) | 0.6 | kept | mc's editor and viewer; disassembly and Markdown are f4's own |
