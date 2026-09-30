@@ -84,6 +84,27 @@ func TestEditorView_DisasmMode_CycleRedecodesUnderTheCursor(t *testing.T) {
 	}
 }
 
+// TestEditorView_DisasmMode_DoesNothingOutsideTheDecodeView: Shift+F4 in the
+// text view used to switch the hidden mode and announce "Disassembler: 32-bit"
+// although no disassembler was on screen (f4#1704).
+func TestEditorView_DisasmMode_DoesNothingOutsideTheDecodeView(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.SetDefaultPalette()
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	ev := editor.NewEditorView(piecetable.New([]byte("plain text\n")), nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+	vtui.FrameManager.Push(ev)
+
+	before := ev.DisasmMode
+	if !RunAction("Editor.DisasmMode") {
+		t.Fatal("Editor.DisasmMode did not run on the editor")
+	}
+	if ev.DisasmMode != before {
+		t.Fatalf("the mode changed from %d to %d in the text view", before, ev.DisasmMode)
+	}
+}
+
 // TestEditorView_DecodeStepSeesTheLastBytes: GetRange refuses a window that
 // runs past the end of the buffer, and the decode step used to ask for
 // fifteen bytes regardless, so Down did nothing on the last instructions of

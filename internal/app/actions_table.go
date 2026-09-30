@@ -3108,9 +3108,12 @@ func init() {
 		DefaultKeys: []string{"ShiftF4"},
 		MenuPath:    "Options",
 		Handler: withEditor(func(ev *editor.EditorView) {
-			// The mode is a property of the file, not of the view, so it
-			// is switched wherever the editor is: the toast says what the
-			// decode view will read the bytes as.
+			// The mode only means something in the decode view: outside it
+			// the key does nothing, rather than announcing a disassembler
+			// that is not on screen (f4#1704).
+			if !ev.DecodeMode {
+				return
+			}
 			mode := ev.CycleDisasmMode()
 			toast.Show(fmt.Sprintf(i18n.Msg("Viewer.DisasmBits"), mode), time.Second)
 			vtui.FrameManager.Redraw()
@@ -3346,6 +3349,9 @@ func init() {
 		DefaultKeys: []string{"ShiftF4"},
 		MenuPath:    "View",
 		Handler: withViewer(func(vv *viewer.ViewerView) {
+			if !vv.DecodeMode {
+				return
+			}
 			mode := vv.CycleDisasmMode()
 			toast.Show(fmt.Sprintf(i18n.Msg("Viewer.DisasmBits"), mode), time.Second)
 			vtui.FrameManager.Redraw()
