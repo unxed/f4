@@ -14,7 +14,9 @@ import (
 // the panel back. Which server it talks to is not in the URI: it is the same
 // one the drive menu entry uses.
 type uriProvider struct {
-	open func(context.Context) (*conn, error)
+	// open makes the connect function of one panel, so that a password typed
+	// for it is remembered by that panel only.
+	open func() func(context.Context) (*conn, error)
 }
 
 func (uriProvider) Scheme() string { return "mongo" }
@@ -24,7 +26,7 @@ func (p uriProvider) OpenURI(ctx context.Context, _ vfs.VFS, raw string) (vfs.VF
 		return nil, fmt.Errorf("MongoDB: not a mongo:// address: %s", raw)
 	}
 	plain := path.Clean("/" + strings.TrimPrefix(raw[len(uriPrefix):], "/"))
-	v := newMongoVFS(p.open)
+	v := newMongoVFS(p.open())
 	item, err := v.Stat(ctx, plain)
 	if err != nil {
 		_ = v.Close()

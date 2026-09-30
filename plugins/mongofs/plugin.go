@@ -11,7 +11,6 @@ package mongofs
 import (
 	"context"
 	"errors"
-	"os"
 
 	"github.com/unxed/f4/vfs"
 )
@@ -34,9 +33,9 @@ func (*Plugin) Init(api vfs.HostAPI) error {
 	if api == nil {
 		return errors.New("MongoDB: nil host API")
 	}
-	api.RegisterDrive(driveName, func() vfs.VFS { return newMongoVFS(connectFromEnv) })
+	api.RegisterDrive(driveName, func() vfs.VFS { return newMongoVFS((&connector{}).open) })
 	// mongo:///<path> reopens the panel from a bookmark, history or a saved session.
-	return api.RegisterURIProvider(uriProvider{open: connectFromEnv})
+	return api.RegisterURIProvider(uriProvider{open: func() func(context.Context) (*conn, error) { return (&connector{}).open }})
 }
 
 func (*Plugin) Close() error {
@@ -45,14 +44,4 @@ func (*Plugin) Close() error {
 }
 
 // connectFromEnv opens the connection MONGODB_URI names.
-func connectFromEnv(ctx context.Context) (*conn, error) {
-	raw := os.Getenv("MONGODB_URI")
-	if raw == "" {
-		raw = defaultURI
-	}
-	cfg, err := parseURI(raw)
-	if err != nil {
-		return nil, err
-	}
-	return dial(ctx, cfg)
-}
+func connectFromEnv(ctx context.Context) (*conn, error) { return (&connector{}).open(ctx) }

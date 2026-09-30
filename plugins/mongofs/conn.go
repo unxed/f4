@@ -44,6 +44,7 @@ var (
 type connConfig struct {
 	addr       string
 	user, pass string
+	passSet    bool // the string carried a password, even an empty one
 	authSource string
 	authMech   string // "" negotiates
 	useTLS     bool
@@ -88,7 +89,7 @@ func parseURI(raw string) (connConfig, error) {
 	cfg := connConfig{addr: host, authSource: "admin", srv: srv, useTLS: srv}
 	if u.User != nil {
 		cfg.user = u.User.Username()
-		cfg.pass, _ = u.User.Password()
+		cfg.pass, cfg.passSet = u.User.Password()
 	}
 	q := u.Query()
 	if v := q.Get("authSource"); v != "" {
