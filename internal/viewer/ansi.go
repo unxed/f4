@@ -57,12 +57,44 @@ func stripANSI(data []byte) (plain []byte, orig []int, seqs []ansiSeq) {
 			}
 			// Not a sequence after all: the ESC is text.
 		}
+		if end, ok := skipNonCSIEscape(data, i); ok {
+			i = end
+			continue
+		}
 		plain = append(plain, data[i])
 		orig = append(orig, i)
 		i++
 	}
 	orig = append(orig, len(data))
 	return plain, orig, seqs
+}
+
+// skipNonCSIEscape recognises the other escape sequences a terminal log
+// carries and no colour depends on, so they do not show up as text: an OSC
+// string (window title, hyperlink) ended by BEL or ESC \, and the two-byte
+// character set selection ESC ( X and ESC ) X. It reports where the sequence
+// ends. An OSC cut by the end of data runs to the end.
+func skipNonCSIEscape(data []byte, i int) (int, bool) {
+	if data[i] != 0x1b || i+1 >= len(data) {
+		return i, false
+	}
+	switch data[i+1] {
+	case ']':
+		for j := i + 2; j < len(data); j++ {
+			if data[j] == 0x07 {
+				return j + 1, true
+			}
+			if data[j] == 0x1b && j+1 < len(data) && data[j+1] == '\\' {
+				return j + 2, true
+			}
+		}
+		return len(data), true
+	case '(', ')':
+		if i+2 < len(data) {
+			return i + 3, true
+		}
+	}
+	return i, false
 }
 
 // parseANSIParams reads the numbers of a parameter string. An empty field is

@@ -31,9 +31,16 @@ func TestStripANSI(t *testing.T) {
 }
 
 func TestStripANSIKeepsALoneEscape(t *testing.T) {
-	plain, _, seqs := stripANSI([]byte("x\x1b]y"))
-	if string(plain) != "x\x1b]y" || len(seqs) != 0 {
+	plain, _, seqs := stripANSI([]byte("x\x1b=y"))
+	if string(plain) != "x\x1b=y" || len(seqs) != 0 {
 		t.Fatalf("plain = %q seqs = %v", plain, seqs)
+	}
+}
+
+func TestStripANSIDropsOSCAndCharsetSelection(t *testing.T) {
+	plain, _, seqs := stripANSI([]byte("a\x1b]0;title\x07b\x1b(Bc\x1b]8;;http://x\x1b\\d"))
+	if string(plain) != "abcd" || len(seqs) != 0 {
+		t.Fatalf("plain = %q seqs = %v, want abcd", plain, seqs)
 	}
 }
 
