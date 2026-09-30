@@ -43,6 +43,9 @@ type ViewerView struct {
 	HexAuto    bool
 	DecodeMode bool
 	WrapMode   bool
+	// AnsiMode draws the colour sequences of terminal output (SGR) as colours
+	// instead of showing them as text (f4#1705); see ansi.go.
+	AnsiMode bool
 	// DisasmMode is the processor mode the decode view disassembles in:
 	// 16, 32 or 64, or 0 while undecided. See disasm.go.
 	DisasmMode int
@@ -620,6 +623,15 @@ func (vv *ViewerView) decodeStep(off int64) int64 {
 	return int64(DisasmInstLen(data, vv.disasmMode()))
 }
 
+// rowReadSize is how many bytes to read to lay out one screen row. Escape
+// sequences take bytes and no room, so an ANSI-mode row needs a longer read.
+func (vv *ViewerView) rowReadSize(width int) int {
+	if vv.AnsiMode {
+		return width * 16
+	}
+	return width * 4
+}
+
 func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) {
 
 	currOffset := vv.TopOffset
@@ -627,7 +639,12 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 	// current row begins, and every line on screen is collected for the
 	// colorizer.
 	hl := vv.windowColorizer()
+	if vv.AnsiMode {
+		// The colours are the file's own.
+		hl = nil
+	}
 	attr := vv.textAttr()
+	ansiState := attr
 	var hlLines []WindowLine
 	hlTexts := map[int64]string{}
 	lineStart, hlOK := int64(0), hl != nil
@@ -648,7 +665,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 
 		// Read a generous chunk to handle wrapping. The row helper keeps
 		// combining sequences and script conjuncts atomic.
-		data, err := vv.Backend.ReadAt(currOffset, width*4)
+		data, err := vv.Backend.ReadAt(currOffset, vv.rowReadSize(width))
 		if err == piecetable.ErrLoading {
 			vv.visibleURLRows = append(vv.visibleURLRows, nil)
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
@@ -668,11 +685,15 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		if config.App.EditorTabSize > 0 {
 			tabSize = config.App.EditorTabSize
 		}
-		row := layoutViewerTextRow(data, width, tabSize, vv.WrapMode)
+		row := layoutViewerTextRowANSI(data, width, tabSize, vv.WrapMode, vv.AnsiMode)
 
 		// Build []vtui.CharInfo for the line
 		var cellByteOffsets []int
-		vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, width)
+		if vv.AnsiMode {
+			vv.rowCells, cellByteOffsets = ansiRowCells(data[:row.textLen], attr, &ansiState, tabSize, width)
+		} else {
+			vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, width)
+		}
 		if hlOK {
 			text, seen := hlTexts[lineStart]
 			if !seen {
@@ -789,13 +810,13 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			if vv.ScrollBar != nil {
 				width--
 			}
-			data, err := vv.Backend.ReadAt(vv.TopOffset, width*4)
+			data, err := vv.Backend.ReadAt(vv.TopOffset, vv.rowReadSize(width))
 			if err == nil && len(data) > 0 {
 				tabSize := 8
 				if config.App.EditorTabSize > 0 {
 					tabSize = config.App.EditorTabSize
 				}
-				row := layoutViewerTextRow(data, width, tabSize, vv.WrapMode)
+				row := layoutViewerTextRowANSI(data, width, tabSize, vv.WrapMode, vv.AnsiMode)
 				if row.lineLen > 0 {
 					vv.TopOffset += int64(row.lineLen)
 				}
@@ -986,6 +1007,8 @@ func (vv *ViewerView) jumpToEnd() {
 		width--
 	}
 	wrapMode := vv.WrapMode
+	ansiMode := vv.AnsiMode
+	rowRead := vv.rowReadSize(width)
 	tabSize := 8
 	if config.App.EditorTabSize > 0 {
 		tabSize = config.App.EditorTabSize
@@ -1053,12 +1076,12 @@ func (vv *ViewerView) jumpToEnd() {
 				offsets = append(offsets, currOff+int64(scanPos))
 				rowData := data[scanPos:]
 				if wrapMode {
-					maxRowData := width * 4
+					maxRowData := rowRead
 					if maxRowData < len(rowData) {
 						rowData = rowData[:maxRowData]
 					}
 				}
-				row := layoutViewerTextRow(rowData, width, tabSize, wrapMode)
+				row := layoutViewerTextRowANSI(rowData, width, tabSize, wrapMode, ansiMode)
 				scanPos += row.lineLen
 				if !row.foundNewline && !wrapMode {
 					break

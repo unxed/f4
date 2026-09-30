@@ -253,6 +253,7 @@ var actionMenuOrder = []string{
 	"Viewer.HexMode",
 	"Viewer.MarkdownFormatted",
 	"Viewer.DisasmMode",
+	"Viewer.AnsiMode",
 	"Viewer.Search",
 	"Viewer.SearchNext",
 	"Viewer.SearchPrevious",

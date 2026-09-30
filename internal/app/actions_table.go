@@ -3353,6 +3353,21 @@ func init() {
 	})
 
 	registerAction(action.Action{
+		Name:        "Viewer.AnsiMode",
+		Area:        "Viewer",
+		Label:       "Terminal colors",
+		LabelKey:    "Action.Viewer.AnsiMode",
+		Description: "Draw the colour escape sequences of terminal output as colours",
+		DescKey:     "Action.Viewer.AnsiMode.Desc",
+		DefaultKeys: []string{"CtrlF8"},
+		MenuPath:    "View",
+		Checked:     viewerState(func(vv *viewer.ViewerView) bool { return vv.AnsiMode }),
+		Handler: withViewer(func(vv *viewer.ViewerView) {
+			vv.AnsiMode = !vv.AnsiMode
+			vtui.FrameManager.Redraw()
+		}),
+	})
+	registerAction(action.Action{
 		Name:        "Viewer.Search",
 		Area:        "Viewer",
 		Label:       "Search",
