@@ -55,12 +55,12 @@ func TestFileDialogIgnoresCornerDrag(t *testing.T) {
 	dlg := FileInputBox("Rename", "Rename 'a.txt' to:", "a.txt", nil)
 	w0, h0 := dlg.Size()
 	press := &vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true,
-		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: uint16(dlg.X2), MouseY: uint16(dlg.Y2)}
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: int16(dlg.X2), MouseY: int16(dlg.Y2)}
 	if !dlg.ProcessMouse(press) {
 		t.Error("the press on the corner was not consumed")
 	}
 	drag := &vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true,
-		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: uint16(dlg.X2 + 10), MouseY: uint16(dlg.Y2 + 5)}
+		ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: int16(dlg.X2 + 10), MouseY: int16(dlg.Y2 + 5)}
 	dlg.ProcessMouse(drag)
 	if w, h := dlg.Size(); w != w0 || h != h0 {
 		t.Errorf("dialog is %dx%d after a corner drag, want %dx%d", w, h, w0, h0)
