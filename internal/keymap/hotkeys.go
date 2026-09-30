@@ -639,6 +639,11 @@ func KeyBarLabelsForAreaExcept(area string, fallbacks *vtui.KeySet, drop func(ac
 		set.Shift[i], set.ShiftDisabled[i] = resolve("Shift", keyNum, fbShift[i])
 		set.Alt[i], set.AltDisabled[i] = resolve("Alt", keyNum, fbAlt[i])
 		set.Ctrl[i], set.CtrlDisabled[i] = resolve("Ctrl", keyNum, fbCtrl[i])
+		// Two modifiers held together get their own rows, filled from the
+		// bindings only: nothing falls back to a caption (f4#1704).
+		set.CtrlShift[i], set.CtrlShiftDisabled[i] = resolve("CtrlShift", keyNum, "")
+		set.AltShift[i], set.AltShiftDisabled[i] = resolve("AltShift", keyNum, "")
+		set.CtrlAlt[i], set.CtrlAltDisabled[i] = resolve("CtrlAlt", keyNum, "")
 	}
 	return set
 }
