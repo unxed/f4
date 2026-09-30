@@ -240,6 +240,7 @@ var _ vfs.PanelKeyProvider = (*netPanel)(nil)
 // panel's own Enter.
 func (p *netPanel) PanelKeys() []vfs.PanelKey {
 	return []vfs.PanelKey{
+		vfs.PanelHelpKey(i18n.Msg("KeyBar.F1"), func() string { return i18n.Msg("NetBrowse.HelpTitle") }, func() string { return i18n.Msg("NetBrowse.Help") }),
 		{VK: vtinput.VK_F5, Label: i18n.Msg("NetBrowse.KeyBar.Refresh"), Run: p.refresh},
 		{VK: vtinput.VK_RETURN, Run: p.open},
 	}

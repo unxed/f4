@@ -862,6 +862,8 @@ SvcMgr.PropsDisplay=Display name:
 SvcMgr.PropsPath=Program:
 SvcMgr.PropsStart=Start type:
 SvcMgr.PropsError=Error control:
+SvcMgr.HelpTitle=Windows services
+SvcMgr.Help=# Windows services\n\nThe services of this computer (or of another one) with their state, start type and process id.\n\n## Keys\n\n- **Enter** - details of the service under the cursor: account, program, dependencies, recovery\n- **F5** - reload the list\n- **Shift+F1** - start; **Shift+F2** - stop (after a confirmation); **Shift+F3** - pause or resume, whichever the state calls for\n- **Shift+F4** - change the start type (Automatic, Automatic (delayed start), Manual, Disabled)\n- **Shift+F5** - show the services of another computer (an empty name returns to this one)\n- **Shift+F6** - filter by state\n- **Shift+F7** - properties of the service\n- Type letters to search by name; click a column header to sort\n\nChanging a service needs the rights of an administrator; without them the system's own message is shown. Try changes on a service you do not depend on.\n\n**Esc**, **F10** or **Ctrl+PgUp** close the panel.
 
 NetBrowse.ColumnName=Name
 NetBrowse.ColumnKind=Kind
@@ -872,6 +874,8 @@ NetBrowse.KeyBar.Refresh=Refresh
 NetBrowse.ShareName=Share %s
 NetBrowse.EnterFailed=Cannot open %s: %v
 NetBrowse.RefreshFailed=Cannot read the network: %v
+NetBrowse.HelpTitle=Network neighbourhood
+NetBrowse.Help=# Network neighbourhood\n\nThe network as Windows sees it: providers, domains and workgroups, computers, and the shared folders of a computer. Read-only.\n\n## Keys\n\n- **Enter** - open the item under the cursor: go into a domain or a computer, or take a share as a folder; on `..` go one level up\n- **F5** - reload the current list\n- Type letters to search by name\n\nA share opens as an ordinary folder by its UNC name, where the usual file operations work.\n\n**Esc**, **F10** or **Ctrl+PgUp** close the panel.
 
 PanelPlugin.KeyBar.Close=Close
 

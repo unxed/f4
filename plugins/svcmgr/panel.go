@@ -237,6 +237,7 @@ var _ vfs.PanelKeyProvider = (*servicesPanel)(nil)
 // they act on the service under the cursor, so they stand down on an empty list.
 func (p *servicesPanel) PanelKeys() []vfs.PanelKey {
 	return []vfs.PanelKey{
+		vfs.PanelHelpKey(i18n.Msg("KeyBar.F1"), func() string { return i18n.Msg("SvcMgr.HelpTitle") }, func() string { return i18n.Msg("SvcMgr.Help") }),
 		{VK: vtinput.VK_F5, Label: i18n.Msg("SvcMgr.KeyBar.Refresh"), Run: p.refresh},
 		{VK: vtinput.VK_RETURN, Run: p.showDetails, Enabled: p.hasSelected},
 		{VK: vtinput.VK_F1, Mods: vtinput.ShiftPressed, Label: i18n.Msg("SvcMgr.KeyBar.Start"), Run: p.start, Enabled: p.hasSelected},
