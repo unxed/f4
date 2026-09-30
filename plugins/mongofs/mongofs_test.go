@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtui"
 )
 
 var (
@@ -837,7 +838,7 @@ func oidA0() objectID { return objectID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} }
 
 func TestURIProviderAndURIPaths(t *testing.T) {
 	f := startFake(t, "", "")
-	p := uriProvider{open: connectTo(f, "", "")}
+	p := uriProvider{open: func() func(context.Context) (*conn, error) { return connectTo(f, "", "") }}
 	ctx := context.Background()
 	if p.Scheme() != "mongo" {
 		t.Fatal(p.Scheme())
@@ -884,5 +885,78 @@ func TestURIProviderAndURIPaths(t *testing.T) {
 	}
 	if _, err := p.OpenURI(ctx, nil, "ftp://x"); err == nil {
 		t.Fatal("a foreign scheme should be refused")
+	}
+}
+
+func TestPasswordIsAskedForAndRemembered(t *testing.T) {
+	f := startFake(t, "alice", "s3cret")
+	t.Setenv("MONGODB_URI", "mongodb://alice@"+f.addr+"/admin")
+	var asked []string
+	answers := []string{"wrong", "s3cret"}
+	prev := passwordPrompt
+	t.Cleanup(func() { passwordPrompt = prev })
+	passwordPrompt = func(_ context.Context, who string) (string, error) {
+		asked = append(asked, who)
+		if len(answers) == 0 {
+			return "", context.Canceled
+		}
+		a := answers[0]
+		answers = answers[1:]
+		return a, nil
+	}
+	c := &connector{}
+	ctx := context.Background()
+	cn, err := c.open(ctx)
+	if err != nil {
+		t.Fatalf("after one wrong password and one right: %v", err)
+	}
+	cn.close()
+	if len(asked) != 2 || asked[0] != "alice@"+f.addr {
+		t.Fatalf("asked %v", asked)
+	}
+	// The right password is remembered by this connector: no new prompt.
+	cn, err = c.open(ctx)
+	if err != nil || len(asked) != 2 {
+		t.Fatalf("reconnect: %v, asked %v", err, asked)
+	}
+	cn.close()
+
+	// Another panel asks for itself, and giving up ends the attempt.
+	if _, err := (&connector{}).open(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled prompt: %v", err)
+	}
+	// An empty answer is not a password.
+	passwordPrompt = func(context.Context, string) (string, error) { return "", nil }
+	if _, err := (&connector{}).open(ctx); !errors.Is(err, errPasswordNotEntered) {
+		t.Fatalf("an empty answer: %v", err)
+	}
+	// Three wrong answers in a row end in an authentication error.
+	passwordPrompt = func(context.Context, string) (string, error) { return "nope", nil }
+	if _, err := (&connector{}).open(ctx); !errors.Is(err, errAuth) {
+		t.Fatalf("three wrong passwords: %v", err)
+	}
+	// A password in the string, or no user at all, never prompts.
+	passwordPrompt = func(context.Context, string) (string, error) {
+		t.Fatal("prompted")
+		return "", nil
+	}
+	t.Setenv("MONGODB_URI", "mongodb://alice:s3cret@"+f.addr+"/admin")
+	cn, err = (&connector{}).open(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cn.close()
+	t.Setenv("MONGODB_URI", "mongodb://alice:@"+f.addr+"/admin")
+	if _, err := (&connector{}).open(ctx); !errors.Is(err, errAuth) {
+		t.Fatalf("an explicitly empty password: %v", err)
+	}
+}
+
+func TestPromptPasswordWithoutUI(t *testing.T) {
+	previous := vtui.FrameManager
+	vtui.FrameManager = nil
+	t.Cleanup(func() { vtui.FrameManager = previous })
+	if _, err := promptPassword(context.Background(), "a@b"); err == nil {
+		t.Fatal("asking for a password without a UI should fail")
 	}
 }
