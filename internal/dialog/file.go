@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"github.com/unxed/f4/internal/i18n"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -73,6 +74,17 @@ func NewFileDialog(title string, height int) *FileDialog {
 	}
 	dlg.ShowClose = true
 	return dlg
+}
+
+// ProcessMouse swallows the corner drag that vtui.Window offers on every modal
+// dialog: the width follows the f4 window and the height is fixed, so letting
+// the user stretch the dialog only left the controls behind (f4#891).
+func (d *FileDialog) ProcessMouse(e *vtinput.InputEvent) bool {
+	if e != nil && e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown &&
+		int(e.MouseX) == d.X2 && int(e.MouseY) == d.Y2 {
+		return true
+	}
+	return d.Window.ProcessMouse(e)
 }
 
 // SetLayout stores the layout pass and runs it once for the initial size.
