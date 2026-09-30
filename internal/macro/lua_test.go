@@ -992,3 +992,35 @@ func TestMacroFar3PanelAPI(t *testing.T) {
 		t.Errorf("pos=%v name=%q (RedrawPanel goes to row 1, SetPath's third argument names a row)", host.pos, host.gotName)
 	}
 }
+
+type editorHost struct {
+	*fakeMacroHost
+	info MacroEditorInfo
+	ok   bool
+}
+
+func (h *editorHost) EditorInfo() (MacroEditorInfo, bool) { return h.info, h.ok }
+
+func TestMacroEditorGetInfo(t *testing.T) {
+	host := &editorHost{fakeMacroHost: newFakeMacroHost(), ok: true,
+		info: MacroEditorInfo{FileName: "/tmp/a.txt", CurLine: 7, CurPos: 3, TotalLines: 40, TabSize: 4}}
+	Engine := newTestMacroEngine(t, host, `
+		local info = editor.GetInfo()
+		__file, __line, __col, __total, __tab, __opts = info.FileName, info.CurLine, info.CurPos, info.TotalLines, info.TabSize, info.Options
+	`)
+	v := macroGlobals(t, Engine, "__file", "__line", "__col", "__total", "__tab", "__opts")
+	if lua.LVAsString(v["__file"]) != "/tmp/a.txt" || lua.LVAsNumber(v["__line"]) != 7 || lua.LVAsNumber(v["__col"]) != 3 ||
+		lua.LVAsNumber(v["__total"]) != 40 || lua.LVAsNumber(v["__tab"]) != 4 || lua.LVAsNumber(v["__opts"]) != 0 {
+		t.Errorf("GetInfo: %v", v)
+	}
+
+	host.ok = false
+	none := newTestMacroEngine(t, host, `__n = editor.GetInfo()`)
+	if macroGlobals(t, none, "__n")["__n"] != lua.LNil {
+		t.Error("GetInfo answered with no editor open")
+	}
+	plain := newTestMacroEngine(t, newFakeMacroHost(), `__n = editor.GetInfo()`)
+	if macroGlobals(t, plain, "__n")["__n"] != lua.LNil {
+		t.Error("a host with no editors answered")
+	}
+}

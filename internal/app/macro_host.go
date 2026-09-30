@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/macro"
 	"github.com/unxed/f4/internal/toast"
@@ -152,6 +153,26 @@ func (f4MacroHost) Message(title, text string) {
 	vtui.FrameManager.PostTask(func() {
 		vtui.ShowMessage(title, text, []string{"&Ok"})
 	})
+}
+
+// EditorInfo is macro.MacroEditorHost: the editor on top of the screen.
+func (f4MacroHost) EditorInfo() (macro.MacroEditorInfo, bool) {
+	type answer struct {
+		info macro.MacroEditorInfo
+		ok   bool
+	}
+	got := onUI(func() answer {
+		if vtui.FrameManager == nil {
+			return answer{}
+		}
+		ev, ok := vtui.FrameManager.GetTopFrame().(*editor.EditorView)
+		if !ok || ev == nil {
+			return answer{}
+		}
+		line, total, column := ev.MacroPosition()
+		return answer{macro.MacroEditorInfo{FileName: ev.FilePath, CurLine: line, CurPos: column, TotalLines: total, TabSize: config.App.EditorTabSize}, true}
+	})
+	return got.info, got.ok
 }
 
 // macroFilePanel is the file panel a macro means by "active"/"passive", or nil.

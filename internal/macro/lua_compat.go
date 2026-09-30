@@ -88,6 +88,34 @@ func (e *LuaMacroEngine) installCompat(L *lua.LState) {
 
 	e.installPanelAPI(L)
 
+	// editor.GetInfo([id]): the editor on top, or nil when there is none.
+	editorNS := L.NewTable()
+	L.SetFuncs(editorNS, map[string]lua.LGFunction{
+		"GetInfo": func(L *lua.LState) int {
+			host, ok := e.host.(MacroEditorHost)
+			if !ok {
+				L.Push(lua.LNil)
+				return 1
+			}
+			info, ok := host.EditorInfo()
+			if !ok {
+				L.Push(lua.LNil)
+				return 1
+			}
+			t := L.NewTable()
+			t.RawSetString("FileName", lua.LString(info.FileName))
+			t.RawSetString("CurLine", lua.LNumber(info.CurLine))
+			t.RawSetString("CurPos", lua.LNumber(info.CurPos))
+			t.RawSetString("TotalLines", lua.LNumber(info.TotalLines))
+			t.RawSetString("TabSize", lua.LNumber(info.TabSize))
+			t.RawSetString("Options", lua.LNumber(0))
+			t.RawSetString("CurTabPos", lua.LNumber(info.CurPos))
+			L.Push(t)
+			return 1
+		},
+	})
+	L.SetGlobal("editor", editorNS)
+
 	// win: only what a script needs at load time. Uuid turns a GUID string
 	// into Far's binary form; here the string is its own form.
 	win := L.NewTable()

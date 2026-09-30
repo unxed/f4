@@ -109,3 +109,10 @@ func (ev *EditorView) EditorStatusText() string {
 	}
 	return fmt.Sprintf("%s%s     ", prefix, ev.editorStatusPositionText())
 }
+
+// MacroPosition is where the cursor is, for macros: the one-based line, the
+// number of lines and the one-based column, as the status line shows them.
+func (ev *EditorView) MacroPosition() (line, totalLines, column int) {
+	line, totalLines, column, _ = ev.editorStatusPosition()
+	return line, totalLines, column
+}

@@ -75,6 +75,21 @@ type MacroPanelHost interface {
 	SetPanelName(active bool, name string) bool
 }
 
+// MacroEditorInfo is the editor a macro runs in, as editor.GetInfo tells it.
+type MacroEditorInfo struct {
+	FileName   string
+	CurLine    int // 1-based
+	CurPos     int // 1-based column
+	TotalLines int
+	TabSize    int
+}
+
+// MacroEditorHost is what a host adds to let macros ask about the editor on
+// top; ok is false when there is none.
+type MacroEditorHost interface {
+	EditorInfo() (info MacroEditorInfo, ok bool)
+}
+
 // MacroConfigHost is what a host adds to let far.GetConfig read its settings.
 type MacroConfigHost interface {
 	// ConfigValue answers a setting by name: a number, a bool or a string.
