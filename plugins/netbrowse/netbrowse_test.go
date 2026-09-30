@@ -188,8 +188,8 @@ func TestPanelGeometryFocusAndDraw(t *testing.T) {
 	if err := p.Close(); err != nil {
 		t.Error(err)
 	}
-	if got := len(p.PanelKeys()); got != 2 {
-		t.Errorf("panel keys = %d, want 2", got)
+	if got := len(p.PanelKeys()); got != 3 { // F5, Enter and F1, the help
+		t.Errorf("panel keys = %d, want 3", got)
 	}
 }
 
