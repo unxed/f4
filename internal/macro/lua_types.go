@@ -54,6 +54,27 @@ type MacroDialogHost interface {
 	Menu(title string, items []string) int
 }
 
+// MacroPanelEntry is one row of a panel as a macro sees it.
+type MacroPanelEntry struct {
+	Name     string
+	IsDir    bool
+	Selected bool
+	Size     int64
+}
+
+// MacroPanelHost is what a host adds to let macros read the rows of a panel and
+// move it (panel.GetPanelItem, Panel.Item, panel.SetPanelDirectory,
+// Panel.SetPosIdx...). Rows are numbered from 1 and ok is false past the ends.
+type MacroPanelHost interface {
+	PanelEntry(active bool, index int) (entry MacroPanelEntry, ok bool)
+	// SetPanelPath changes the directory the panel shows.
+	SetPanelPath(active bool, path string) bool
+	// SetPanelPos puts the cursor on row index.
+	SetPanelPos(active bool, index int) bool
+	// SetPanelName puts the cursor on the row with that name.
+	SetPanelName(active bool, name string) bool
+}
+
 // MacroConfigHost is what a host adds to let far.GetConfig read its settings.
 type MacroConfigHost interface {
 	// ConfigValue answers a setting by name: a number, a bool or a string.

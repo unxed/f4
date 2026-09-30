@@ -930,3 +930,65 @@ func TestMacroFar3LoadTimeGlobalsLetAFileLoad(t *testing.T) {
 		t.Errorf("values: %v", v)
 	}
 }
+
+// panelHost is a fake host with panels of rows.
+type panelHost struct {
+	*fakeMacroHost
+	rows    map[bool][]MacroPanelEntry
+	path    map[bool]string
+	pos     map[bool]int
+	gotName string
+}
+
+func (h *panelHost) PanelEntry(active bool, i int) (MacroPanelEntry, bool) {
+	rows := h.rows[active]
+	if i < 1 || i > len(rows) {
+		return MacroPanelEntry{}, false
+	}
+	return rows[i-1], true
+}
+func (h *panelHost) SetPanelPath(active bool, p string) bool { h.path[active] = p; return p != "" }
+func (h *panelHost) SetPanelPos(active bool, i int) bool     { h.pos[active] = i; return i > 0 }
+func (h *panelHost) SetPanelName(active bool, n string) bool { h.gotName = n; return n != "" }
+
+func TestMacroFar3PanelAPI(t *testing.T) {
+	base := newFakeMacroHost()
+	base.panels[true] = MacroPanelInfo{Path: "/home", ItemCount: 3, CurPos: 2, TopPos: 1, SelCount: 1}
+	host := &panelHost{fakeMacroHost: base,
+		rows: map[bool][]MacroPanelEntry{true: {{Name: "..", IsDir: true}, {Name: "a.txt", Size: 12, Selected: true}, {Name: "dir", IsDir: true}}},
+		path: map[bool]string{}, pos: map[bool]int{}}
+	Engine := newTestMacroEngine(t, host, `
+		local ACTIVE_NEW, ACTIVE_OLD = 1, 0
+		local info = panel.GetPanelInfo(nil, ACTIVE_NEW)
+		__items, __cur, __type = info.ItemsNumber, info.CurrentItem, info.PanelType
+		__dir = panel.GetPanelDirectory(nil, ACTIVE_NEW).Name
+		__item = panel.GetPanelItem(nil, ACTIVE_NEW, 2)
+		__name, __attr, __size, __sel = Panel.Item(ACTIVE_OLD, 2, 0), Panel.Item(ACTIVE_OLD, 3, 2), Panel.Item(ACTIVE_OLD, 2, 6), Panel.Item(ACTIVE_OLD, 2, 8)
+		__none = Panel.Item(ACTIVE_OLD, 9, 0)
+		__set = panel.SetPanelDirectory(nil, ACTIVE_NEW, "/tmp")
+		__pos = Panel.SetPosIdx(ACTIVE_OLD, 3)
+		__ok = Panel.SetPos(ACTIVE_OLD, "a.txt")
+		__setpath = Panel.SetPath(ACTIVE_OLD, "/var", "x")
+		__exist = panel.CheckPanelsExist()
+		panel.RedrawPanel(nil, ACTIVE_NEW, { CurrentItem = 1 })
+	`)
+	v := macroGlobals(t, Engine, "__items", "__cur", "__type", "__dir", "__item", "__name", "__attr", "__size", "__sel", "__none", "__set", "__pos", "__ok", "__setpath", "__exist")
+	if lua.LVAsNumber(v["__items"]) != 3 || lua.LVAsNumber(v["__cur"]) != 2 || lua.LVAsNumber(v["__type"]) != 1 || lua.LVAsString(v["__dir"]) != "/home" {
+		t.Errorf("info: %v", v)
+	}
+	if it, ok := v["__item"].(*lua.LTable); !ok || lua.LVAsString(it.RawGetString("FileName")) != "a.txt" || lua.LVAsNumber(it.RawGetString("FileSize")) != 12 {
+		t.Errorf("GetPanelItem = %v", v["__item"])
+	}
+	if lua.LVAsString(v["__name"]) != "a.txt" || lua.LVAsNumber(v["__attr"]) != 0x10 || lua.LVAsNumber(v["__size"]) != 12 || v["__sel"] != lua.LTrue || v["__none"] != lua.LNil {
+		t.Errorf("Panel.Item: %v", v)
+	}
+	if v["__set"] != lua.LTrue || lua.LVAsNumber(v["__pos"]) != 3 || v["__ok"] != lua.LTrue || v["__setpath"] != lua.LTrue || v["__exist"] != lua.LTrue {
+		t.Errorf("setters: %v", v)
+	}
+	if host.path[true] != "/var" {
+		t.Errorf("the last directory set was %v, want /var (Panel.SetPath came after SetPanelDirectory)", host.path)
+	}
+	if host.pos[true] != 1 || host.gotName != "x" {
+		t.Errorf("pos=%v name=%q (RedrawPanel goes to row 1, SetPath's third argument names a row)", host.pos, host.gotName)
+	}
+}
