@@ -233,7 +233,9 @@ jobs:
 
         # Build GUI-only binary for Windows (no console flash)
         if [ "$GOOS" = "windows" ]; then
-          go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
+          # f4-gui.exe is a small launcher for f4.exe (f4#1567), not a second
+          # copy of the whole program linked as a GUI application.
+          go build -trimpath -ldflags="-s -w -H windowsgui" -o build/f4-gui$EXT ./cmd/f4-gui-launcher
 
         fi
 
@@ -490,7 +492,7 @@ jobs:
           go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS" -o "$BUILD_DIR/f4$EXT" ./cmd/f4 </dev/null
 
           if [ "$GOOS" = "windows" ]; then
-            go build "${BUILD_TAG_ARGS[@]}" -trimpath $GCFLAGS -ldflags="$APP_LDFLAGS -H windowsgui" -o "$BUILD_DIR/f4-gui$EXT" ./cmd/f4 </dev/null
+            go build -trimpath -ldflags="-s -w -H windowsgui" -o "$BUILD_DIR/f4-gui$EXT" ./cmd/f4-gui-launcher </dev/null
           fi
 
           cp -r internal/i18n/lang internal/dialog/help "$BUILD_DIR/"
@@ -713,11 +715,10 @@ jobs:
 
         go build -tags "$LITE_TAGS" -trimpath $GCFLAGS \
           -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
-        # Same as the regular build: the GUI-only binary for Windows, so a
-        # launch from Explorer opens no console window.
+        # Same as the regular build: f4-gui.exe, the launcher, so a launch from
+        # Explorer opens no console window.
         if [ "$GOOS" = "windows" ]; then
-          go build -tags "$LITE_TAGS" -trimpath $GCFLAGS \
-            -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui$EXT ./cmd/f4
+          go build -trimpath -ldflags="-s -w -H windowsgui" -o build/f4-gui$EXT ./cmd/f4-gui-launcher
         fi
         go build -tags "$MATRIX_TAGS" -trimpath $GCFLAGS \
           -ldflags="$APP_LDFLAGS" -o build-control/f4$EXT ./cmd/f4
@@ -1340,8 +1341,8 @@ jobs:
         # does not start on Windows 7/8/8.1 (#1656). The release check reads
         # the tag back from the archive.
         go build -tags win7 -trimpath -ldflags="$APP_LDFLAGS" -o build/f4.exe ./cmd/f4
-        # GUI-only binary (no console flash), same as in the main matrix.
-        go build -tags win7 -trimpath -ldflags="$APP_LDFLAGS -H windowsgui" -o build/f4-gui.exe ./cmd/f4
+        # f4-gui.exe: the launcher, same as in the main matrix (f4#1567).
+        go build -trimpath -ldflags="-s -w -H windowsgui" -o build/f4-gui.exe ./cmd/f4-gui-launcher
 
         cp -r internal/i18n/lang internal/dialog/help build/
         cp f4.example.ini build/
