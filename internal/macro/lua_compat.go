@@ -87,6 +87,7 @@ func (e *LuaMacroEngine) installCompat(L *lua.LState) {
 	}
 
 	e.installPanelAPI(L)
+	e.installRegex(L)
 
 	// editor.GetInfo([id]): the editor on top, or nil when there is none.
 	editorNS := L.NewTable()

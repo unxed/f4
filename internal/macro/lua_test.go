@@ -1097,3 +1097,46 @@ func TestMacroClipboardFsplitAndPostmacro(t *testing.T) {
 		t.Errorf("a host with no clipboard: %v %v", pv["__c"], pv["__p"])
 	}
 }
+
+func TestMacroRegexNew(t *testing.T) {
+	host := newFakeMacroHost()
+	Engine := newTestMacroEngine(t, host, `
+		local upper = regex.new("^\\U+$")            -- Far's \U: not an upper-case letter
+		__u1, __u2 = upper:match("abc123"), upper:match("Abc")
+		local ext = regex.new([=[
+			(\w+)     # the name
+			\. (\w+)  # the extension
+		]=], "x")
+		__n, __e = ext:match("dir/report.txt")
+		__first, __last = ext:find("dir/report.txt")
+		local words = regex.new("\\i+", "i")
+		__all = ""
+		for w in words:gmatch("ab cd_ ef") do __all = __all .. "[" .. w .. "]" end
+		local sub, count = regex.new("(a)(b)"):gsub("abab xab", "%2%1")
+		__sub, __cnt = sub, count
+		local viaFn = regex.new("\\d+"):gsub("a1b22", function(d) return "<" .. d .. ">" end)
+		__fn = viaFn
+		local lookbehind = regex.new("(?<=x)y")       -- RE2 has no look-behind
+		__never = lookbehind:match("xy")
+		__ok = true
+	`)
+	v := macroGlobals(t, Engine, "__u1", "__u2", "__n", "__e", "__first", "__last", "__all", "__sub", "__cnt", "__fn", "__never", "__ok")
+	if lua.LVAsString(v["__u1"]) != "abc123" || v["__u2"] != lua.LNil {
+		t.Errorf("\\U: %v %v", v["__u1"], v["__u2"])
+	}
+	if lua.LVAsString(v["__n"]) != "report" || lua.LVAsString(v["__e"]) != "txt" || lua.LVAsNumber(v["__first"]) != 5 || lua.LVAsNumber(v["__last"]) != 14 {
+		t.Errorf("extended match: %v %v %v %v", v["__n"], v["__e"], v["__first"], v["__last"])
+	}
+	if lua.LVAsString(v["__all"]) != "[ab][cd_][ef]" || lua.LVAsString(v["__sub"]) != "baba xba" || lua.LVAsNumber(v["__cnt"]) != 3 || lua.LVAsString(v["__fn"]) != "a<1>b<22>" {
+		t.Errorf("gmatch/gsub: %v %v %v %v", v["__all"], v["__sub"], v["__cnt"], v["__fn"])
+	}
+	if v["__never"] != lua.LNil || v["__ok"] != lua.LTrue {
+		t.Errorf("an unsupported pattern broke the file: never=%v ok=%v", v["__never"], v["__ok"])
+	}
+	host.mu.Lock()
+	logged := len(host.logs)
+	host.mu.Unlock()
+	if logged == 0 {
+		t.Error("the pattern RE2 cannot compile was not logged")
+	}
+}
