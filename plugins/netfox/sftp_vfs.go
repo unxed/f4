@@ -330,7 +330,55 @@ func (v *SFTPVFS) Remove(ctx context.Context, p string) error {
 	return nil
 }
 func (v *SFTPVFS) Rename(ctx context.Context, o, n string) error {
-	return v.client.Rename(v.encodePath(o), v.encodePath(n))
+	overwrite, known := vfs.DestinationOverwrite(ctx)
+	return sftpRename(v.client, v.encodePath(o), v.encodePath(n), known && overwrite)
+}
+
+// sftpRenameClient is the part of *sftp.Client that sftpRename uses, so that a
+// server without the replacing rename can be faked in tests.
+type sftpRenameClient interface {
+	Rename(oldname, newname string) error
+	PosixRename(oldname, newname string) error
+	HasExtension(name string) (string, bool)
+	Lstat(p string) (os.FileInfo, error)
+	Remove(path string) error
+}
+
+// sftpPosixRenameExtension is the OpenSSH extension that renames over an
+// existing file, as rename(2) does.
+const sftpPosixRenameExtension = "posix-rename@openssh.com"
+
+// sftpRename renames from to to. The plain SFTP rename (protocol version 3)
+// fails with SSH_FX_FAILURE when the destination exists, which broke saving an
+// edited file over SFTP: the editor stages the new content beside the file and
+// renames it over the original (f4#1716). When the caller allows replacing the
+// destination, use the posix-rename extension; a server without it gets the
+// original moved aside first and put back if the replacement fails.
+func sftpRename(c sftpRenameClient, from, to string, overwrite bool) error {
+	if !overwrite {
+		return c.Rename(from, to)
+	}
+	if _, ok := c.HasExtension(sftpPosixRenameExtension); ok {
+		return c.PosixRename(from, to)
+	}
+	err := c.Rename(from, to)
+	if err == nil {
+		return nil
+	}
+	st, serr := c.Lstat(to)
+	if serr != nil || st.IsDir() {
+		return err
+	}
+	backup := fmt.Sprintf("%s.f4-replaced-%d", to, time.Now().UnixNano())
+	if berr := c.Rename(to, backup); berr != nil {
+		return err
+	}
+	if rerr := c.Rename(from, to); rerr != nil {
+		_ = c.Rename(backup, to)
+		return rerr
+	}
+	_ = c.Remove(backup)
+	return nil
 }
 
 func (v *SFTPVFS) SetAttributes(ctx context.Context, path string, item vfs.VFSItem) error {
