@@ -71,6 +71,12 @@ func (r *seqMemberReader) ReadAt(p []byte, off int64) (int, error) {
 	return n, err
 }
 
+func (r *seqMemberReader) Position() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.pos
+}
+
 func (r *seqMemberReader) dropLocked() {
 	if r.file != nil {
 		_ = r.file.Close()

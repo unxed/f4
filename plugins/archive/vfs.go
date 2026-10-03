@@ -1256,7 +1256,12 @@ func (v *ArchiveVFS) fallbackOpenMemberSequential(ctx context.Context, fsPath st
 func (w *archiveReadWrapper) ReadAt(ctx context.Context, p []byte, off int64) (int, error) {
 	w.mu.Lock()
 	streamReadAt := w.streamReadAt
+	extracted := w.extracted
+	tmp := w.tmpFile
 	w.mu.Unlock()
+	if extracted && tmp != nil {
+		return tmp.ReadAt(p, off)
+	}
 	if streamReadAt {
 		return w.readAtFromStream(ctx, p, off)
 	}
@@ -1264,7 +1269,7 @@ func (w *archiveReadWrapper) ReadAt(ctx context.Context, p []byte, off int64) (i
 		return 0, err
 	}
 	w.mu.Lock()
-	tmp := w.tmpFile
+	tmp = w.tmpFile
 	w.mu.Unlock()
 
 	if ctx.Err() != nil {
@@ -1284,6 +1289,11 @@ func (w *archiveReadWrapper) readAtFromStream(ctx context.Context, p []byte, off
 		return 0, err
 	}
 	w.mu.Lock()
+	if w.extracted && w.tmpFile != nil {
+		tmp := w.tmpFile
+		w.mu.Unlock()
+		return tmp.ReadAt(p, off)
+	}
 	v := w.v
 	fsPath := w.fsPath
 	size := w.size
@@ -1301,6 +1311,24 @@ func (w *archiveReadWrapper) readAtFromStream(ctx context.Context, p []byte, off
 	v.mu.Unlock()
 	if fsys == nil {
 		return 0, errors.New("archive filesystem is unavailable")
+	}
+	seqPos := w.seq.Position()
+	if seqPos > 0 && off < seqPos {
+		// ZIP and similar formats inspect the end-of-file directory first and
+		// then seek back to the local header. Replaying a sequential parent
+		// member for every such read is quadratic in the member size. Switch
+		// once to the existing private materialization path; sequential reads
+		// keep the reader-backed, no-temp fast path.
+		if err := w.materialize(ctx, false); err != nil {
+			return 0, err
+		}
+		w.mu.Lock()
+		tmp := w.tmpFile
+		w.mu.Unlock()
+		if tmp == nil {
+			return 0, errors.New("archive member did not materialize")
+		}
+		return tmp.ReadAt(p, off)
 	}
 	w.seq.setOpen(func() (fs.File, error) {
 		v.mu.Lock()

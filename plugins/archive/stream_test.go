@@ -196,6 +196,26 @@ func TestArchiveVFSReaderBackedNestedTarGzipAndZip(t *testing.T) {
 	requireReaderBacked(t, inner, "ZIP inside outer tar.gz")
 	t.Cleanup(func() { _ = inner.Close() })
 
+	// ZIP reads its central directory near the end first and then returns to
+	// the local header at the beginning. A sequential parent member cannot
+	// serve that backwards ReadAt efficiently, so the stream adapter switches
+	// to one private materialization instead of replaying the TAR member for
+	// every request (f4#1731).
+	stream, ok := inner.fsys.(*streamArchiveFS)
+	if !ok {
+		t.Fatalf("nested ZIP fs = %T, want *streamArchiveFS", inner.fsys)
+	}
+	source, ok := stream.source.source.(*archiveReadWrapper)
+	if !ok {
+		t.Fatalf("nested ZIP source = %T, want *archiveReadWrapper", stream.source.source)
+	}
+	source.mu.Lock()
+	materialized := source.extracted && source.tmpPath != ""
+	source.mu.Unlock()
+	if !materialized {
+		t.Fatal("nested ZIP parent member was replayed instead of materialized after backward read")
+	}
+
 	got := readArchiveMember(t, inner, inner.Join(innerPath, "leaf.txt"))
 	if !bytes.Equal(got, leaf) {
 		t.Fatalf("nested content = %q, want %q", got, leaf)
