@@ -128,7 +128,11 @@ func (settingsHost) SessionPath() string { return getSessionIniPath() }
 func (settingsHost) GuiBackends() []string { return startupGuiBackends }
 func (settingsHost) PluginPackage(install bool, pf *panel.PanelsFrame, item plughost.PlugRingItem, refresh func()) {
 	if install {
-		actionInstallPlugRingItem(pf, nil, item, refresh)
+		// actionInstallPlugRingItem may wait synchronously for a confirmation
+		// dialog through PanelsFrame.Message. This method is called from a UI
+		// task by the Settings catalog, so the wait must not occupy that task
+		// (f4#1710).
+		go actionInstallPlugRingItem(pf, nil, item, refresh)
 	} else {
 		actionRemovePlugRingItem(pf, nil, item, refresh)
 	}

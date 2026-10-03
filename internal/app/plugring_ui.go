@@ -228,7 +228,12 @@ func actionPlugRingFocused(pf *panel.PanelsFrame, focusItemID string) {
 
 	btnInstall.OnClick = func() {
 		if item := selected(); item != nil {
-			actionInstallPlugRingItem(pf, dlg, *item, refresh)
+			// The installer may use PanelsFrame.Message for a synchronous
+			// confirmation. Run that orchestration off the UI goroutine: Message
+			// posts the dialog to the UI queue and waits for its answer, so calling
+			// it here would wait for the same goroutine that has to show the
+			// dialog (f4#1710).
+			go actionInstallPlugRingItem(pf, dlg, *item, refresh)
 		}
 	}
 	btnRemove.OnClick = func() {
