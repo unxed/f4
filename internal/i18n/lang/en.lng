@@ -2298,6 +2298,7 @@ CommandPalette.Bookmark.Home.Desc=Open the home folder in the active panel
 
 Drive.Title= Drive
 Drive.Links=Links
+Drive.Tools=Tools
 Drive.BottomHint= Ins/Ctrl+N Del F4 F9
 Drive.UnmountFailedTitle=Unmount failed
 Drive.UnmountFailed=Could not unmount\n%s:\n\n%v

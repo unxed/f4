@@ -1500,6 +1500,7 @@ Every file tracked in the repository. Regenerate with
     │   │   ├── custom_column_modes_test.go
     │   │   ├── dirwatch.go
     │   │   ├── dirwatch_test.go
+    │   │   ├── drive_menu_headings_test.go
     │   │   ├── drives_bookmarks.go
     │   │   ├── drives_bookmarks_test.go
     │   │   ├── drives_bookmarks_ui.go

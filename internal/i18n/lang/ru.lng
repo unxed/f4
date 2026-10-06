@@ -2298,6 +2298,7 @@ CommandPalette.Bookmark.Home.Desc=Открыть домашнюю папку в 
 
 Drive.Title= Диски
 Drive.Links=Links
+Drive.Tools=Инструменты
 Drive.BottomHint= Ins/Ctrl+N Del F4 F9
 Drive.UnmountFailedTitle=Не удалось размонтировать
 Drive.UnmountFailed=Не удалось размонтировать\n%s:\n\n%v

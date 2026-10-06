@@ -6283,7 +6283,7 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	// Ctrl+Down on the tool rows (#1148).
 	toolRows := map[int]int{}
 	if len(drives) > 0 {
-		menu.AddSeparator()
+		menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Tools")})
 		for index, drv := range drives {
 			factory := drv.Factory
 			toolRows[menu.GetItemCount()] = index
@@ -6321,7 +6321,6 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	// while this list is the DiskMenuEditor-style, unbounded drive-menu list.
 	driveBookmarkRows := map[int]int{} // menu row -> named bookmark index
 	driveBookmarks := []DriveBookmark(nil)
-	headerRow := -1
 	if driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuShowBookmarks) {
 		var err error
 		driveBookmarks, err = LoadDriveBookmarks(DriveBookmarksFilePath())
@@ -6329,9 +6328,9 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 			vtui.DebugLog("DRIVE BOOKMARKS: load %q failed: %v", DriveBookmarksFilePath(), err)
 			driveBookmarks = nil
 		}
-		menu.AddSeparator()
-		headerRow = menu.GetItemCount()
-		menu.AddItem(vtui.MenuItem{Text: i18n.Msg("Drive.Links"), Command: appcmd.CmDriveBookmarksHeader})
+		// The caption sits in the rule itself, as the menu title does, and
+		// takes no row of its own (#1148).
+		menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Links")})
 		for index, bookmark := range driveBookmarks {
 			bookmark := bookmark
 			driveBookmarkRows[menu.GetItemCount()] = index
@@ -6342,11 +6341,6 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 				},
 			})
 		}
-		vtui.FrameManager.DisabledCommands.Disable(appcmd.CmDriveBookmarksHeader)
-	}
-	oldSelectable := menu.IsSelectable
-	menu.IsSelectable = func(index int) bool {
-		return index != headerRow && oldSelectable(index)
 	}
 
 	// Обработка физических клавиш / и ~ (layout-independent)
