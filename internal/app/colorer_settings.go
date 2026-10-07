@@ -158,10 +158,18 @@ func actionColorerReloadBase(pf *panel.PanelsFrame) {
 		if check.Err != nil {
 			return
 		}
-		editor.ResetColorerSessions()
-		editor.ResetColorerRegions()
-		editor.ReloadColorerEditors()
+		reloadColorerEditors()
 	})
+}
+
+// reloadColorerEditors applies a configuration accepted by the settings
+// dialog to editors that were already open. Without this, changing the user
+// HRC directory and pressing OK only saved the path: existing editors kept
+// their sessions and never saw the new schemes until a separate Reload.
+func reloadColorerEditors() {
+	editor.ResetColorerSessions()
+	editor.ResetColorerRegions()
+	editor.ReloadColorerEditors()
 }
 
 func actionColorerSettings(pf *panel.PanelsFrame) {
@@ -404,6 +412,7 @@ func actionColorerSettings(pf *panel.PanelsFrame) {
 				return
 			}
 			apply()
+			reloadColorerEditors()
 			dlg.Close()
 		})
 	}
@@ -415,9 +424,7 @@ func actionColorerSettings(pf *panel.PanelsFrame) {
 				return
 			}
 			apply()
-			editor.ResetColorerSessions()
-			editor.ResetColorerRegions()
-			editor.ReloadColorerEditors()
+			reloadColorerEditors()
 		})
 	}
 
