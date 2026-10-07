@@ -251,7 +251,7 @@ func ActionPasteClipboard(pf *PanelsFrame) bool {
 				release()
 				return
 			}
-			if pf.pasteFileClipboard(contents.Text, err) {
+			if pf.pasteFileClipboardContents(contents, err) {
 				release()
 				return
 			}

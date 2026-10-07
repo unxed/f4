@@ -179,3 +179,34 @@ func TestPanelPasteTakesRememberedFilesBeforeText(t *testing.T) {
 		t.Fatalf("the file paths were typed on the command line: %q", got)
 	}
 }
+
+func TestPanelPasteExternalFileClipboardStartsCopy(t *testing.T) {
+	pf, pnl, _, ops := newFileClipboardFixture(t)
+	old := readPanelClipboard
+	t.Cleanup(func() { terminal.WaitForAsyncClipboard(); readPanelClipboard = old })
+
+	sourceDir := t.TempDir()
+	for _, name := range []string{"from-a.txt", "from-b.txt"} {
+		if err := os.WriteFile(filepath.Join(sourceDir, name), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	destDir := t.TempDir()
+	pnl.Vfs = vfs.NewOSVFS(destDir)
+	paths := []string{filepath.Join(sourceDir, "from-a.txt"), filepath.Join(sourceDir, "from-b.txt")}
+	readPanelClipboard = func(context.Context) (terminal.ClipboardContents, error) {
+		return terminal.ClipboardContents{Text: vtui.FormatURIList(paths), Files: paths}, nil
+	}
+	if !ActionPasteClipboard(pf) {
+		t.Fatal("paste of external files not handled")
+	}
+	terminal.WaitForAsyncClipboard()
+	testutil.DrainUITasks()
+	if len(*ops) != 1 {
+		t.Fatalf("%d transfers started by Ctrl+V, want 1", len(*ops))
+	}
+	op := (*ops)[0]
+	if op.base != sourceDir || strings.Join(op.names, ",") != "from-a.txt,from-b.txt" || op.dest != destDir+fileClipboardSeparator() || op.move {
+		t.Fatalf("transfer = %+v, want a copy from %s into %s", op, sourceDir, destDir)
+	}
+}

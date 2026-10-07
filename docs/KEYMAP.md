@@ -231,13 +231,16 @@ the directory of the active panel through the same file operations as F5 and F6,
 the usual queue, conflict questions and progress apply. A copy can be pasted again;
 a cut is spent by the first paste.
 
-The paths of the files are put on the system clipboard as text, one per line. That
-text is how a paste recognizes the files as still current: if the clipboard holds
-anything else by then, the remembered files are forgotten and the paste is an
-ordinary text or image paste. While the command line holds text, Ctrl+C and Ctrl+V
-stay with the command line, and the paste is a text paste.
+The paths of the files are put on the system clipboard as text, one per line, and
+as the platform's file representation where it is available (`text/uri-list` on
+Unix and `CF_HDROP` on Windows). That representation lets a file manager paste
+files copied in f4, while f4 can also paste local files copied in another file
+manager. A remembered f4 paste recognizes its files by the clipboard contents;
+if the clipboard holds anything else by then, the remembered files are forgotten
+and the paste is an ordinary text or image paste. While the command line holds
+text, Ctrl+C and Ctrl+V stay with the command line, and the paste is a text paste.
 
 Cut has no default key because Ctrl+X belongs to the command line history; bind it, or
 any other key, in `Options > Hotkey Configuration`. The remembered files are kept
-inside f4: other programs receive only the paths as text, and files copied in other
-programs cannot be pasted into a panel yet.
+inside f4, while the native file clipboard additionally carries the cut/copy
+state where the platform exposes it.

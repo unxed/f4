@@ -2,6 +2,7 @@ package panel
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ type fileClipboard struct {
 	source vfs.VFS
 	base   string
 	names  []string
+	paths  []string
 	cut    bool
 	text   string
 }
@@ -76,11 +78,12 @@ func ActionCopyFilesToClipboard(pf *PanelsFrame, cut bool) bool {
 		source: active.Vfs,
 		base:   base,
 		names:  names,
+		paths:  paths,
 		cut:    cut,
 		text:   strings.Join(paths, "\n"),
 	}
 	pf.fileClip = clip
-	terminal.SetF4Clipboard(clip.text)
+	terminal.SetF4FileClipboard(clip.text, paths, cut)
 
 	key := "Panel.FileClipboard.CopiedFmt"
 	if cut {
@@ -103,18 +106,47 @@ func normalizeClipboardText(text string) string {
 // whether the paste was spent on the remembered files; false sends the paste
 // on to the usual text and image handling.
 func (pf *PanelsFrame) pasteFileClipboard(text string, readErr error) bool {
+	return pf.pasteFileClipboardContents(terminal.ClipboardContents{Text: text}, readErr)
+}
+
+func sameFileClipboardPaths(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if filepath.Clean(left[i]) != filepath.Clean(right[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (pf *PanelsFrame) pasteFileClipboardContents(contents terminal.ClipboardContents, readErr error) bool {
 	clip := pf.fileClip
 	// Text typed on the command line is what Ctrl+V is aimed at then.
-	if clip == nil || !pf.CmdLine.IsEmpty() {
+	if !pf.CmdLine.IsEmpty() {
 		return false
 	}
-	// An unreadable clipboard (no clipboard tool, a terminal that refuses)
-	// cannot say the files are stale, and the remembered files are still what
-	// the user asked for.
-	if readErr == nil && normalizeClipboardText(text) != normalizeClipboardText(clip.text) {
-		pf.fileClip = nil
+	if clip != nil {
+		matches := len(contents.Files) > 0 && sameFileClipboardPaths(contents.Files, clip.paths)
+		// An unreadable clipboard (no clipboard tool, a terminal that refuses)
+		// cannot say the files are stale, and the remembered files are still what
+		// the user asked for.
+		if !matches && readErr == nil && normalizeClipboardText(contents.Text) != normalizeClipboardText(clip.text) {
+			pf.fileClip = nil
+			clip = nil
+		}
+		if clip != nil {
+			return pf.pasteRememberedFileClipboard(clip)
+		}
+	}
+	if len(contents.Files) == 0 {
 		return false
 	}
+	return pf.pasteExternalFileClipboard(contents.Files, contents.FilesCut)
+}
+
+func (pf *PanelsFrame) pasteRememberedFileClipboard(clip *fileClipboard) bool {
 	target := pf.GetActivePanel()
 	if target == nil || target.Vfs == nil {
 		return false
@@ -138,5 +170,46 @@ func (pf *PanelsFrame) pasteFileClipboard(text string, readErr error) bool {
 		}
 	}
 	runFileClipboardOp(clip.source, target.Vfs, clip.base, clip.names, dest, clip.cut, done)
+	return true
+}
+
+func (pf *PanelsFrame) pasteExternalFileClipboard(paths []string, move bool) bool {
+	target := pf.GetActivePanel()
+	if target == nil || target.Vfs == nil {
+		return false
+	}
+	dest := target.Vfs.GetPath()
+	if dest != "" && !strings.HasSuffix(dest, "/") && !strings.HasSuffix(dest, "\\") {
+		sep := "/"
+		if _, local := target.Vfs.(*vfs.OSVFS); local && runtime.GOOS == "windows" {
+			sep = "\\"
+		}
+		dest += sep
+	}
+	groups := make(map[string][]string)
+	var order []string
+	for _, path := range paths {
+		path = filepath.Clean(path)
+		if path == "." || path == "" || !filepath.IsAbs(path) {
+			continue
+		}
+		dir, name := filepath.Dir(path), filepath.Base(path)
+		if _, ok := groups[dir]; !ok {
+			order = append(order, dir)
+		}
+		groups[dir] = append(groups[dir], name)
+	}
+	if len(order) == 0 {
+		return false
+	}
+	done := func() {
+		if !pf.Closed {
+			pf.RefreshAll()
+		}
+	}
+	for _, dir := range order {
+		source := vfs.NewOSVFS(dir)
+		runFileClipboardOp(source, target.Vfs, dir, groups[dir], dest, move, done)
+	}
 	return true
 }
