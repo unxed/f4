@@ -159,14 +159,15 @@ type TerminalView struct {
 	// Coordinates are absolute (screen) columns/rows, chosen so the
 	// highlight stays visually anchored while PTY output scrolls the
 	// underlying grid — matches xterm-style selection semantics.
-	SelActive  bool
-	selStartX  int
-	selStartY  int
-	selEndX    int
-	selEndY    int
-	SelBlock   bool
-	showOffset int // last vertical "visual gravity" offset applied in Show
-	hoverURL   string
+	SelActive           bool
+	selStartX           int
+	selStartY           int
+	selEndX             int
+	selEndY             int
+	SelBlock            bool
+	showOffset          int  // last vertical "visual gravity" offset applied in Show
+	visualGravityLocked bool // keep the viewport fixed while OSC 133 C..D output runs
+	hoverURL            string
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -321,6 +322,8 @@ func (tv *TerminalView) ResetBuffer(w, h int) {
 	tv.AltLines = makeBuf()
 	tv.WrapFlags = make([]bool, h)
 	tv.Images = nil
+	tv.showOffset = 0
+	tv.visualGravityLocked = false
 	tv.virtual, tv.phMeta, tv.phLast = nil, nil, placeholderRun{}
 
 	// Сброс параметров прокрутки и курсора
@@ -1078,6 +1081,10 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 
 	offset := 0
 	if !tv.UseAltScreen {
+		offset = tv.showOffset
+	}
+	if !tv.UseAltScreen && !tv.visualGravityLocked {
+		offset = 0
 		lowestRow := 0
 		for y := tv.Height - 1; y >= 0; y-- {
 			if tv.rowHasText(y) {
@@ -2054,6 +2061,7 @@ func (tv *TerminalView) HandleOSC133(payload string) {
 		if !tv.kittyCommandRunning.Swap(true) {
 			tv.kittyBeforeCommand.Store(tv.KittyFlags.Swap(0))
 		}
+		tv.SetVisualGravityLocked(true)
 		tv.SetMuted(false)
 		if tv.OnBusyChange != nil {
 			tv.OnBusyChange(true)
@@ -2064,6 +2072,7 @@ func (tv *TerminalView) HandleOSC133(payload string) {
 		if tv.kittyCommandRunning.Swap(false) {
 			tv.KittyFlags.Store(tv.kittyBeforeCommand.Load())
 		}
+		tv.SetVisualGravityLocked(false)
 		tv.EnsureFreshPromptLine()
 		if tv.OnBusyChange != nil {
 			tv.OnBusyChange(false)
@@ -2077,6 +2086,16 @@ func (tv *TerminalView) HandleOSC133(payload string) {
 func (tv *TerminalView) SetPromptOverlaysLastRow(overlays bool) {
 	tv.mu.Lock()
 	tv.promptOverlaysLastRow = overlays
+	tv.mu.Unlock()
+}
+
+// SetVisualGravityLocked keeps the primary viewport at its current offset
+// while a command is repainting rows. Windows console programs commonly use
+// cursor-up/carriage-return redraws, so recomputing gravity for every partial
+// PTY frame makes the whole output jump (f4#1749).
+func (tv *TerminalView) SetVisualGravityLocked(locked bool) {
+	tv.mu.Lock()
+	tv.visualGravityLocked = locked
 	tv.mu.Unlock()
 }
 

@@ -755,6 +755,38 @@ func TestTerminalView_WindowsConPTY_VisualGravity(t *testing.T) {
 	}
 }
 
+func TestTerminalView_VisualGravityStaysFixedDuringCommandOutput(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	tv.SetFocus(true)
+	tv.SetVisible(true)
+	tv.SetPosition(0, 0, 79, 23)
+	tv.SetCursor(0, 0)
+	tv.PutChar('A', DefaultTermAttr)
+	tv.HandleOSC133("C")
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 24)
+	tv.Show(scr)
+	lockedOffset := tv.showOffset
+
+	// A program such as docker compose redraws different rows between
+	// frames. Its active command must not make the whole viewport move with
+	// each newly touched row.
+	tv.SetCursor(0, 1)
+	tv.PutChar('B', DefaultTermAttr)
+	tv.Show(scr)
+	if tv.showOffset != lockedOffset {
+		t.Fatalf("visual gravity moved during OSC 133 C..D output: %d -> %d", lockedOffset, tv.showOffset)
+	}
+
+	tv.HandleOSC133("D")
+	tv.Show(scr)
+	if tv.showOffset == lockedOffset {
+		t.Fatalf("visual gravity did not resume after OSC 133 D: still %d", tv.showOffset)
+	}
+}
+
 func TestTerminalView_HiddenCursorStaysHiddenWhenFocused(t *testing.T) {
 	tv := NewTerminalView(80, 10)
 	defer tv.Close()

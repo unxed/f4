@@ -2215,6 +2215,9 @@ func (pf *PanelsFrame) shellBusyChanged(busy bool) {
 // backstop regardless of whether this particular D ever shows up.
 func (pf *PanelsFrame) BeginManagedExecution() {
 	pf.Executing = true
+	if pf.TermView != nil {
+		pf.TermView.SetVisualGravityLocked(true)
+	}
 	pf.ignoreNextPrompt = false
 	pf.armManagedExecDebounce()
 }
@@ -2226,6 +2229,9 @@ func (pf *PanelsFrame) BeginManagedExecution() {
 // the command is sent, so that first stale marker is discarded.
 func (pf *PanelsFrame) BeginPromptDrivenExecution() {
 	pf.Executing = true
+	if pf.TermView != nil {
+		pf.TermView.SetVisualGravityLocked(true)
+	}
 	pf.ignoreNextPrompt = !pf.ShellPromptReady
 	pf.armManagedExecDebounce()
 }
@@ -2332,6 +2338,9 @@ func (pf *PanelsFrame) pollManagedExecutionDebounce() {
 // out of the busy state.
 func (pf *PanelsFrame) endExecution() {
 	pf.Executing = false
+	if pf.TermView != nil {
+		pf.TermView.SetVisualGravityLocked(false)
+	}
 	pf.workspaceCommandTitle = ""
 	if pf.ReturnToPanels {
 		pf.ShowPanels = true
