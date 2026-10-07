@@ -2863,7 +2863,7 @@ func init() {
 		Area:        "Editor",
 		Label:       "Delete word backward",
 		Description: "Delete the word to the left of the cursor",
-		DefaultKeys: []string{"CtrlBack"},
+		DefaultKeys: []string{"CtrlBS"},
 		MenuPath:    "Edit",
 		Handler:     withEditor(func(ev *editor.EditorView) { ev.DeleteWordBackward() }),
 	})

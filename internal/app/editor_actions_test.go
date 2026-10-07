@@ -207,7 +207,7 @@ func TestEditorFAR3HotkeysResolve(t *testing.T) {
 		"CtrlE":          "Editor.MoveToScreenBottom",
 		"CtrlK":          "Editor.DeleteToLineEnd",
 		"AltD":           "Editor.DeleteToLineEnd",
-		"CtrlBack":       "Editor.DeleteWordBackward",
+		"CtrlBS":         "Editor.DeleteWordBackward",
 		"CtrlT":          "Editor.DeleteSpacersForward",
 		"CtrlD":          "Editor.DeleteBlock",
 		"CtrlP":          "Editor.CopyBlockToCursor",

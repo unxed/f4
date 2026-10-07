@@ -606,6 +606,7 @@ Every file tracked in the repository. Regenerate with
     │   │   ├── editor_actions_test.go
     │   │   ├── editor_binary_open_test.go
     │   │   ├── editor_events.go
+    │   │   ├── editor_far3_keys_path_test.go
     │   │   ├── editor_host_test.go
     │   │   ├── editor_hotkeys_test.go
     │   │   ├── editor_keys_test.go
