@@ -135,6 +135,9 @@ func TestPluginHotkeyEditHoldsOneCharacter(t *testing.T) {
 }
 
 func TestMenuHeightLimit(t *testing.T) {
+	if pluginMenuBottomHint != " F4 Del " {
+		t.Fatalf("plugin menu hint = %q, want F4 and Del", pluginMenuBottomHint)
+	}
 	if got := menuHeightLimit("", 50); got != 15 {
 		t.Errorf("a generic menu on 50 rows: %d, want 15", got)
 	}
@@ -176,6 +179,12 @@ func TestPluginHotkeyDialogLayout(t *testing.T) {
 	dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
 	if !ok {
 		t.Fatal("the hot key window is not on top")
+	}
+	if dlg.ShowClose {
+		t.Fatal("the hot key dialog still shows a close button")
+	}
+	if got, want := dlg.X2-dlg.X1+1, pluginHotkeyDialogWidth("Visual File Renamer"); got != want {
+		t.Fatalf("the hot key window width = %d, want content width %d", got, want)
 	}
 	t.Cleanup(func() { vtui.FrameManager.Pop() })
 	rules := vtui.DefaultLayoutRules

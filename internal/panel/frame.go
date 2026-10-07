@@ -5321,12 +5321,24 @@ func (pf *PanelsFrame) menuCore(title, bottomHint string, items []vtui.MenuItem,
 			menu.SetBottomTitle(bottomHint)
 		}
 
-		// Calculate dynamic width based on items and title
-		maxW := runewidth.StringWidth(title) + 10
+		// Calculate dynamic width based on items and title. The plugin menu is
+		// intentionally only one padding column wider than its longest row:
+		// its rows already contain the shortcut column, and the old generous
+		// padding made the F11 window much wider than the plugin names.
+		padding := 8
+		minPadding := 10
+		if bottomHint == pluginMenuBottomHint {
+			padding = 4
+			minPadding = 4
+		}
+		maxW := runewidth.StringWidth(title) + minPadding
+		if hintWidth := runewidth.StringWidth(bottomHint) + minPadding; hintWidth > maxW {
+			maxW = hintWidth
+		}
 		for _, item := range items {
 			menu.AddItem(item)
 			clean, _, _ := vtui.ParseAmpersandString(item.Text)
-			w := runewidth.StringWidth(clean) + runewidth.StringWidth(item.Shortcut) + 8 // padding for markers and borders
+			w := runewidth.StringWidth(clean) + runewidth.StringWidth(item.Shortcut) + padding
 			if w > maxW {
 				maxW = w
 			}

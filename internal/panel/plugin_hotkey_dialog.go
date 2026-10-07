@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/vtinput"
@@ -101,6 +102,28 @@ func (e *pluginHotkeyEdit) Show(scr *vtui.ScreenBuf) {
 	e.Edit.Show(scr)
 }
 
+func pluginHotkeyDialogWidth(label string) int {
+	cleanLabel, _, _ := vtui.ParseAmpersandString(label)
+	maxContent := runewidth.StringWidth(i18n.Msg("Plugins.HotkeyPrompt"))
+	for _, width := range []int{
+		runewidth.StringWidth(cleanLabel) + 2, // one-cell field and its gap
+		runewidth.StringWidth(i18n.Msg("DriveLink.HotkeyHint")),
+	} {
+		if width > maxContent {
+			maxContent = width
+		}
+	}
+	buttonWidth := func(text string) int {
+		return runewidth.StringWidth(string(vtui.UIStrings.ButtonBrackets[0]) + " " + text + " " + string(vtui.UIStrings.ButtonBrackets[1]))
+	}
+	buttons := buttonWidth(i18n.Msg("vtui.Ok")) + 2 + buttonWidth(i18n.Msg("vtui.Cancel"))
+	if buttons > maxContent {
+		maxContent = buttons
+	}
+	// Leave one cell between each line and the frame.
+	return maxContent + 4
+}
+
 // showPluginHotkeyDialog asks for the menu hotkey of a plugin entry in a
 // one-character field with OK and Cancel: the letter is shown, edited and
 // deleted (empty field) like any other field, as the ticket asked (#918).
@@ -116,15 +139,15 @@ func showPluginHotkeyDialog(hm *keymap.HotkeyManager, actionName, label string, 
 	// The rows follow the example in the ticket (#918): the prompt, the
 	// one-cell field with the name of the entry beside it, the hint, a rule
 	// and the buttons as the last row inside the frame, no blank rows.
-	const width, height = 50, 7
+	width, height := pluginHotkeyDialogWidth(cleanLabel), 7
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("Plugins.HotkeyTitle"))
-	dlg.ShowClose = true
+	dlg.ShowClose = false
 
 	edit := &pluginHotkeyEdit{vtui.NewEdit(0, 0, 1, currentPluginHotkeyText(hm, actionName, label, declaredKey))}
 	prompt := vtui.NewText(0, 0, i18n.Msg("Plugins.HotkeyPrompt"), vtui.Palette[vtui.ColDialogText])
 	title := vtui.NewText(0, 0, cleanLabel, vtui.Palette[vtui.ColDialogText])
 	note := vtui.NewText(0, 0, i18n.Msg("DriveLink.HotkeyHint"), vtui.Palette[vtui.ColDialogText])
-	sep := vtui.NewSeparator(0, 0, width, true, true)
+	sep := vtui.NewSeparator(0, 0, width-4, true, true)
 	btnOk := vtui.NewButton(0, 0, i18n.Msg("vtui.Ok"))
 	btnOk.IsDefault = true
 	btnCancel := vtui.NewButton(0, 0, i18n.Msg("vtui.Cancel"))
