@@ -361,6 +361,19 @@ func Main() {
 		}
 		return
 	}
+	// The elevated dispatcher of Windows (f4#1768): UAC started this copy of
+	// f4 for one client, and it does nothing else.
+	if sock, token, found, err := vfs.ParseElevatedDispatcherArgs(os.Args[1:]); found {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := vfs.RunElevatedDispatcher(sock, token, nil); err != nil {
+			fmt.Fprintf(os.Stderr, "f4 elevated dispatcher failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	installConsoleCtrlHandler()
 	var sudoDispatcher string
 

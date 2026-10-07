@@ -63,8 +63,11 @@ and exits when it leaves. Windows has no descriptor passing, so the framing
 (`vfs/sudo_frame.go`) carries messages only, bounded to 64 MiB each; file contents
 will cross as requests, not as handles.
 
-What is done: the authenticated channel. Still to come, one part at a time:
-launching the dispatcher through `ShellExecute "runas"`, the operations it
-serves, and the prompt in panels and in the editor that offers to retry a refused
-operation as administrator. Until the last part lands the Windows build still
+What is done: the authenticated channel, and the dispatcher itself:
+`f4 --elevated-dispatcher <socket> <token>` (accepted only as the whole tail of
+the command line) listens on the socket, serves the one client with the token and
+exits when it leaves; `LaunchElevatedDispatcher` starts it through
+`ShellExecute "runas"`, which is where UAC asks. Still to come, one part at a time:
+the operations it serves, and the prompt in panels and in the editor that offers to
+retry a refused operation as administrator. Until the last part lands the Windows build still
 reports elevation as unavailable.

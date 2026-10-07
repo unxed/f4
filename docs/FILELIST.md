@@ -3474,10 +3474,14 @@ Every file tracked in the repository. Regenerate with
         ├── sudo_dispatcher_unix_test.go
         ├── sudo_dispatcher_windows.go
         ├── sudo_elevated.go
+        ├── sudo_elevated_dispatcher.go
+        ├── sudo_elevated_dispatcher_test.go
         ├── sudo_elevated_test.go
         ├── sudo_frame.go
         ├── sudo_ipc_unix.go
         ├── sudo_ipc_windows.go
+        ├── sudo_launch_other.go
+        ├── sudo_launch_windows.go
         ├── sudo_msg.go
         ├── sudo_notexist_test.go
         ├── sudo_test.go
