@@ -5350,6 +5350,23 @@ func TestEditorView_RectangularSelection_Paste(t *testing.T) {
 
 	GlobalLastClipboardWasRectangular = false
 }
+
+func TestEditorView_PasteText_NormalizesWindowsLineEndings(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	Pt := piecetable.New([]byte("before\nafter"))
+	ev := NewEditorView(Pt, nil, "")
+	defer ev.Close()
+	ev.SetPosition(0, 0, 80, 24)
+	ev.CursorLine = 1
+	ev.CursorPos = 0
+
+	ev.PasteText("one\r\ntwo\r\n")
+
+	if got, want := ev.Pt.String(), "before\none\ntwo\nafter"; got != want {
+		t.Fatalf("CRLF paste = %q, want %q", got, want)
+	}
+}
+
 func TestEditorView_RegexpSearchReplace(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	Pt := piecetable.New([]byte("abc 123 abc"))

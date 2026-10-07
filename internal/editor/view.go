@@ -6159,7 +6159,20 @@ func (ev *EditorView) PasteRectangular(text string, targetCol int) {
 	ev.EnsureCursorVisible()
 }
 
+// normalizePastedText keeps the editor's internal line model consistent when
+// a clipboard backend returns Windows line endings. The bracketed-paste path
+// already does this while it accumulates input; action-driven paste must use
+// the same representation or CR characters become visible buffer data and
+// can make a multi-line paste look joined or repeated by the terminal.
+func normalizePastedText(text string) string {
+	if !strings.Contains(text, "\r") {
+		return text
+	}
+	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(text)
+}
+
 func (ev *EditorView) PasteText(text string) {
+	text = normalizePastedText(text)
 	if GlobalLastClipboardWasRectangular {
 		targetCol := ev.getVisualColOf(ev.CursorLine, ev.CursorPos)
 		ev.PasteRectangular(text, targetCol)
