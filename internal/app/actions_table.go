@@ -353,14 +353,39 @@ func init() {
 		Description: "Configure the size boundaries for panel groups",
 		DescKey:     "Group.Settings.Desc"})
 
+	// Menu items run synchronously from vtui's VMenu callback, before the menu
+	// frame is removed. In that window GetTopFrame is the menu rather than the
+	// editor that owns it, so resolve the active screen's editor underneath a
+	// menu overlay as well.
+	editorForAction := func() *editor.EditorView {
+		if vtui.FrameManager == nil {
+			return nil
+		}
+		if ev, ok := vtui.FrameManager.GetTopFrame().(*editor.EditorView); ok {
+			return ev
+		}
+		top := vtui.FrameManager.GetTopFrame()
+		if top == nil || top.GetType() != vtui.TypeMenu {
+			return nil
+		}
+		index := vtui.FrameManager.ActiveIdx
+		if index < 0 || index >= len(vtui.FrameManager.Screens) {
+			return nil
+		}
+		screen := vtui.FrameManager.Screens[index]
+		for i := len(screen.Frames) - 1; i >= 0; i-- {
+			if ev, ok := screen.Frames[i].(*editor.EditorView); ok && !ev.IsDone() {
+				return ev
+			}
+		}
+		return nil
+	}
+
 	// withMultiEditor is for the handful of actions that know about the
 	// multi-caret set and act on it themselves.
 	withMultiEditor := func(fn func(ev *editor.EditorView)) func() bool {
 		return func() bool {
-			if vtui.FrameManager == nil {
-				return false
-			}
-			if ev, ok := vtui.FrameManager.GetTopFrame().(*editor.EditorView); ok {
+			if ev := editorForAction(); ev != nil {
 				fn(ev)
 				return true
 			}
@@ -397,7 +422,7 @@ func init() {
 			if vtui.FrameManager == nil {
 				return false
 			}
-			if ev, ok := vtui.FrameManager.GetTopFrame().(*editor.EditorView); ok {
+			if ev := editorForAction(); ev != nil {
 				return fn(ev)
 			}
 			return false

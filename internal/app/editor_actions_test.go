@@ -63,6 +63,34 @@ func TestEditorCalculateExpressionActionReplacesSelectionWithResult(t *testing.T
 	}
 }
 
+func TestEditorCopyPasteActionsWorkWhileEditMenuIsOpen(t *testing.T) {
+	ev := newActionTestEditor(t, "abc")
+	vtui.FrameManager.Push(ev)
+
+	ev.SelActive = true
+	ev.SelAnchorOffset = 0
+	ev.CursorPos = len("abc")
+	menu := vtui.NewVMenu("Edit")
+	vtui.FrameManager.Push(menu)
+	t.Cleanup(menu.Close)
+
+	if !RunAction("Editor.Copy") {
+		t.Fatal("Editor.Copy did not resolve the editor below the menu")
+	}
+	if got := vtui.GetClipboard(); got != "abc" {
+		t.Fatalf("menu copy clipboard = %q, want %q", got, "abc")
+	}
+
+	ev.SelActive = false
+	ev.CursorPos = 0
+	if !RunAction("Editor.Paste") {
+		t.Fatal("Editor.Paste did not resolve the editor below the menu")
+	}
+	if got, want := ev.GetText(), "abcabc"; got != want {
+		t.Fatalf("menu paste text = %q, want %q", got, want)
+	}
+}
+
 func TestEditorAmountInWordsActionReplacesSelection(t *testing.T) {
 	ev := newActionTestEditor(t, "5 руб")
 	vtui.FrameManager.Push(ev)
