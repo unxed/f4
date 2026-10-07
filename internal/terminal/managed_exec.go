@@ -13,3 +13,16 @@ import "fmt"
 func ManagedForegroundCommand(sqCmd string) string {
 	return fmt.Sprintf("{ trap \"printf ''\" INT; printf \"\\033]133;C\\007\"; eval %s ; FARVTRESULT=$?; printf \"\\033]133;D\\007\"; trap - INT; (exit $FARVTRESULT); }", sqCmd)
 }
+
+// ManagedForegroundCommandInDirectory runs the managed command only after a
+// directory change succeeded. A plain `cd dir && ManagedForegroundCommand`
+// is not sufficient: when the directory needs sudo, the unprivileged shell
+// rejects cd and short-circuits the OSC wrapper, leaving f4 waiting forever
+// for its completion marker (f4#1255).
+//
+// sqPath and sqCmd are already shell-quoted for the POSIX shell. The failure
+// arm emits the same C/D markers as a managed command, then preserves cd's
+// exit status, so the terminal returns to the panels instead of hanging.
+func ManagedForegroundCommandInDirectory(sqPath, sqCmd string) string {
+	return fmt.Sprintf("set +H; if cd %s; then %s; else FARVTRESULT=$?; printf \"\\033]133;C\\007\\033]133;D\\007\"; (exit $FARVTRESULT); fi", sqPath, ManagedForegroundCommand(sqCmd))
+}

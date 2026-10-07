@@ -3513,7 +3513,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 						wrapped := terminal.ManagedForegroundCommand(sqCmd)
 						if path != "" {
 							sqPath := strings.ReplaceAll(path, "'", "'\\''")
-							fullWireCmd = fmt.Sprintf(" set +H; cd '%s' && %s\r", sqPath, wrapped)
+							fullWireCmd = fmt.Sprintf(" %s\r", terminal.ManagedForegroundCommandInDirectory("'"+sqPath+"'", sqCmd))
 						} else {
 							fullWireCmd = fmt.Sprintf(" %s\r", wrapped)
 						}
