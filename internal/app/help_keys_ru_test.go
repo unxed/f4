@@ -5,9 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/internal/config"
-	"github.com/unxed/f4/internal/dialog"
 )
 
 func TestGenerateKeysHelpTopic_Russian(t *testing.T) {
@@ -32,35 +30,6 @@ func TestGenerateKeysHelpTopic_Russian(t *testing.T) {
 	topic2 := generateKeysHelpTopic("ViewerEditor", "t", []string{"Editor"}, "")
 	if !strings.Contains(strings.Join(topic2.Lines, "\n"), "Сохранить файл") {
 		t.Errorf("Expected Russian editor description in generated topic")
-	}
-}
-
-func TestGenerateKeysHelpTopicsFitHelpWidth(t *testing.T) {
-	old := keymap.GlobalHotkeysMgr
-	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
-	t.Cleanup(func() { keymap.GlobalHotkeysMgr = old })
-
-	oldLang := config.App.Language
-	t.Cleanup(func() {
-		config.App.Language = oldLang
-		initLang()
-	})
-	config.App.Language = "ru"
-	initLang()
-
-	for _, tc := range []struct {
-		name  string
-		areas []string
-	}{
-		{name: "PanelNav", areas: []string{"Shell", "Terminal", "Common"}},
-		{name: "ViewerEditor", areas: []string{"Editor", "Viewer", "Common"}},
-	} {
-		topic := generateKeysHelpTopic(tc.name, "t", tc.areas, "")
-		for lineNo, line := range topic.Lines {
-			if width := runewidth.StringWidth(line); width > dialog.GeneratedHelpLineWidth {
-				t.Errorf("%s line %d is %d columns wide, want <= %d: %q", tc.name, lineNo, width, dialog.GeneratedHelpLineWidth, line)
-			}
-		}
 	}
 }
 

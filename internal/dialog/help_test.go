@@ -172,3 +172,15 @@ func TestHelpCommandLineTopic(t *testing.T) {
 		})
 	}
 }
+
+func TestAppendGeneratedHelpActionDefersWrappingToHelpView(t *testing.T) {
+	topic := &vtui.HelpTopic{}
+	desc := strings.Repeat("word ", 20)
+	AppendGeneratedHelpAction(topic, "F1", desc)
+	if len(topic.Lines) != 1 {
+		t.Fatalf("generated action was split into %d source lines, want one", len(topic.Lines))
+	}
+	if !strings.Contains(topic.Lines[0], desc) {
+		t.Fatalf("generated action lost its description: %q", topic.Lines[0])
+	}
+}

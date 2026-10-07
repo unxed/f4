@@ -17,8 +17,11 @@ import (
 // calling vtui.HelpView.SetPosition directly, to catch a re-wrap that works
 // on one resize path but not on this one.
 func TestHelpRewrapsAfterF5ZoomToggle(t *testing.T) {
-	long := "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron"
-	view, scr := newSearchableHelpForTestAtSize(t, 100, 25, []string{"first", long, "last"})
+	generated := &vtui.HelpTopic{}
+	AppendGeneratedHelpAction(generated, "F3", "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda")
+	lines := append([]string{"first"}, generated.Lines...)
+	lines = append(lines, "last")
+	view, scr := newSearchableHelpForTestAtSize(t, 100, 25, lines)
 
 	// Render once so RenderHelpFrame's enableHelpZoom flips on ShowZoom, the
 	// same as the real F1 help window before any resize.

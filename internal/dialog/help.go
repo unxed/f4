@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mattn/go-runewidth"
 	embedded "github.com/unxed/f4"
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/i18n"
@@ -91,20 +90,10 @@ const GeneratedHelpLineWidth = 70
 
 func AppendGeneratedHelpAction(topic *vtui.HelpTopic, keys, desc string) {
 	prefix := fmt.Sprintf("  %-14s - ", keys)
-	prefixWidth := runewidth.StringWidth(prefix)
-	if prefixWidth >= GeneratedHelpLineWidth {
-		topic.Lines = append(topic.Lines, vtui.WrapText(prefix+desc, GeneratedHelpLineWidth)...)
-		return
-	}
-
-	continuation := strings.Repeat(" ", prefixWidth)
-	for i, line := range vtui.WrapText(desc, GeneratedHelpLineWidth-prefixWidth) {
-		if i == 0 {
-			topic.Lines = append(topic.Lines, prefix+line)
-		} else {
-			topic.Lines = append(topic.Lines, continuation+line)
-		}
-	}
+	// Keep the action description as one source line. HelpView wraps it to the
+	// actual window width, so maximizing Help can reflow the line instead of
+	// retaining breaks made for the old 70-column layout (f4 #378).
+	topic.Lines = append(topic.Lines, prefix+desc)
 }
 
 // HelpMsg resolves an i18n key preferring the help language strings,
