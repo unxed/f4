@@ -9,11 +9,3 @@ const altGrTextSource = "f4-altgr"
 func IsAltGrText(e *vtinput.InputEvent) bool {
 	return e != nil && e.Type == vtinput.KeyEventType && e.KeyDown && e.InputSource == altGrTextSource
 }
-
-func markAltGrText(e *vtinput.InputEvent) {
-	e.ControlKeyState &^= vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
-		vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed | vtinput.EnhancedKey
-	e.VirtualKeyCode, e.VirtualScanCode = 0, 0
-	e.UnshiftedChar = e.Char
-	e.InputSource = altGrTextSource
-}

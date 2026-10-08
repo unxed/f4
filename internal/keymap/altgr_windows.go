@@ -49,6 +49,14 @@ func altGrCandidate(e *vtinput.InputEvent) bool {
 		e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightCtrlPressed) == 0
 }
 
+func markAltGrText(e *vtinput.InputEvent) {
+	e.ControlKeyState &^= vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
+		vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed | vtinput.EnhancedKey
+	e.VirtualKeyCode, e.VirtualScanCode = 0, 0
+	e.UnshiftedChar = e.Char
+	e.InputSource = altGrTextSource
+}
+
 func normalizeAltGrWithLayout(e *vtinput.InputEvent, layout uintptr, split bool) (text, consumed bool) {
 	if !altGrCandidate(e) || layout == 0 {
 		return false, false
