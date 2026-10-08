@@ -250,6 +250,9 @@ var vkSpelledHotkeys = map[uint16]bool{
 // way Far does, while actions such as AI.TogglePanel may be rebound or
 // explicitly unbound on the RCtrl spelling.
 func EventToHotkeyString(e *vtinput.InputEvent) string {
+	if IsAltGrText(e) {
+		return ""
+	}
 	key := EventToFarString(e)
 	vk := e.VirtualKeyCode
 	if normalized := layoutShortcutVK(e); normalized != 0 {

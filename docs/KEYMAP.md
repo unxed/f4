@@ -136,6 +136,29 @@ f4 folds a shifted character back onto the key that produced it, so all of
 those name the same rule. Write the `Shift1 ... Shift0` form: it says which
 key you meant, and it does not collide with the wildcard `*`.
 
+## Windows AltGr text (issue #1815)
+
+Windows layout-generated AltGr text reaches the editor, command line and dialog
+fields before key remapping, macro triggers or assigned commands. f4 requires
+Right Alt (without Left Alt or Right Ctrl) and verifies the character against the
+foreground window's keyboard layout; a printable character with arbitrary
+Ctrl/Alt flags is not sufficient. The synthetic Left Ctrl flag is removed only
+for confirmed text. A shortcut without a layout-generated character keeps its
+normal behavior, including Ctrl+Left Alt shortcuts.
+
+The Win32 and gogpu hosts send a physical modified key followed by text. f4
+defers the physical event when the layout assigns AltGr text or a dead key,
+then accepts the translated character once. Debug mode logs this routing with
+`[FIX:1815]`. Windows reports an intentional Ctrl+Right Alt chord with the same
+flags as AltGr; when the layout assigns text to that chord, f4 treats it as text.
+
+Layout validation uses `ToUnicodeEx` with its non-mutating flag, available from
+Windows 10 version 1607; older systems retain their previous input behavior to
+avoid disturbing dead-key composition. Regression tests exercise German `@`/`€`,
+Polish Shift+AltGr `Ą`, French spacing dead-key `~`, ordinary shortcuts and an
+unassigned US layout, plus insertion into
+the editor, command line and `vtui.Edit` with conflicting hotkey/macro bindings.
+
 ## What a terminal cannot send
 
 `Ctrl` does nothing to a digit in a plain terminal — `Ctrl+1`, `Alt+1` and

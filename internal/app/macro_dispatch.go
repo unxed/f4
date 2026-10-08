@@ -141,6 +141,15 @@ func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType {
 		return false
 	}
+	if text, consumed := keymap.NormalizeAltGr(e); text || consumed {
+		// Confirmed layout text bypasses remaps, commands and macro triggers.
+		// Recording still retains what the user actually typed.
+		if text && m != nil && m.Recording {
+			copy := *e
+			m.Buffer = append(m.Buffer, &copy)
+		}
+		return consumed
+	}
 
 	// Wayland reports the translated keysym for the active layout. Restore the
 	// physical Latin VK before remaps and native handlers inspect the event, so
