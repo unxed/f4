@@ -83,7 +83,9 @@ func TestWorkerManagerRunsSubtasksOnWorkers(t *testing.T) {
 
 func TestWorkerManagerRestartsInACleanContext(t *testing.T) {
 	srv, bodies := managerServer(t,
-		func(body string) bool { return strings.Contains(body, "Subtask 1:") && !strings.Contains(body, "started again") },
+		func(body string) bool {
+			return strings.Contains(body, "Subtask 1:") && !strings.Contains(body, "started again")
+		},
 		runWorkersCall(`[\"build it\"]`),
 		`{"choices":[{"message":{"content":"built"}}]}`)
 	config := func() Config { return Config{BaseURL: srv.URL, Model: "m", APIKey: "k"} }
