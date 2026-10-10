@@ -1169,6 +1169,25 @@ func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
 	fp.Wide = false
 	fp.configureCellSelection()
 	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
+	fp.reloadForLinkCounts()
+}
+
+// reloadForLinkCounts reads the directory again when the mode now shows the
+// "LN" column and the listing on screen was loaded without the counts, which
+// only a load asks for (f4#1861).
+func (fp *FileSystemPanel) reloadForLinkCounts() {
+	if _, ok := fp.Vfs.(linkCountFiller); !ok {
+		return
+	}
+	if !panelColumnsShow(PanelViewModeSettings(fp.EffectiveViewMode()).Columns, LinkCountColumn) {
+		return
+	}
+	for _, e := range fp.AllEntries() {
+		if !e.IsDir && e.Name != ".." && !e.HasMetadata(vfs.MetadataNlink) {
+			fp.ReadDirectory()
+			return
+		}
+	}
 }
 
 // mouseEntryIndex returns the entry under the mouse. Multi-column panel modes
@@ -2777,6 +2796,13 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	loadSyncPanel := config.App.SyncPanelLoad
 	loadShowHidden := config.App.ShowHiddenFiles
 	loadFrames := vtui.FrameManager
+	// The "LN" column needs a query per file on Windows, which the plain
+	// listing does not make; pay it only while the column is on screen
+	// (f4#1861).
+	linkCounter, _ := loadVFS.(linkCountFiller)
+	if !panelColumnsShow(PanelViewModeSettings(fp.EffectiveViewMode()).Columns, LinkCountColumn) {
+		linkCounter = nil
+	}
 
 	fp.EnqueueDirectoryLoad(func() {
 		if ctx.Err() != nil {
@@ -2787,6 +2813,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		err := loadVFS.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil {
 				return
+			}
+			if linkCounter != nil {
+				linkCounter.FillLinkCounts(ctx, path, chunk)
 			}
 			accumulated = append(accumulated, chunk...)
 			if ctx.Err() != nil {

@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/unxed/f4/vfs/hostmode"
+	"github.com/unxed/f4/vfs/hostpath"
 )
 
 // fileStandardInfo mirrors the Win32 FILE_STANDARD_INFO struct.
@@ -198,4 +199,49 @@ func isReparsePoint(info os.FileInfo) bool {
 		return a.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
 	}
 	return false
+}
+
+// FillLinkCounts asks NTFS for the hard link count of each file among items,
+// which ReadDir listed in dir without one (f4#1861): the panel's "LN" column,
+// as far3 shows it. It costs a CreateFile per file, so the panel asks only
+// while it shows that column. Items that already know their count (posix
+// mode) are left as they are.
+func (v *OSVFS) FillLinkCounts(ctx context.Context, dir string, items []VFSItem) {
+	absDir, err := v.Abs(dir)
+	if err != nil {
+		return
+	}
+	for i := range items {
+		if ctx.Err() != nil {
+			return
+		}
+		item := &items[i]
+		if item.IsDir || item.Name == ".." || item.HasMetadata(MetadataNlink) {
+			continue
+		}
+		ptr, err := windows.UTF16PtrFromString(prepareOSPath(hostpath.Join(absDir, item.Name)))
+		if err != nil {
+			continue
+		}
+		h, err := windows.CreateFile(ptr, 0,
+			windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+			nil, windows.OPEN_EXISTING,
+			windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+		if err != nil {
+			continue
+		}
+		var fsi fileStandardInfo
+		err = windows.GetFileInformationByHandleEx(h, windows.FileStandardInfo,
+			(*byte)(unsafe.Pointer(&fsi)), uint32(unsafe.Sizeof(fsi)))
+		_ = windows.CloseHandle(h)
+		if err != nil {
+			continue
+		}
+		item.Nlink = uint64(fsi.NumberOfLinks)
+		item.KnownMetadata |= MetadataNlink
+		if !item.HasMetadata(MetadataPhysicalSize) {
+			item.PhysicalSize = fsi.AllocationSize
+			item.KnownMetadata |= MetadataPhysicalSize
+		}
+	}
 }
