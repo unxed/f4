@@ -5492,6 +5492,60 @@ func editorTempSiblingWithToken(filesystem vfs.VFS, FilePath, token string) (str
 	return tempPath, nil
 }
 
+// editorSymlinkTarget is the file a symbolic link at path finally points
+// to; ok is false when path is not a link or cannot be resolved.
+func editorSymlinkTarget(ctx context.Context, filesystem vfs.VFS, path string) (string, bool) {
+	lstater, ok := filesystem.(interface {
+		Lstat(context.Context, string) (vfs.VFSItem, error)
+	})
+	if !ok {
+		return "", false
+	}
+	item, err := lstater.Lstat(ctx, path)
+	if err != nil || !item.IsSymlink {
+		return "", false
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil || target == "" {
+		return "", false
+	}
+	return target, true
+}
+
+// copyEditorStageInPlace rewrites path with the content of the stage,
+// keeping the file itself, and with it every hard link to it.
+func copyEditorStageInPlace(ctx context.Context, filesystem vfs.VFS, stage, path string) (err error) {
+	src, err := filesystem.Open(ctx, stage)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, src.Close()) }()
+	dst, err := filesystem.Create(vfs.WithDestinationOverwrite(ctx, true), path)
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, 256<<10)
+	for off := int64(0); off < src.Size(); {
+		n, rerr := src.ReadAt(ctx, buf, off)
+		if n > 0 {
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				_ = dst.Close()
+				return werr
+			}
+			off += int64(n)
+		}
+		if rerr != nil && !(errors.Is(rerr, io.EOF) && off >= src.Size()) {
+			_ = dst.Close()
+			return rerr
+		}
+		if n == 0 && rerr == nil {
+			_ = dst.Close()
+			return io.ErrUnexpectedEOF
+		}
+	}
+	return dst.Close()
+}
+
 func cleanupEditorStage(filesystem vfs.VFS, tempPath string) {
 	if filesystem == nil || tempPath == "" {
 		return
@@ -5558,8 +5612,22 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		//needsBufferRecovery := oldAsync != nil && ev.Pt.GetOriginalBuffer() == oldAsync
 
 		capabilities := ev.Vfs.GetCapabilities()
+		// Saving through a symbolic link writes the file it points to:
+		// renaming the new content over the link itself turned the link
+		// into a separate copy (f4#1861). The editor keeps the link's name.
+		writePath := FilePath
+		if !CreateNewTarget && fileops.IsLocalOSVFS(ev.Vfs) {
+			if target, ok := editorSymlinkTarget(ctx.Context, ev.Vfs, FilePath); ok {
+				writePath = target
+			}
+		}
 		// Capture original metadata to restore it after atomic rename
-		originalStat, statErr := ev.Vfs.Stat(ctx.Context, FilePath)
+		originalStat, statErr := ev.Vfs.Stat(ctx.Context, writePath)
+		// A file with other hard links is rewritten in place: a rename would
+		// give this name a new file and leave the other names on the old
+		// content (f4#1861).
+		keepLinks := statErr == nil && !CreateNewTarget && fileops.IsLocalOSVFS(ev.Vfs) &&
+			originalStat.HasMetadata(vfs.MetadataNlink) && originalStat.Nlink > 1
 		if CreateNewTarget {
 			var destinationErr error
 			switch {
@@ -5597,7 +5665,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		var f io.WriteCloser
 		var err error
 		if useTemp {
-			tempPath, err = editorTempSibling(ev.Vfs, FilePath)
+			tempPath, err = editorTempSibling(ev.Vfs, writePath)
 		}
 
 		// A file system that can assemble a file out of pieces of another
@@ -5609,7 +5677,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		if err == nil {
 			if patcher, ok := ev.Vfs.(vfs.InPlacePatcher); ok && ev.Codepage == 65001 && !ev.Utf8BOM && !CreateNewTarget && !fullWrite {
 				if pieces, ok := patchPiecesFromTable(ev.Pt); ok {
-					perr := patcher.PatchInPlace(ctx.Context, FilePath, pieces)
+					perr := patcher.PatchInPlace(ctx.Context, writePath, pieces)
 					if perr == nil {
 						saved = true
 						// This one writes through to the destination itself, so
@@ -5630,7 +5698,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		if !saved && err == nil {
 			if delta, isDelta := ev.Vfs.(vfs.DeltaWriter); isDelta && useTemp && ev.Codepage == 65001 && !ev.Utf8BOM && !fullWrite {
 				if pieces, ok := patchPiecesFromTable(ev.Pt); ok {
-					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), FilePath, tempPath, pieces)
+					perr := delta.PatchFile(vfs.WithDestinationOverwrite(ctx.Context, false), writePath, tempPath, pieces)
 					if perr == nil {
 						saved = true
 					} else {
@@ -5645,7 +5713,7 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 		} else if useTemp && err == nil {
 			f, err = ev.Vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, false), tempPath)
 		} else if err == nil {
-			f, err = ev.Vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, !CreateNewTarget), FilePath)
+			f, err = ev.Vfs.Create(vfs.WithDestinationOverwrite(ctx.Context, !CreateNewTarget), writePath)
 		}
 		if err == nil && useTemp && !saved {
 			// os.Create-style APIs commonly start at 0666/umask (often 0644).
@@ -5766,8 +5834,17 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 				}
 				oldBackingClosed = true
 			}
-			renameCtx := vfs.WithDestinationOverwrite(ctx.Context, !CreateNewTarget)
-			if err := ev.Vfs.Rename(renameCtx, tempPath, FilePath); err != nil {
+			if keepLinks {
+				if err := copyEditorStageInPlace(ctx.Context, ev.Vfs, tempPath, writePath); err != nil {
+					// The stage still holds the whole new text; it stays.
+					ctx.RunOnUI(func() {
+						ev.Saving = false
+						vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to write the file in place:\n%v\n\nThe new text is kept in:\n%s", err, tempPath), []string{"&Ok"})
+					})
+					return
+				}
+				cleanupEditorStage(ev.Vfs, tempPath)
+			} else if err := ev.Vfs.Rename(vfs.WithDestinationOverwrite(ctx.Context, !CreateNewTarget), tempPath, writePath); err != nil {
 				// Do not remove the staged path after an uncertain/partial rename.
 				// A remote provider may have committed the move and merely lost the
 				// response (or failed while removing its backup). In that state the
