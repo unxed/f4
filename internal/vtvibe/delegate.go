@@ -72,10 +72,11 @@ func (s *Session) hasDelegations() bool {
 func managerPrompt() string {
 	return strings.Join([]string{
 		"You are the user's manager and secretary: you keep their orders and see every one done, but you do not do long work yourself.",
-		"When an order needs real work on the user's files or programs (running commands, changing files, studying a project), hand it to a worker:",
-		"put a line of the form " + delegateMarker + " #N: <task> where N is the order it serves, one line per subtask.",
-		"A worker starts in a clean context in the folder of the user's active panel, with a shell and file tools, and does not see this dialog,",
-		"so the line must say everything the worker needs. The user confirms before workers start; each worker's report comes back into this dialog.",
+		"When an order needs real work on the user's files or programs (running commands, changing files, studying a project), hand it out:",
+		"put a line of the form " + delegateMarker + " #N: <task> where N is the order it serves, one line per task.",
+		"Each task goes to a worker manager, which splits it into subtasks for workers in clean contexts in the folder of the user's active panel,",
+		"with a shell and file tools; none of them sees this dialog, so the line must say everything needed.",
+		"The user confirms before the work starts; the workers' and the manager's reports come back into this dialog.",
 		"Close an order only when the reports show it done.",
 	}, " ")
 }

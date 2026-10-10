@@ -622,7 +622,7 @@ func aiTaskCommand(pf *panel.PanelsFrame, arg string) {
 // worker succeeds: right for a task the user gave with ai:task, while an
 // order the manager split up is closed by the manager. done, if set, runs on
 // the UI thread after the report.
-func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }, session *vtvibe.Session, task, dir string, order int, closeOrder bool, done func()) {
+func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }, session *vtvibe.Session, task, dir string, order int, closeOrder bool, done func(vtvibe.WorkerResult)) {
 	config := aiAgentConfig(session)
 	// The worker's file changes are journaled so ai:task undo N can put
 	// them back (f4#1842, stage H9).
@@ -653,7 +653,7 @@ func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) },
 			session.Note("assistant", text)
 			aiBotRefresh(pf)
 			if done != nil {
-				done()
+				done(r)
 			}
 		})
 	})
@@ -923,7 +923,7 @@ func aiDelegate(pf *panel.PanelsFrame, session *vtvibe.Session, delegations []vt
 		}
 		left := len(delegations)
 		for _, d := range delegations {
-			aiStartWorker(pf, manager, session, d.Task, dir, d.Order, false, func() {
+			aiStartManager(pf, manager, session, d.Task, dir, func() {
 				if left--; left == 0 && aiNonstop(session) && !session.Busy() {
 					aiRunWork(pf, session, func(ctx context.Context) (vtvibe.WorkEnd, error) {
 						c, _ := vtvibeConfig()
@@ -994,4 +994,50 @@ func orderLine(text string) string {
 		r = append(r[:70], '…')
 	}
 	return string(r)
+}
+
+// aiStartManager hands a task of the main dialog to a worker manager of its
+// own (f4#1842, docs/VTVIBE.md § 19a.2): it splits the task, runs the parts
+// on workers — each started the way ai:task starts one, journal, MCP servers
+// and approval included — and its one report goes to the dialog. done is
+// called on the UI goroutine when it has reported.
+func aiStartManager(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }, session *vtvibe.Session, task, dir string, done func()) {
+	config := aiAgentConfig(session)
+	session.Note("assistant", fmt.Sprintf(i18n.Msg("AI.ManagerStarted"), task))
+	aiBotRefresh(pf)
+	go func() {
+		run := func(ctx context.Context, subtask string) vtvibe.WorkerResult {
+			reported := make(chan vtvibe.WorkerResult, 1)
+			manager.PostTask(func() {
+				aiStartWorker(pf, manager, session, subtask, dir, 0, false, func(r vtvibe.WorkerResult) { reported <- r })
+			})
+			select {
+			case r := <-reported:
+				return r
+			case <-ctx.Done():
+				return vtvibe.WorkerResult{Task: subtask, Err: ctx.Err()}
+			}
+		}
+		result := vtvibe.RunWorkerManager(context.Background(), config, task, vtvibe.DefaultParallelWorkers, run)
+		// The workers' tokens were counted as each reported; only the
+		// manager's own are left.
+		own := result.Usage
+		for _, w := range result.Workers {
+			own.In -= w.Usage.In
+			own.Out -= w.Usage.Out
+		}
+		model := config().Model
+		text := fmt.Sprintf(i18n.Msg("AI.ManagerReport"), len(result.Workers), strings.TrimSpace(result.Report))
+		if result.Err != nil {
+			text = fmt.Sprintf(i18n.Msg("AI.ManagerFailed"), result.Err, len(result.Workers))
+		}
+		manager.PostTask(func() {
+			session.AddSpent(model, own)
+			session.Note("assistant", text)
+			aiBotRefresh(pf)
+			if done != nil {
+				done()
+			}
+		})
+	}()
 }
