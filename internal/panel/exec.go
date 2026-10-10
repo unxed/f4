@@ -163,6 +163,12 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	captureHostConsoleBuffer(pf.LastW, pf.LastH)
 
 	vtui.Resume()
+	// The command ran in this very console and may have left its input mode
+	// changed: with ENABLE_MOUSE_INPUT off, a right click on XP opened the
+	// console's own Edit menu instead of reaching f4 (Zeroes1, f4#897, item
+	// 4). Ask for the mouse again, as the host-console path does on its way
+	// back (console.go), before the redraw.
+	restoreHostInputModes()
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.HardRefresh()
 	}
