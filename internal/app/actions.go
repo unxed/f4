@@ -3014,6 +3014,16 @@ func actionCreateLink(pf *panel.PanelsFrame) {
 			srcVfs := fspSrc.Vfs
 			dstVfs := fspDst.Vfs
 			srcBasePath := srcVfs.GetPath()
+			// A name without a path is made next to the source, as far3 does:
+			// the passive panel's folder is only the default the field
+			// starts with (f4#1861).
+			_, srcLocal := srcVfs.(*vfs.OSVFS)
+			_, dstLocal := dstVfs.(*vfs.OSVFS)
+			if srcLocal && dstLocal {
+				if abs, err := srcVfs.Abs(dest); err == nil {
+					dest = abs
+				}
+			}
 
 			var errs []string
 			for _, name := range names {
