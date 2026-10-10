@@ -644,6 +644,9 @@ func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) },
 		return aiWithApproval(manager, func() string { return label.Load().(string) }, list)
 	}
 	aiWorkers.SetGates(vtvibe.GateRules{User: aiGateRules, Learned: aiLearnedRules, Learn: aiLearnRule})
+	// The tokens are counted for the model the task started on, read now:
+	// once a stopped worker winds down, nothing of it reads the settings.
+	model := config().Model
 	id := aiWorkers.Start(task, dir, config, tools, func(r vtvibe.WorkerResult) {
 		text := aiTaskResultText(r, order)
 		if problems := mcp.close(); problems != "" {
@@ -652,7 +655,6 @@ func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) },
 		if n := len(journal.Files()); n > 0 {
 			text += "\n\n" + fmt.Sprintf(i18n.Msg("AI.TaskUndoHint"), n, r.ID)
 		}
-		model := config().Model
 		manager.PostTask(func() {
 			session.AddSpent(model, r.Usage)
 			if r.Err == nil && closeOrder {

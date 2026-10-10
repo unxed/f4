@@ -123,6 +123,18 @@ func TestAIManagerStopsWithItsWorkers(t *testing.T) {
 	if !stopped {
 		t.Fatal("the worker never asked its model")
 	}
+	// The stopped worker winds down on its own goroutine; once it is off the
+	// list it reads nothing more, so the test's cleanup may replace the
+	// settings.
+	for len(aiWorkers.Running()) > 0 {
+		select {
+		case fn := <-q.ch:
+			fn()
+		case <-deadline:
+			t.Fatal("the stopped worker did not finish")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 	if len(aiManagers.running()) != 0 {
 		t.Fatal("the stopped manager is still listed")
 	}
