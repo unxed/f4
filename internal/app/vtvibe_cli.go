@@ -186,7 +186,13 @@ func runAIBotCLI(parsed aiCLIArgs, cfg vtvibe.Config, stdout, stderr io.Writer) 
 	})
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	round, err := bot.RunOnce(ctx, parsed.bot, dir, cfg, nil)
+	// The MCP servers of ai/mcp.json run for this round, in its folder, as
+	// for a round started from the panel.
+	mcp := &aiMCPRun{dir: dir}
+	round, err := bot.RunOnce(ctx, parsed.bot, dir, cfg, mcp.tools())
+	if problems := mcp.close(); problems != "" {
+		_, _ = fmt.Fprintf(stderr, "f4 --ai-bot: %s\n", problems)
+	}
 	if err == nil {
 		err = round.Err
 	}

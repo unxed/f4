@@ -134,3 +134,32 @@ func TestAIBotCLIWantsConsent(t *testing.T) {
 		}
 	}
 }
+
+func TestAIBotCLIStartsTheMCPServers(t *testing.T) {
+	setupPortableIni(t, "0")
+	if err := os.MkdirAll(filepath.Dir(vtvibeMCPPath()), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(vtvibeMCPPath(), []byte(`{"mcpServers":{"broken":{"command":"f4-no-such-mcp-server"}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	instruction := filepath.Join(dir, "bot.md")
+	if err := os.WriteFile(instruction, []byte("Say done."), 0600); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"done"}}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	config := func() (vtvibe.Config, string, vtvibe.Provider) {
+		return vtvibe.Config{BaseURL: srv.URL, Model: "m", APIKey: "k"}, "TEST_KEY", vtvibe.Provider{}
+	}
+	var stdout, stderr bytes.Buffer
+	code, _ := runAICLI([]string{"--ai-bot", instruction, "--ai-yes", "--ai-whole"}, nil, &stdout, &stderr, config)
+	if code != 0 || stdout.String() != "done\n" || !strings.Contains(stderr.String(), "broken") {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+	}
+}
