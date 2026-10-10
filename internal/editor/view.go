@@ -5534,7 +5534,7 @@ func copyEditorStageInPlace(ctx context.Context, filesystem vfs.VFS, stage, path
 			}
 			off += int64(n)
 		}
-		if rerr != nil && !(errors.Is(rerr, io.EOF) && off >= src.Size()) {
+		if rerr != nil && (!errors.Is(rerr, io.EOF) || off < src.Size()) {
 			_ = dst.Close()
 			return rerr
 		}
