@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/keymap"
+	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -84,5 +85,41 @@ func TestCommandPaletteReloadAfterAssignKeepsCursor(t *testing.T) {
 	dialog.reloadAfterAssign("b")
 	if dialog.table.SelectPos != 1 || dialog.filtered[1].Shortcut != "Ctrl+Q" {
 		t.Fatalf("cursor %d, shortcut %q", dialog.table.SelectPos, dialog.filtered[1].Shortcut)
+	}
+}
+
+// #1836, f4#1842: Ctrl+Shift+K takes a key off a command, a default key too
+// (the right Ctrl+A of the AI panel, wanted for Attributes).
+func TestCommandPaletteCtrlShiftKRemovesAKey(t *testing.T) {
+	old := keymap.GlobalHotkeysMgr
+	hm := keymap.NewHotkeyManager("")
+	hm.Bind("Common", "RCtrlA", "AI.TogglePanel")
+	keymap.GlobalHotkeysMgr = hm
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = old })
+
+	entries := []commandPaletteEntry{
+		{Key: "act:ai.togglepanel", Label: "AI panel", ID: "AI.TogglePanel", source: commandPaletteSourceAction},
+	}
+	dialog, _ := newCommandPaletteUITestDialog(t, 100, 30, entries, nil)
+	vtui.FrameManager.Push(dialog)
+
+	e := commandPaletteKey(vtinput.VK_K)
+	e.ControlKeyState = vtinput.RightCtrlPressed | vtinput.ShiftPressed
+	if !dialog.ProcessKey(e) {
+		t.Fatal("Ctrl+Shift+K was not consumed")
+	}
+	question, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok || vtui.FrameManager.GetTopFrame() == vtui.Frame(dialog) {
+		t.Fatal("Ctrl+Shift+K asked nothing")
+	}
+	testutil.ClickDialogButton(t, question, keymap.FormatKeyForUI("RCtrlA"))
+	if got, ok := hm.GetActiveBindings()["Common"]["RCtrlA"]; ok {
+		t.Fatalf("RCtrlA is still bound to %q", got)
+	}
+	if hm.Bindings["Common"]["RCtrlA"] != "None" {
+		t.Fatal("the removal is not kept as an override of the default")
+	}
+	if dialog.query.GetText() != "" {
+		t.Fatalf("the chord typed into the query: %q", dialog.query.GetText())
 	}
 }

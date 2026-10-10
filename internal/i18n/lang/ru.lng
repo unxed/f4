@@ -2156,8 +2156,10 @@ Hotkeys.AssignCancel=Нажмите Esc для отмены
 
 CommandPalette.Title= Палитра команд
 CommandPalette.QueryPrompt=>
-CommandPalette.AssignHint= Ctrl+K: назначить клавишу
+CommandPalette.AssignHint= Ctrl+K: назначить клавишу, Ctrl+Shift+K: убрать 
 CommandPalette.AssignUnavailable= Клавишу можно назначить только команде, выполняющей действие.
+CommandPalette.NoKeyToRemove= У этой команды нет клавиши, которую можно убрать.
+CommandPalette.RemoveKeyQuestion=Какую клавишу убрать у команды «%s»?
 CommandPalette.ColumnCommand=Команда
 CommandPalette.ColumnCategory=Категория
 CommandPalette.ColumnShortcut=Клавиша

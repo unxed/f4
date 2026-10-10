@@ -2156,8 +2156,10 @@ Hotkeys.AssignCancel=Press Esc to cancel
 
 CommandPalette.Title= Command Palette
 CommandPalette.QueryPrompt=>
-CommandPalette.AssignHint= Ctrl+K: assign key
+CommandPalette.AssignHint= Ctrl+K: assign a key, Ctrl+Shift+K: remove one 
 CommandPalette.AssignUnavailable= A key can be assigned only to commands that run an action.
+CommandPalette.NoKeyToRemove= This command has no key to remove.
+CommandPalette.RemoveKeyQuestion=Remove which key from «%s»?
 CommandPalette.ColumnCommand=Command
 CommandPalette.ColumnCategory=Category
 CommandPalette.ColumnShortcut=Shortcut
