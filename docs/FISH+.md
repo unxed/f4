@@ -189,6 +189,12 @@ A write that dies in the middle — the disk fills up, the medium fails — leav
 Timestamps are not. GNU `touch` takes an epoch as `-d @1400000000`; BSD and macOS have never accepted that and want `-t YYYYMMDDhhmm.SS` — in the *local* time of the host, which is exactly the one thing the client cannot compute for it. So the conversion happens on the remote side: the helper tries GNU form first, and if it is refused it asks the host's own `date` to render the epoch, `date -r` for BSD and `date -d @` for GNU, and feeds the result to `touch -t`. The `date -r` attempt is skipped when a file with that name exists in the current directory, because GNU `date` reads `-r` as "reference file" and would then quietly report that file's time instead.
 
 Setting both times is one `touch`; setting them to different values is two, `-m` and then `-a`, because that is all POSIX `touch` offers. A caller that wants neither pays no round trip at all.
+### Streaming file search
+
+Alt+F7 uses `FishVFS.FindFilesStream`. Synchronous `ffind` responses publish parsed entries as each line arrives, through a separate session opened with the connection's dialer. The panel session remains available for viewing and editing results during the search. If a separate session cannot be created, the search uses the ordinary VFS walk. Background `ffindjob` searches publish entries from each poll and reuse the panel session between requests. Cancellation drains response framing and drops background jobs. No wire commands or response formats change.
+
+Remote fast search reports paths and available counters, with no percentage because the helper does not report a reliable count of root subdirectories. The fallback VFS walk can estimate progress from those direct subdirectories. A refused fast search falls back only before publishing any hits, preventing duplicates; an error after hits preserves them in the results window.
+
 ### Remote search
 
 This is the first command that is FISH+ rather than fish: the remote host does the work and only the answer travels. `grep -a -b -o` prints one match per line as `offset:text`, and an `awk` behind it throws the text away and stops after the limit, so a pattern matching a million times costs the same handful of bytes on the wire as one matching three times — and grep dies on the broken pipe instead of reading the rest of the file.

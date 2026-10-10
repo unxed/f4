@@ -65,7 +65,7 @@ var commandPaletteAuditClasses = map[string]bool{
 // one package to another; it never removes one. A smaller number here means an
 // audit entry was dropped together with its subject, which the set comparison
 // below cannot see because both sides shrink at once.
-const commandPaletteF4Surfaces = 67
+const commandPaletteF4Surfaces = 69
 
 // commandPaletteTargetPackage named the package each audited cmd/f4 file would
 // end up in once the split reached it, so an audit key survived the move that
@@ -92,6 +92,9 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	"cmdline.(*CommandLine).ProcessKey": {
 		class: paletteAuditParentControl, rationale: "command-line editing primitives belong to PanelsFrame rather than being standalone commands",
 	},
+	"cmdline.(*CompletionMenu).ProcessKey": {
+		class: paletteAuditModalLocal, rationale: "the command-line suggestion popup accepts Ctrl+Enter locally without dispatching command execution",
+	},
 	"app.(*commandPaletteDialog).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "the palette dialog owns query, navigation, execution, and cancellation while it is open",
 	},
@@ -110,8 +113,11 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 	"editor.(*EditorView).ProcessKey": {
 		class: paletteAuditActionArea, rationale: "editor commands are registered actions; raw text and cursor editing remain local primitives",
 	},
-	"app.(*SearchResultsWindow).ProcessKey": {
-		class: paletteAuditModalLocal, rationale: "find results are a modal result picker whose F3/F4/F5 buttons route to existing view/edit/temporary-panel operations",
+	"findfile.(*SearchResultsWindow).ProcessKey": {
+		class: paletteAuditModalLocal, rationale: "find results are a modal result picker whose F3/F4/F6 buttons route to existing view/edit/temporary-panel operations",
+	},
+	"findfile.(*ParametersWindow).ProcessKey": {
+		class: paletteAuditModalLocal, rationale: "find parameters use Up/Down for local focus between mask, content and submit; FindFile is the registered entry point",
 	},
 	"app.(*SyncResultsWindow).ProcessKey": {
 		class: paletteAuditModalLocal, rationale: "the synchronize window is modal and its keys only set the copy direction of the row under the cursor; Panel.SyncDirs is its registered entry point",

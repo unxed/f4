@@ -4549,6 +4549,18 @@ func (fp *FileSystemPanel) GetMarkedNames() []string {
 	return names
 }
 
+// GetMarkedFolderPaths returns explicitly marked directories in panel order.
+// The cursor alone and directory symlinks do not define a search scope.
+func (fp *FileSystemPanel) GetMarkedFolderPaths() []string {
+	paths := make([]string, 0)
+	for _, entry := range fp.Entries {
+		if entry.Selected && entry.IsDir && !entry.IsSymlink && entry.Name != ".." {
+			paths = append(paths, fp.Vfs.Join(fp.Vfs.GetPath(), entry.Name))
+		}
+	}
+	return paths
+}
+
 // ReplaceMarkedNames atomically replaces the explicit panel selection.
 func (fp *FileSystemPanel) ReplaceMarkedNames(names []string) {
 	selected := make(map[string]struct{}, len(names))

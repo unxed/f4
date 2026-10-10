@@ -17,6 +17,7 @@ import (
 	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/fileops"
+	"github.com/unxed/f4/internal/findfile"
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
@@ -516,6 +517,32 @@ func init() {
 	}
 
 	// --- Common actions (available in every area) ---
+	registerAction(action.Action{
+		Name: "FindFile.Stop", Area: "Common",
+		Label: "Stop File Search", LabelKey: "Action.FindFile.Stop",
+		Description: "Stop the active file search and keep its results", DescKey: "Action.FindFile.Stop.Desc",
+		DefaultKeys:  []string{"CtrlShiftF7"},
+		HideFromMenu: true,
+		Visible: func() bool {
+			if vtui.FrameManager == nil {
+				return false
+			}
+			w, ok := vtui.FrameManager.GetTopFrame().(*findfile.SearchResultsWindow)
+			return ok && w.Running()
+		},
+		Handler: func() bool {
+			if vtui.FrameManager == nil {
+				return false
+			}
+			w, ok := vtui.FrameManager.GetTopFrame().(*findfile.SearchResultsWindow)
+			if !ok {
+				return false
+			}
+			w.Stop()
+			return true
+		},
+	})
+
 	registerAction(action.Action{
 		Name:        "App.ScreenGrab",
 		Area:        "Common",

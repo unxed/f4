@@ -30,6 +30,7 @@ internal/        # everything the application is, in layers
   viewer/        #   layer 3: the viewer
   terminal/      #   layer 3: the terminal view, PTY sessions, ConPTY
   cmdline/       #   layer 3: the command line and apply-command
+  findfile/      #   layer 3: live file search and its results window
   dialog/        #   layer 3: dialogs, help, settings screens
   media/         #   layer 3: images, audio, video
   macro/         #   layer 3: the macro engine

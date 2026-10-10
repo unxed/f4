@@ -67,6 +67,7 @@ var actionMenuOrder = []string{
 	"Panel.Base64EncodeFile",
 	"Panel.Base64DecodeFile",
 	"File.Find",
+	"FindFile.Stop",
 	"File.FindDuplicates",
 	"Panel.CompareFolders",
 	"Panel.CompareFilesByContent",

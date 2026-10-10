@@ -22,6 +22,7 @@ import (
 	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/fileops"
+	"github.com/unxed/f4/internal/findfile"
 	"github.com/unxed/f4/internal/gui"
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
@@ -4025,8 +4026,7 @@ func actionFindFile(pf *panel.PanelsFrame) {
 	}
 
 	const width, height = 78, 20
-	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("FindFile.Title"))
-	dlg.ShowClose = true
+	dlg := findfile.NewParametersWindow()
 
 	lblMask := vtui.NewLabel(0, 0, i18n.Msg("FindFile.MaskPrompt"), nil)
 	editMask := vtui.NewEdit(0, 0, 20, LastFindFileMask)
@@ -4051,6 +4051,13 @@ func actionFindFile(pf *panel.PanelsFrame) {
 	chkFolders.State = boolToCheckboxState(LastFindFileFolders)
 	chkSymlinks := vtui.NewCheckbox(0, 0, i18n.Msg("FindFile.Symlinks"), false)
 	chkSymlinks.State = boolToCheckboxState(LastFindFileSymlinks)
+	selectedFolders := activePanel.GetMarkedFolderPaths()
+	var chkSelectedFolders *vtui.Checkbox
+	if len(selectedFolders) > 0 {
+		chkSelectedFolders = vtui.NewCheckbox(0, 0, i18n.Msg("FindFile.SelectedFolders"), false)
+		chkSelectedFolders.State = 1
+	}
+	separator := vtui.NewSeparator(0, 0, width-4, false, false)
 
 	btnFind := vtui.NewButton(0, 0, i18n.Msg("FindFile.BtnFind"))
 	btnFind.IsDefault = true
@@ -4058,23 +4065,24 @@ func actionFindFile(pf *panel.PanelsFrame) {
 
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
+	dlg.AddItem(chkFolders)
+	dlg.AddItem(chkSymlinks)
+	if chkSelectedFolders != nil {
+		dlg.AddItem(chkSelectedFolders)
+	}
+	dlg.AddItem(separator)
 	dlg.AddItem(lblText)
 	dlg.AddItem(editText)
 	dlg.AddItem(chkCase)
 	dlg.AddItem(chkWhole)
 	dlg.AddItem(chkRegexp)
 	dlg.AddItem(chkNotContaining)
-	dlg.AddItem(chkFolders)
-	dlg.AddItem(chkSymlinks)
 	dlg.AddItem(btnFind)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(lblMask, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(editMask, vtui.Margins{Top: 1}, vtui.AlignFill)
-
-	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(editText, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
 	// Each row is its own HBox, so the right checkbox would otherwise
 	// land wherever its left neighbour ends and the column would
@@ -4089,9 +4097,15 @@ func actionFindFile(pf *panel.PanelsFrame) {
 		row.Add(right, vtui.Margins{}, vtui.AlignTop)
 		return row
 	}
+	vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{Top: 1}, vtui.AlignFill)
+	if chkSelectedFolders != nil {
+		vbox.Add(chkSelectedFolders, vtui.Margins{}, vtui.AlignLeft)
+	}
+	vbox.Add(separator, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editText, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(optionsRow(chkCase, chkWhole), vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(optionsRow(chkRegexp, chkNotContaining), vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -4102,6 +4116,8 @@ func actionFindFile(pf *panel.PanelsFrame) {
 
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
+	dlg.SetLayout(hbox)
+	dlg.SetNavigation(editMask, editText, btnFind)
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnFind.OnClick = func() {
@@ -4116,16 +4132,28 @@ func actionFindFile(pf *panel.PanelsFrame) {
 		LastFindFileFolders = chkFolders.State == 1
 		LastFindFileSymlinks = chkSymlinks.State == 1
 		SaveSession()
-		dlg.Close()
 		if LastFindFileMask != "" {
-			ExecuteFindFile(pf, activePanel.Vfs, activePanel.Vfs.GetPath(), LastFindFileMask, LastFindFileText, FindFileOptions{
-				CaseSensitive: LastFindFileCaseSensitive,
-				WholeWords:    LastFindFileWholeWords,
-				Regex:         LastFindFileRegexp,
-				NotContaining: LastFindFileNotContaining,
-				FindFolders:   LastFindFileFolders,
-				FindSymlinks:  LastFindFileSymlinks,
-			})
+			btnFind.SetVisible(false)
+			btnCancel.SetVisible(false)
+			btnFind.IsDefault = false
+			controls := []vtui.UIElement{lblMask, editMask, chkFolders, chkSymlinks, separator, lblText, editText, chkCase, chkWhole, chkRegexp, chkNotContaining}
+			if chkSelectedFolders != nil {
+				controls = append(controls, chkSelectedFolders)
+			}
+			if chkSelectedFolders == nil || chkSelectedFolders.State != 1 {
+				selectedFolders = nil
+			}
+			dlg.Expand(controls, activePanel.Vfs, activePanel.Vfs.GetPath(), LastFindFileMask, LastFindFileText, FindFileOptions{
+				SelectedFolders: selectedFolders,
+				CaseSensitive:   LastFindFileCaseSensitive,
+				WholeWords:      LastFindFileWholeWords,
+				Regex:           LastFindFileRegexp,
+				NotContaining:   LastFindFileNotContaining,
+				FindFolders:     LastFindFileFolders,
+				FindSymlinks:    LastFindFileSymlinks,
+			}, findFileHost(pf))
+		} else {
+			dlg.Close()
 		}
 	}
 

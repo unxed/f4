@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/unxed/f4/internal/cmdline"
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtinput"
@@ -194,7 +195,7 @@ func (pf *PanelsFrame) buildConsoleOverlayContent() terminal.ConsoleOverlayConte
 	}
 
 	if vtui.FrameManager != nil {
-		if ac, ok := vtui.FrameManager.GetTopFrame().(*vtui.AutoCompleteMenu); ok && ac != nil && ac.HasMatches() {
+		if ac, ok := cmdline.AsCompletionMenu(vtui.FrameManager.GetTopFrame()); ok && ac != nil && ac.HasMatches() {
 			x1, y1, x2, y2 := ac.GetPosition()
 			ov.Popup = &terminal.OverlayPopupContent{
 				X:         x1,
@@ -255,7 +256,7 @@ func (pf *PanelsFrame) IsTopFrame() bool {
 	if top == vtui.Frame(pf) {
 		return true
 	}
-	if _, ok := top.(*vtui.AutoCompleteMenu); ok {
+	if _, ok := cmdline.AsCompletionMenu(top); ok {
 		if len(frames) >= 2 && frames[len(frames)-2] == vtui.Frame(pf) {
 			return true
 		}
@@ -441,7 +442,7 @@ func (pf *PanelsFrame) handleHostConsoleTab(e *vtinput.InputEvent) bool {
 		return false
 	}
 
-	if ac, ok := vtui.FrameManager.GetTopFrame().(*vtui.AutoCompleteMenu); ok && ac != nil {
+	if ac, ok := cmdline.AsCompletionMenu(vtui.FrameManager.GetTopFrame()); ok && ac != nil {
 		if ac.Edit != pf.CmdLine.Edit || !ac.HasMatches() {
 			return false
 		}
@@ -450,7 +451,7 @@ func (pf *PanelsFrame) handleHostConsoleTab(e *vtinput.InputEvent) bool {
 		return true
 	}
 
-	ac := vtui.NewAutoCompleteMenu(pf.CmdLine.Edit)
+	ac := cmdline.NewCompletionMenu(pf.CmdLine.Edit)
 	if !ac.HasMatches() {
 		return false
 	}

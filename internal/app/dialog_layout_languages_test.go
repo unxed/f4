@@ -6,11 +6,143 @@ package app
 
 import (
 	"github.com/unxed/f4/internal/panel"
+	"github.com/unxed/f4/internal/paneltest"
+	"github.com/unxed/f4/internal/theme"
 	"testing"
 
 	"github.com/unxed/f4/internal/i18n"
+	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+
+func TestFindFileSelectedFoldersCheckbox(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	theme.SetDefaultF4Palette()
+	packs := i18n.LoadAllLanguagePacks()
+	for _, tc := range []struct {
+		name    string
+		entries []*panel.FileEntry
+		want    bool
+	}{
+		{name: "cursor folder", entries: []*panel.FileEntry{{VFSItem: vfs.VFSItem{Name: "folder", IsDir: true}}}},
+		{name: "marked file", entries: []*panel.FileEntry{{VFSItem: vfs.VFSItem{Name: "file.txt"}, Selected: true}}},
+		{name: "marked folder", entries: []*panel.FileEntry{{VFSItem: vfs.VFSItem{Name: "folder", IsDir: true}, Selected: true}}, want: true},
+		{name: "mixed marks", entries: []*panel.FileEntry{
+			{VFSItem: vfs.VFSItem{Name: "file.txt"}, Selected: true},
+			{VFSItem: vfs.VFSItem{Name: "folder", IsDir: true}, Selected: true},
+		}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vtui.AssertLayoutInLanguages(t, packs, func() vtui.Container {
+				screen := vtui.NewSilentScreenBuf()
+				screen.AllocBuf(80, 25)
+				vtui.FrameManager.Init(screen)
+				pf := panel.NewPanelsFrame()
+				defer pf.Close()
+				pf.ResizeConsole(80, 25)
+				pf.GetActivePanel().Entries = tc.entries
+				actionFindFile(pf)
+				dlg := vtui.FrameManager.GetTopFrame().(vtui.Container)
+				var selected *vtui.Checkbox
+				var separator *vtui.Separator
+				var edits []*vtui.Edit
+				var checkboxes []*vtui.Checkbox
+				var buttons []*vtui.Button
+				for _, child := range dlg.GetChildren() {
+					switch value := child.(type) {
+					case *vtui.Separator:
+						separator = value
+					case *vtui.Edit:
+						edits = append(edits, value)
+					case *vtui.Checkbox:
+						checkboxes = append(checkboxes, value)
+					case *vtui.Button:
+						buttons = append(buttons, value)
+					}
+					if checkbox, ok := child.(*vtui.Checkbox); ok && checkbox.GetText() == i18n.Msg("FindFile.SelectedFolders") {
+						selected = checkbox
+					}
+				}
+				if (selected != nil) != tc.want {
+					t.Errorf("checkbox present=%v, want %v", selected != nil, tc.want)
+				}
+				if selected != nil && selected.State != 1 {
+					t.Error("selected folders must be checked by default")
+				}
+				if separator == nil || len(edits) != 2 {
+					t.Error("file and text sections must be separated")
+					return dlg
+				}
+				_, maskY, _, _ := edits[0].GetPosition()
+				_, textY, _, _ := edits[1].GetPosition()
+				_, separatorY, _, _ := separator.GetPosition()
+				fileOptionsBottom := maskY
+				optionsBottom := maskY
+				for _, checkbox := range checkboxes {
+					_, y, _, _ := checkbox.GetPosition()
+					optionsBottom = max(optionsBottom, y)
+					fileOption := checkbox == selected || checkbox.GetText() == i18n.Msg("FindFile.Folders") || checkbox.GetText() == i18n.Msg("FindFile.Symlinks")
+					if fileOption {
+						fileOptionsBottom = max(fileOptionsBottom, y)
+						if y <= maskY || y >= separatorY {
+							t.Errorf("file option %q outside file section", checkbox.GetText())
+						}
+					} else if y <= textY || textY <= separatorY {
+						t.Errorf("text option %q outside text section", checkbox.GetText())
+					}
+				}
+				if separatorY != fileOptionsBottom+1 {
+					t.Error("separator must immediately follow file search options")
+				}
+				for _, button := range buttons {
+					_, y, _, _ := button.GetPosition()
+					if y != optionsBottom+2 {
+						t.Error("expected exactly one blank row before Find and Cancel")
+					}
+				}
+				return dlg
+			})
+		})
+	}
+}
+
+func TestFindFileInputsImmediatelyFollowLabels(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	screen := vtui.NewSilentScreenBuf()
+	screen.AllocBuf(80, 25)
+	vtui.FrameManager.Init(screen)
+	theme.SetDefaultF4Palette()
+	pf := panel.NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	actionFindFile(pf)
+	dlg, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatal("Find File dialog missing")
+	}
+	var label *vtui.Text
+	pairs := 0
+	for _, child := range dlg.GetChildren() {
+		switch value := child.(type) {
+		case *vtui.Text:
+			label = value
+		case *vtui.Edit:
+			if label == nil {
+				t.Fatal("input missing its label")
+			}
+			_, _, _, labelBottom := label.GetPosition()
+			_, inputTop, _, _ := value.GetPosition()
+			if inputTop != labelBottom+1 {
+				t.Errorf("input starts at row %d, want %d immediately after label", inputTop, labelBottom+1)
+			}
+			pairs++
+			label = nil
+		}
+	}
+	if pairs != 2 {
+		t.Errorf("checked %d label/input pairs, want 2", pairs)
+	}
+}
 
 func TestLayout_FileAssociationEditor_AllLanguages(t *testing.T) {
 	vtui.SetDefaultPalette()
