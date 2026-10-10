@@ -77,6 +77,11 @@ func (pf *PanelsFrame) TogglePanelsVisibility() {
 	default:
 		vtui.FrameManager.HardRefresh()
 	}
+	if pf.SearchFirstMode() {
+		// The console edit owns the caret while panels are hidden. Preserve
+		// the saved navigation target so showing panels restores its focus.
+		pf.CmdLine.SetFocus(pf.IsFocused() && (pf.CommandLineFocused || !pf.ShowPanels))
+	}
 	if pf.ShowPanels {
 		pf.RefreshAll()
 	}

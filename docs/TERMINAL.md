@@ -191,6 +191,25 @@ of `ResizeConsole`, `false` in `ShellModeHost`, where the overlay sits *below*
 the mirrored grid and injecting anything would desync the mirror from the real
 host terminal. The alternate screen and muted mirrors are skipped as well.
 
+### The reserved keybar row during a command
+
+Own-terminal mode keeps the configured keybar row outside the PTY viewport
+while a command runs, avoiding a resize that could make the shell redraw its
+prompt. The keybar itself is hidden. `PanelsFrame.Show` paints the uncovered
+row with `terminal.DefaultTermAttr`, using terminal rendering rather than UI
+overlay color binding, so stale UI backgrounds do not remain below the output.
+Alternate-screen applications occupy the last row and are not covered by this
+fill. Host-console overlays are handled separately.
+
+In search-first navigation mode, hiding panels temporarily focuses the visible
+command-line edit. Workspace focus events restore that edit focus while the
+panels remain hidden, so the edit's caret replaces the terminal's native caret.
+The saved panel/command navigation target is retained and restored when panels
+are shown again.
+Enter's default policy may reset that saved target to the panel even while
+panels are hidden. `SetCommandLineFocus` keeps the active console edit focused
+in that case, so the empty edit restores its caret after command completion.
+
 ### Known bug: keyboard protocol modes outlive the shell that asked for them
 
 `TerminalView.Win32InputMode` and `TerminalView.KittyFlags` are set by `DECSET`

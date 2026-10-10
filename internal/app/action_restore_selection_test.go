@@ -180,3 +180,29 @@ func TestHotkeyManager_RestoreSelectionDefault_Issue289(t *testing.T) {
 		t.Errorf("Shell/CtrlM: got %q, want %q", got, "Panel.RestoreSelection")
 	}
 }
+
+func TestSelectFromClipboardActionIsDiscoverable(t *testing.T) {
+	act, ok := GetAction("Panel.SelectFromClipboard")
+	if !ok || act.Area != "Shell" || act.MenuPath != "Files" || act.Handler == nil {
+		t.Fatal("clipboard selection is not registered for panels and the Files menu")
+	}
+	hm := keymap.NewHotkeyManager("")
+	hm.InitDefaults()
+	if got := hm.Bindings["Shell"]["CtrlS"]; got != "Panel.SelectFromClipboard:NoTerminalApp" {
+		t.Fatalf("Ctrl+S binding = %q", got)
+	}
+	old := keymap.GlobalHotkeysMgr
+	keymap.GlobalHotkeysMgr = hm
+	t.Cleanup(func() { keymap.GlobalHotkeysMgr = old })
+	for _, menu := range BuildMenuBarItems("Shell") {
+		for _, item := range menu.SubItems {
+			if plainMenuText(item.Text) == plainMenuText(act.DisplayLabel()) {
+				if item.Shortcut != "Ctrl+S" {
+					t.Fatalf("menu shortcut = %q", item.Shortcut)
+				}
+				return
+			}
+		}
+	}
+	t.Fatal("clipboard selection is missing from the menu")
+}

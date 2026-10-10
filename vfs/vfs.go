@@ -763,9 +763,8 @@ type FindQuery struct {
 	// Limit caps the number of hits; zero leaves it to the file system.
 	Limit int
 	// Progress, when non-nil, is called periodically while the search
-	// runs — file systems that support it (currently FISH+ against a
-	// Windows peer) report the last path the walk visited and running
-	// counters, so a dialog can show real-time state instead of a
+	// runs — file systems that support it report the last path the walk
+	// visited and running counters, so a dialog can show real-time state instead of a
 	// spinner. Called on the goroutine that drives FindFiles; the
 	// callback must not block. A file system that has no progress to
 	// report simply never calls it, which is what the interface's
@@ -775,6 +774,12 @@ type FindQuery struct {
 
 // FindProgress is a checkpoint reported by an in-flight tree search.
 type FindProgress struct {
+	// DirectoryTotalKnown distinguishes a known empty root from a backend
+	// that cannot estimate the remaining work. Counts cover direct children
+	// of the search root; a child completes after its entire subtree.
+	DirectoryTotalKnown bool
+	CompletedDirs       int64
+	TotalDirs           int64
 	// Scanned is how many entries the walk has visited so far.
 	Scanned int64
 	// Found is how many entries have matched so far.
@@ -785,11 +790,19 @@ type FindProgress struct {
 }
 
 // FileFinder is implemented by a file system that can walk a tree on its own
-// side. Like LineIndexer it is an optional interface: a local file system is
-// no faster for it, so only the ones that gain from it carry it, and a
-// caller that does not find it walks the tree itself as before.
+// side. It is optional: local implementations can keep rejected metadata lazy,
+// while remote implementations avoid downloading candidates. Callers without
+// an accelerated finder walk the tree through VFS operations.
 type FileFinder interface {
 	FindFiles(ctx context.Context, dir string, q FindQuery) ([]FoundEntry, error)
+}
+
+// StreamingFileFinder delivers hits before the tree search completes. The
+// callback runs synchronously on the search goroutine and must not retain
+// mutable backend state or perform UI operations. Cancellation may leave a
+// partial result set. ErrFindOptionsUnsupported must precede any emitted hit.
+type StreamingFileFinder interface {
+	FindFilesStream(ctx context.Context, dir string, q FindQuery, onFound func(FoundEntry)) error
 }
 
 // ErrFindOptionsUnsupported tells a caller that a server-side finder cannot

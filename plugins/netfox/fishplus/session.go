@@ -451,6 +451,14 @@ func (s *Session) ExecPaths(ctx context.Context, cmd string, paths []string, arg
 	return s.exec(ctx, false, cmd, args, paths)
 }
 
+// ExecPathsLines delivers text payload lines while the response is arriving.
+// onLine executes under the session's request lock: it must not issue another
+// request on this session or block on a consumer. Payload is not accumulated
+// in Response.Lines. Existing cancellation/draining and framing stay shared.
+func (s *Session) ExecPathsLines(ctx context.Context, cmd string, paths []string, onLine func(string), args ...string) (*Response, error) {
+	return s.execFullLines(ctx, false, cmd, args, paths, nil, false, nil, onLine)
+}
+
 // ExecData and ExecPathData behave like Exec and ExecPath but also accept
 // binary frames: a line "#<n>" followed by exactly n raw bytes.
 func (s *Session) ExecData(ctx context.Context, cmd string, args ...string) (*Response, error) {
@@ -504,6 +512,11 @@ func (s *Session) exec(ctx context.Context, binary bool, cmd string, args, paths
 }
 
 func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, paths []string, payload []byte, encoded bool, body func(w io.Writer) error) (*Response, error) {
+	return s.execFullLines(ctx, binary, cmd, args, paths, payload, encoded, body, nil)
+}
+
+func (s *Session) execFullLines(ctx context.Context, binary bool, cmd string, args, paths []string, payload []byte, encoded bool, body func(w io.Writer) error, onLine func(string)) (*Response, error) {
+
 	if cmd == "" || strings.ContainsAny(cmd, " \t\r\n") {
 		return nil, fmt.Errorf("fishplus: invalid command %q", cmd)
 	}
@@ -574,10 +587,15 @@ func (s *Session) execFull(ctx context.Context, binary bool, cmd string, args, p
 			return nil, err
 		}
 	}
-	return s.readResponse(ctx, id, binary)
+	return s.readResponseLines(ctx, id, binary, onLine)
 }
 
 func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Response, error) {
+	return s.readResponseLines(ctx, id, binary, nil)
+}
+
+func (s *Session) readResponseLines(ctx context.Context, id uint64, binary bool, onLine func(string)) (*Response, error) {
+
 	prefix := "." + s.token + " " + strconv.FormatUint(id, 10) + " "
 	resp := &Response{}
 	for {
@@ -646,7 +664,11 @@ func (s *Session) readResponse(ctx context.Context, id uint64, binary bool) (*Re
 			resp.Data = append(resp.Data, buf...)
 			continue
 		}
-		resp.Lines = append(resp.Lines, line)
+		if onLine != nil {
+			onLine(line)
+		} else {
+			resp.Lines = append(resp.Lines, line)
+		}
 	}
 }
 

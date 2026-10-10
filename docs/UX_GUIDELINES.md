@@ -154,7 +154,8 @@ File panels are a special, highly optimized version of a `Table`.
 *   `Up`/`Down`, `PgUp`/`PgDn`: Navigate vertically within the current column.
 *   `Left`/`Right`: Jump one full page (view height) up or down within the *current column*. If at the top/bottom, jump to the top/bottom of the adjacent column. **These keys do not change the active panel.**
 *   `Enter`: Enters a directory or executes a file.
-*   `Ctrl+Enter`: Inserts the selected filename into the command line.
+*   `Ctrl+Enter`: Inserts the selected filename into the command line. While command-line suggestions are open, it accepts the selected suggestion (or the first match) without executing the command.
+*   `Alt+F7`: When directories are explicitly marked, Find File shows "In selected folders", checked by default. It searches those directory trees; unchecking it searches the current directory tree. Marked files and the panel cursor alone do not enable the option.
 
 #### Menus (`MenuBar`, `VMenu`)
 
@@ -177,6 +178,13 @@ While `vtui` is keyboard-first, mouse interaction is designed to be consistent a
 *   **Right Click (Contextual):** In specific components like file panels, right-click can be used for secondary actions like multi-selection.
 *   **Wheel:** Scrolls the component under the cursor, regardless of focus.
 
+### 4. Live File Search (Alt+F7)
+
+Starting a search expands the parameters dialog immediately. The submitted mask, text and checkboxes stay at the top, frozen for the duration of the search; progress, results and result actions appear below them. Find and Cancel are replaced by the result actions. Hits appear in discovery order without resetting the selected row, focus or scroll position. The window displays the current path, counts and approximate progress when the provider knows the number of root subdirectories. The list uses the remaining space on an 80×25 terminal and grows when the window is resized or maximized. Searches started without a parameters dialog show a request summary instead.
+
+Pause, beside the progress percentage, suspends the search at its next progress/result checkpoint and becomes Resume. The title and current-path label reflect the paused state. Resume continues the same search and retains its results and selection. The button disappears after completion. Remote background jobs can continue on the server while the client is paused. The configurable `FindFile.Stop` action (default `Ctrl+Shift+F7`) still cancels the search and keeps its results open. Esc or Close cancels and closes it, including while paused. View (F3) and Edit (F4) remain available while searching or paused; Go to and Panel (F6) close and cancel, using the currently displayed results. F5 maximizes or restores the dialog. File actions are disabled while the list is empty. Completion, no matches and errors are shown in the same expanded dialog; errors retain partial results. Search history is saved when Find is pressed.
+
+Completed duplicate-search results use the same table without live search controls.
 By adhering to these rules, we aim to build TUI applications that are powerful, efficient, and a pleasure to use for both novice and expert users.
 ### Panel group headings
 

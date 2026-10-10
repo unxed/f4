@@ -229,6 +229,17 @@ preferences. Editor and dialog clipboard shortcuts keep their existing actions.
 
 ### Panel file clipboard (f4#1767)
 
+`Panel.SelectFromClipboard` (Ctrl+S) replaces the active panel's marks with items
+whose names are on the clipboard. It accepts names separated by spaces, tabs or
+line breaks, with single or double quotes optional. Names are matched literally,
+ignoring case; folders can be marked too, but the parent row cannot. For unquoted
+names containing spaces, the longest existing panel name wins; use quotes or one
+name per line to disambiguate. Full paths are matched by their final component.
+An empty clipboard leaves the marks alone. The action appears in Files and the
+Ctrl+Shift+P command palette. Ctrl+M restores the selection from before Ctrl+S;
+Ctrl+M itself swaps current marks with the previous selection snapshot, without
+reading the clipboard.
+
 `Panel.CopyFilesToClipboard` (Ctrl+C) and `Panel.CutFilesToClipboard` remember the
 selected files of the active panel, or the file under the cursor when nothing is
 marked; the Files menu lists both. The files stay where they are. The next
