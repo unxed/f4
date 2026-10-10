@@ -16,6 +16,13 @@ import (
 // Two runs over the same tree produce byte identical output: there is no
 // timestamp in the header on purpose.
 func (s *Session) Pack() string {
+	return s.packFor(nil)
+}
+
+// packFor is Pack with only the files keep accepts given in full; the others
+// are named, with a note that they were left out for room (compact.go). A
+// nil keep keeps every file.
+func (s *Session) packFor(keep func(rel string) bool) string {
 	s.treeMu.RLock()
 	defer s.treeMu.RUnlock()
 	files := s.tree.walkFiles(ctxDir)
@@ -39,7 +46,9 @@ func (s *Session) Pack() string {
 		total += len(data)
 		fmt.Fprintf(&tree, "  %s\n", rel)
 		fmt.Fprintf(&body, "\n=== BEGIN %s ===\n", rel)
-		if img, sent := sendableImage(rel, data, pictures); img.MIME != "" {
+		if keep != nil && !keep(rel) {
+			fmt.Fprintf(&body, "<%d bytes, left out: the dialog no longer fits the model's context; the user can mention the file to have it sent again>\n", len(data))
+		} else if img, sent := sendableImage(rel, data, pictures); img.MIME != "" {
 			if sent {
 				pictures++
 			}
