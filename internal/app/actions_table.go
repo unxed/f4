@@ -1165,6 +1165,21 @@ func init() {
 		}),
 	})
 	registerAction(action.Action{
+		Name:        "Panel.SelectFromClipboard",
+		Area:        "Shell",
+		Label:       "Select from clipboard",
+		LabelKey:    "Action.Panel.SelectFromClipboard",
+		Description: "Select panel items whose names are on the clipboard",
+		DescKey:     "Action.Panel.SelectFromClipboard.Desc",
+		DefaultKeys: []string{"CtrlS:NoTerminalApp"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *panel.PanelsFrame) {
+			if fsp := pf.GetActivePanel(); fsp != nil {
+				fsp.SelectFromClipboard(vtui.GetClipboard())
+			}
+		}),
+	})
+	registerAction(action.Action{
 		Name:        "Panel.SelectNavigation",
 		Area:        "Shell",
 		Label:       "Select While Navigating",

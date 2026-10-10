@@ -59,6 +59,7 @@ var actionMenuOrder = []string{
 	"Panel.DeselectCurrentExtension",
 	"Panel.InvertSelection",
 	"Panel.RestoreSelection",
+	"Panel.SelectFromClipboard",
 	"Panel.SelectNavigation",
 	"Panel.ToggleCommandLineFocus",
 	"Panel.UserMenu",
