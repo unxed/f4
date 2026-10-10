@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
