@@ -32,6 +32,8 @@ type savedDialog struct {
 	GitHubToken string `json:"github_token,omitempty"`
 	// Spent is what the dialog has spent, by model.
 	Spent map[string]Usage `json:"spent,omitempty"`
+	// Applied lists the patches of the model the user applied.
+	Applied []AppliedPatch `json:"applied,omitempty"`
 }
 
 // SetStorePath makes path the dialog's file: a dialog saved there earlier is
@@ -84,6 +86,7 @@ func (s *Session) restoreLocked(d savedDialog) {
 	s.mode = d.Mode
 	s.githubToken = d.GitHubToken
 	s.spent = d.Spent
+	s.applied = d.Applied
 	s.writeSessionFile()
 }
 
@@ -96,7 +99,7 @@ func (s *Session) saveLocked() {
 	if s.storePath == "" {
 		return
 	}
-	d := savedDialog{Version: storeVersion, Title: s.title, PatchMode: s.apMode, Turns: s.turns, Orders: s.orders, Mode: s.mode, GitHubToken: s.githubToken, Spent: s.spent}
+	d := savedDialog{Version: storeVersion, Title: s.title, PatchMode: s.apMode, Turns: s.turns, Orders: s.orders, Mode: s.mode, GitHubToken: s.githubToken, Spent: s.spent, Applied: s.applied}
 	for _, p := range s.tree.walkFiles(ctxDir) {
 		if data, ok := s.tree.readFile(p); ok {
 			if d.Context == nil {

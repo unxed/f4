@@ -575,9 +575,15 @@ type FileSystemPanel struct {
 	// leftover AI download's RefreshAll re-armed the queue while a test
 	// helper's join goroutine was still returning from the round that had
 	// just finished.
-	loadIdleCh                 chan struct{}
-	loadWorkerActive           bool
-	pendingDirectoryLoad       func()
+	loadIdleCh           chan struct{}
+	loadWorkerActive     bool
+	pendingDirectoryLoad func()
+	// pendingDetachable and runningDetachable say a load may be left behind
+	// once cancelled (a local read that can hang on a sudo password,
+	// f4#1411); loadWorkerGen moves on when one is, so its worker stops.
+	pendingDetachable          bool
+	runningDetachable          bool
+	loadWorkerGen              uint64
 	ProviderOpenTask           *vtui.TaskContext
 	directoryErrorDialog       *vtui.Window
 	ProviderOpenTarget         string
@@ -1169,6 +1175,25 @@ func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
 	fp.Wide = false
 	fp.configureCellSelection()
 	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
+	fp.reloadForLinkCounts()
+}
+
+// reloadForLinkCounts reads the directory again when the mode now shows the
+// "LN" column and the listing on screen was loaded without the counts, which
+// only a load asks for (f4#1861).
+func (fp *FileSystemPanel) reloadForLinkCounts() {
+	if _, ok := fp.Vfs.(linkCountFiller); !ok {
+		return
+	}
+	if !panelColumnsShow(PanelViewModeSettings(fp.EffectiveViewMode()).Columns, LinkCountColumn) {
+		return
+	}
+	for _, e := range fp.AllEntries() {
+		if !e.IsDir && e.Name != ".." && !e.HasMetadata(vfs.MetadataNlink) {
+			fp.ReadDirectory()
+			return
+		}
+	}
 }
 
 // mouseEntryIndex returns the entry under the mouse. Multi-column panel modes
@@ -2254,14 +2279,33 @@ func (fp *FileSystemPanel) ReadDirectory() {
 // cancelled by readDirectoryEx; it may still need to drain one FISH+ response,
 // after which only the most recent path is allowed to start.
 func (fp *FileSystemPanel) EnqueueDirectoryLoad(load func()) {
+	fp.enqueueDirectoryLoad(load, false)
+}
+
+// enqueueDirectoryLoad is EnqueueDirectoryLoad; detachable says this load
+// need not be waited for once a newer one cancels it. A local read may sit
+// on a sudo password prompt (entering /root), and the next directory the user
+// walks to stayed empty until the prompt was answered (f4#1411). A remote
+// read is still waited for: its connection carries one request at a time.
+func (fp *FileSystemPanel) enqueueDirectoryLoad(load func(), detachable bool) {
 	fp.loadQueueMu.Lock()
 	if fp.loadWorkerActive {
-		fp.pendingDirectoryLoad = load
-		fp.loadQueueMu.Unlock()
-		return
+		if !fp.runningDetachable {
+			fp.pendingDirectoryLoad, fp.pendingDetachable = load, detachable
+			fp.loadQueueMu.Unlock()
+			return
+		}
+		// The running read was cancelled by this navigation: leave it to
+		// finish on its own, its results are dropped (loadCtx no longer
+		// matches), and start this one now.
+		fp.loadWorkerGen++
+		fp.pendingDirectoryLoad = nil
+	} else {
+		fp.loadWorkerActive = true
+		fp.loadIdleCh = make(chan struct{})
 	}
-	fp.loadWorkerActive = true
-	fp.loadIdleCh = make(chan struct{})
+	fp.runningDetachable = detachable
+	gen := fp.loadWorkerGen
 	// Every worker is also counted process-wide. A worker reads globals while
 	// it runs -- config.App and vtui.FrameManager, and the frame manager's task
 	// queue when it posts back -- so anything that replaces one of those has to
@@ -2279,7 +2323,13 @@ func (fp *FileSystemPanel) EnqueueDirectoryLoad(load func()) {
 			next()
 
 			fp.loadQueueMu.Lock()
+			if fp.loadWorkerGen != gen {
+				// Left behind: a newer worker owns the queue.
+				fp.loadQueueMu.Unlock()
+				return
+			}
 			next = fp.pendingDirectoryLoad
+			fp.runningDetachable = fp.pendingDetachable
 			fp.pendingDirectoryLoad = nil
 			if next == nil {
 				fp.loadWorkerActive = false
@@ -2777,8 +2827,16 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	loadSyncPanel := config.App.SyncPanelLoad
 	loadShowHidden := config.App.ShowHiddenFiles
 	loadFrames := vtui.FrameManager
+	// The "LN" column needs a query per file on Windows, which the plain
+	// listing does not make; pay it only while the column is on screen
+	// (f4#1861).
+	linkCounter, _ := loadVFS.(linkCountFiller)
+	if !panelColumnsShow(PanelViewModeSettings(fp.EffectiveViewMode()).Columns, LinkCountColumn) {
+		linkCounter = nil
+	}
 
-	fp.EnqueueDirectoryLoad(func() {
+	_, localLoad := loadVFS.(*vfs.OSVFS)
+	fp.enqueueDirectoryLoad(func() {
 		if ctx.Err() != nil {
 			return
 		}
@@ -2787,6 +2845,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		err := loadVFS.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil {
 				return
+			}
+			if linkCounter != nil {
+				linkCounter.FillLinkCounts(ctx, path, chunk)
 			}
 			accumulated = append(accumulated, chunk...)
 			if ctx.Err() != nil {
@@ -3132,7 +3193,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			fp.Refresh()
 			loadFrames.Redraw()
 		})
-	})
+	}, localLoad)
 }
 
 // applyUpItemStat gives the ".." row the times, mode and owner of the parent

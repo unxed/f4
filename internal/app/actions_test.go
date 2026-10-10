@@ -3878,3 +3878,68 @@ func TestActionSwitchEditorViewer_HeightPreserved(t *testing.T) {
 		}
 	}
 }
+
+// f4#1861: a link name typed without a path is made in the source panel's
+// folder, as in far3, not in the passive panel's.
+func TestActionCreateLink_RelativeNameIsNextToTheSource(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	theme.SetDefaultF4Palette()
+
+	pf := panel.NewPanelsFrame()
+	t.Cleanup(pf.Close)
+	pf.ResizeConsole(80, 25)
+	fspSrc := pf.Panels[0].(*panel.FileSystemPanel)
+	fspDst := pf.Panels[1].(*panel.FileSystemPanel)
+	paneltest.WaitForLoad(t, fspSrc)
+	paneltest.WaitForLoad(t, fspDst)
+
+	srcDir, dstDir := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "text.txt"), []byte("same"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fspSrc.Vfs = vfs.NewOSVFS(srcDir)
+	fspDst.Vfs = vfs.NewOSVFS(dstDir)
+	fspSrc.Entries = []*panel.FileEntry{{VFSItem: vfs.VFSItem{Name: "text.txt"}}}
+	fspSrc.SetCursorIndex(0)
+	pf.ActiveIdx = 0
+
+	actionCreateLink(pf)
+	dlg, ok := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	if !ok {
+		t.Fatal("no link dialog")
+	}
+	for _, child := range dlg.GetChildren() {
+		switch c := child.(type) {
+		case *vtui.Edit:
+			c.SetText("hl.txt")
+		case *vtui.ComboBox:
+			c.Menu.SetSelectPos(2) // hard link
+		}
+	}
+	testutil.ClickDialogButton(t, dlg, "Create link")
+
+	want := filepath.Join(srcDir, "hl.txt")
+	deadline := time.After(3 * time.Second)
+	for {
+		if _, err := os.Lstat(want); err == nil {
+			break
+		}
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			entries, _ := os.ReadDir(dstDir)
+			t.Fatalf("the link is not at %s (passive panel holds %d entries)", want, len(entries))
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(dstDir, "hl.txt")); err == nil {
+		t.Fatal("the link was made in the passive panel's folder")
+	}
+	a, _ := os.Stat(filepath.Join(srcDir, "text.txt"))
+	b, _ := os.Stat(want)
+	if !os.SameFile(a, b) {
+		t.Fatal("hl.txt is not a hard link to text.txt")
+	}
+}

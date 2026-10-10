@@ -506,6 +506,10 @@ func (d *commandPaletteDialog) ProcessKey(event *vtinput.InputEvent) bool {
 			d.executeCurrent()
 			return true
 		case vtinput.VK_K:
+			if commandPaletteUnassignKey(event) {
+				d.unassignKeyFromSelected()
+				return true
+			}
 			if commandPaletteAssignKey(event) {
 				d.assignKeyToSelected()
 				return true

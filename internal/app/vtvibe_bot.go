@@ -583,10 +583,18 @@ func aiTaskCommand(pf *panel.PanelsFrame, arg string) {
 	lower := strings.ToLower(arg)
 	switch {
 	case arg == "":
-		vtui.ShowMessage(i18n.Msg("AI.Title"), aiTasksText(aiWorkers.Running()), []string{i18n.Msg("vtui.Ok")})
+		vtui.ShowMessage(i18n.Msg("AI.Title"), aiTasksText(aiWorkers.Running(), aiManagers.running()), []string{i18n.Msg("vtui.Ok")})
 		return
 	case strings.HasPrefix(lower, "stop "):
-		id, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(arg[len("stop "):]), "#"))
+		which := strings.TrimPrefix(strings.TrimSpace(lower[len("stop "):]), "#")
+		if rest, ok := strings.CutPrefix(which, "m"); ok {
+			// A worker manager: it and every worker it started.
+			if id, err := strconv.Atoi(rest); err != nil || !aiManagers.stop(id) {
+				vtui.ShowMessage(i18n.Msg("AI.Title"), i18n.Msg("AI.TaskUnknown"), []string{i18n.Msg("vtui.Ok")})
+			}
+			return
+		}
+		id, err := strconv.Atoi(which)
 		if err != nil || !aiWorkers.Stop(id) {
 			vtui.ShowMessage(i18n.Msg("AI.Title"), i18n.Msg("AI.TaskUnknown"), []string{i18n.Msg("vtui.Ok")})
 		}
@@ -622,7 +630,7 @@ func aiTaskCommand(pf *panel.PanelsFrame, arg string) {
 // worker succeeds: right for a task the user gave with ai:task, while an
 // order the manager split up is closed by the manager. done, if set, runs on
 // the UI thread after the report.
-func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }, session *vtvibe.Session, task, dir string, order int, closeOrder bool, done func(vtvibe.WorkerResult)) {
+func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }, session *vtvibe.Session, task, dir string, order int, closeOrder bool, done func(vtvibe.WorkerResult)) int {
 	config := aiAgentConfig(session)
 	// The worker's file changes are journaled so ai:task undo N can put
 	// them back (f4#1842, stage H9).
@@ -636,6 +644,9 @@ func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) },
 		return aiWithApproval(manager, func() string { return label.Load().(string) }, list)
 	}
 	aiWorkers.SetGates(vtvibe.GateRules{User: aiGateRules, Learned: aiLearnedRules, Learn: aiLearnRule})
+	// The tokens are counted for the model the task started on, read now:
+	// once a stopped worker winds down, nothing of it reads the settings.
+	model := config().Model
 	id := aiWorkers.Start(task, dir, config, tools, func(r vtvibe.WorkerResult) {
 		text := aiTaskResultText(r, order)
 		if problems := mcp.close(); problems != "" {
@@ -644,7 +655,6 @@ func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) },
 		if n := len(journal.Files()); n > 0 {
 			text += "\n\n" + fmt.Sprintf(i18n.Msg("AI.TaskUndoHint"), n, r.ID)
 		}
-		model := config().Model
 		manager.PostTask(func() {
 			session.AddSpent(model, r.Usage)
 			if r.Err == nil && closeOrder {
@@ -665,6 +675,7 @@ func aiStartWorker(pf *panel.PanelsFrame, manager interface{ PostTask(func()) },
 		session.Note("assistant", fmt.Sprintf(i18n.Msg("AI.WorkerStarted"), id, task))
 	}
 	aiBotRefresh(pf)
+	return id
 }
 
 // vtvibeMCPPath is the MCP servers' configuration, in the format Claude
@@ -972,20 +983,27 @@ func aiTaskResultText(r vtvibe.WorkerResult, order int) string {
 	return sb.String()
 }
 
-func aiTasksText(running map[int]string) string {
-	if len(running) == 0 {
+func aiTasksText(running, managers map[int]string) string {
+	if len(running) == 0 && len(managers) == 0 {
 		return i18n.Msg("AI.NoTasks")
 	}
-	ids := make([]int, 0, len(running))
-	for id := range running {
-		ids = append(ids, id)
+	var lines []string
+	for _, id := range sortedIDs(managers) {
+		lines = append(lines, fmt.Sprintf(i18n.Msg("AI.ManagerLine"), id, orderLine(managers[id])))
 	}
-	sort.Ints(ids)
-	lines := make([]string, 0, len(ids))
-	for _, id := range ids {
+	for _, id := range sortedIDs(running) {
 		lines = append(lines, fmt.Sprintf("#%d %s", id, orderLine(running[id])))
 	}
 	return dialog.EscapeAmpersand(strings.Join(lines, "\n"))
+}
+
+func sortedIDs(m map[int]string) []int {
+	ids := make([]int, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	return ids
 }
 
 func orderLine(text string) string {
@@ -1003,13 +1021,20 @@ func orderLine(text string) string {
 // called on the UI goroutine when it has reported.
 func aiStartManager(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }, session *vtvibe.Session, task, dir string, done func()) {
 	config := aiAgentConfig(session)
-	session.Note("assistant", fmt.Sprintf(i18n.Msg("AI.ManagerStarted"), task))
+	ctx, cancel := context.WithCancel(context.Background())
+	run := aiManagers.add(task, cancel)
+	session.Note("assistant", fmt.Sprintf(i18n.Msg("AI.ManagerStarted"), run.id, task))
 	aiBotRefresh(pf)
 	go func() {
-		run := func(ctx context.Context, subtask string) vtvibe.WorkerResult {
+		defer aiManagers.remove(run.id)
+		work := func(ctx context.Context, subtask string) vtvibe.WorkerResult {
 			reported := make(chan vtvibe.WorkerResult, 1)
 			manager.PostTask(func() {
-				aiStartWorker(pf, manager, session, subtask, dir, 0, false, func(r vtvibe.WorkerResult) { reported <- r })
+				if ctx.Err() != nil {
+					reported <- vtvibe.WorkerResult{Task: subtask, Err: ctx.Err()}
+					return
+				}
+				run.addWorker(aiStartWorker(pf, manager, session, subtask, dir, 0, false, func(r vtvibe.WorkerResult) { reported <- r }))
 			})
 			select {
 			case r := <-reported:
@@ -1018,7 +1043,8 @@ func aiStartManager(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }
 				return vtvibe.WorkerResult{Task: subtask, Err: ctx.Err()}
 			}
 		}
-		result := vtvibe.RunWorkerManager(context.Background(), config, task, vtvibe.DefaultParallelWorkers, run)
+		result := vtvibe.RunWorkerManager(ctx, config, task, vtvibe.DefaultParallelWorkers, work)
+		cancel()
 		// The workers' tokens were counted as each reported; only the
 		// manager's own are left.
 		own := result.Usage
@@ -1040,4 +1066,75 @@ func aiStartManager(pf *panel.PanelsFrame, manager interface{ PostTask(func()) }
 			}
 		})
 	}()
+}
+
+// aiManagers are the worker managers at work: ai:task lists them as mN, and
+// ai:task stop mN stops one together with the workers it started.
+var aiManagers aiManagerSet
+
+type aiManagerSet struct {
+	mu   sync.Mutex
+	next int
+	runs map[int]*aiManagerRun
+}
+
+type aiManagerRun struct {
+	id      int
+	task    string
+	cancel  context.CancelFunc
+	mu      sync.Mutex
+	workers []int
+}
+
+func (r *aiManagerRun) addWorker(id int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.workers = append(r.workers, id)
+}
+
+func (m *aiManagerSet) add(task string, cancel context.CancelFunc) *aiManagerRun {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.runs == nil {
+		m.runs = map[int]*aiManagerRun{}
+	}
+	m.next++
+	run := &aiManagerRun{id: m.next, task: task, cancel: cancel}
+	m.runs[run.id] = run
+	return run
+}
+
+func (m *aiManagerSet) remove(id int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.runs, id)
+}
+
+func (m *aiManagerSet) running() map[int]string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[int]string, len(m.runs))
+	for id, r := range m.runs {
+		out[id] = r.task
+	}
+	return out
+}
+
+// stop cancels the manager and stops its workers; false when there is no
+// manager id.
+func (m *aiManagerSet) stop(id int) bool {
+	m.mu.Lock()
+	run := m.runs[id]
+	m.mu.Unlock()
+	if run == nil {
+		return false
+	}
+	run.cancel()
+	run.mu.Lock()
+	workers := append([]int(nil), run.workers...)
+	run.mu.Unlock()
+	for _, w := range workers {
+		aiWorkers.Stop(w)
+	}
+	return true
 }

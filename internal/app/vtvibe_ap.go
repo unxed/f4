@@ -164,6 +164,13 @@ func aiRunPatcher(pf *panel.PanelsFrame, patch *vtvibe.Patch, root string, dry b
 				return
 			}
 			pf.RefreshAll()
+			// A real run that wrote something is remembered with the
+			// dialog: when it no longer fits the model's context, the
+			// patch's code gives way to the commit it went into (f4#1842,
+			// § 19a.3).
+			if !dry && (exitCode == 0 || exitCode == 2) {
+				aiSession().NoteApplied(vtvibe.AppliedPatch{ID: patch.ID, Root: root, Files: patch.Files, At: time.Now()})
+			}
 			// A real run that wrote something can be undone (Ctrl+Z in
 			// the AI panel, ai:undo, or Undo on the result right below).
 			aiPushUndo(undo)

@@ -72,3 +72,73 @@ func TestAIStartManagerRunsWorkersAndReports(t *testing.T) {
 		}
 	}
 }
+
+func TestAIManagerStopsWithItsWorkers(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	workerAsked := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(string(data), "worker manager") {
+			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":null,"tool_calls":[{"id":"m1","type":"function","function":{"name":"run_workers","arguments":"{\"tasks\":[\"wait forever\"]}"}}]}}]}`)
+			return
+		}
+		// The worker's model never answers until the request is dropped.
+		select {
+		case workerAsked <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	setupPortableIni(t, "0")
+	writeVtvibeINI(t, "[general]\nbase_url = "+srv.URL+"\nmodel = m\nkey = k\n")
+
+	session := vtvibe.NewSession()
+	q := queuedTasks{ch: make(chan func(), 16)}
+	reported := false
+	aiStartManager(&panel.PanelsFrame{}, q, session, "never ends", t.TempDir(), func() { reported = true })
+	deadline := time.After(10 * time.Second)
+	stopped := false
+	for !reported {
+		select {
+		case fn := <-q.ch:
+			fn()
+		case <-workerAsked:
+			running := aiManagers.running()
+			if len(running) != 1 {
+				t.Fatalf("managers at work: %v", running)
+			}
+			for id := range running {
+				if !aiManagers.stop(id) {
+					t.Fatal("the manager could not be stopped")
+				}
+			}
+			stopped = true
+		case <-deadline:
+			t.Fatal("the stopped manager did not report")
+		}
+	}
+	if !stopped {
+		t.Fatal("the worker never asked its model")
+	}
+	// The stopped worker winds down on its own goroutine; once it is off the
+	// list it reads nothing more, so the test's cleanup may replace the
+	// settings.
+	for len(aiWorkers.Running()) > 0 {
+		select {
+		case fn := <-q.ch:
+			fn()
+		case <-deadline:
+			t.Fatal("the stopped worker did not finish")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if len(aiManagers.running()) != 0 {
+		t.Fatal("the stopped manager is still listed")
+	}
+	if text := aiTasksText(nil, map[int]string{3: "task"}); !strings.Contains(text, "m3") {
+		t.Fatalf("ai:task does not list the manager: %q", text)
+	}
+}

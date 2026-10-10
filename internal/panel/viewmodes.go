@@ -12,6 +12,7 @@ package panel
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -948,6 +949,22 @@ func (fp *FileSystemPanel) cellText(e *FileEntry, column PanelColumn) string {
 		return panelLinkCountText(e)
 	}
 	return ""
+}
+
+// linkCountFiller is a file system that can add the hard link counts its
+// listing left out (vfs.OSVFS on Windows).
+type linkCountFiller interface {
+	FillLinkCounts(ctx context.Context, dir string, items []vfs.VFSItem)
+}
+
+// panelColumnsShow reports whether columns include a column of kind.
+func panelColumnsShow(columns []PanelColumn, kind PanelColumnType) bool {
+	for _, c := range columns {
+		if c.Type == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // panelLinkCountText is far3's "LN" column: the number of hard links to the

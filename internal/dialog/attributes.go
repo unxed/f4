@@ -1150,6 +1150,16 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 		}
 	}
 
+	// f4#1861: a file with several hard links lists all its names, as far3
+	// does; the count alone would not tell where the others are.
+	linkNames := attributesHardLinkNames(v, path, item, multiple)
+	if len(linkNames) > 0 {
+		height += 2 + min(len(linkNames), maxShownLinkNames)
+		if len(linkNames) > maxShownLinkNames {
+			height++
+		}
+	}
+
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("Attributes.Title"))
 	dlg.ShowClose = true
 	x, y := dlg.X1, dlg.Y1
@@ -1184,6 +1194,24 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 		dlg.AddItem(lblLinkTarget)
 		dlg.AddItem(editLinkTarget)
 		mainVBox.Add(rowLinkTarget, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
+
+	if len(linkNames) > 0 {
+		lblLinks := vtui.NewText(0, 0, fmt.Sprintf(i18n.Msg("Attributes.HardLinks"), len(linkNames)), vtui.Palette[vtui.ColDialogText])
+		dlg.AddItem(lblLinks)
+		mainVBox.Add(lblLinks, vtui.Margins{Top: 1}, vtui.AlignLeft)
+		for i, name := range linkNames {
+			text := "  " + vtui.TruncateMiddle(name, 52)
+			if i == maxShownLinkNames {
+				text = fmt.Sprintf(i18n.Msg("Attributes.HardLinksMore"), len(linkNames)-maxShownLinkNames)
+			}
+			lbl := vtui.NewText(0, 0, text, vtui.Palette[vtui.ColDialogText])
+			dlg.AddItem(lbl)
+			mainVBox.Add(lbl, vtui.Margins{}, vtui.AlignLeft)
+			if i == maxShownLinkNames {
+				break
+			}
+		}
 	}
 
 	gbAttr := vtui.NewGroupBox(0, 0, 54, 6, " "+i18n.Msg("Attributes.Flags")+" ")
@@ -1441,4 +1469,27 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
 	vtui.FrameManager.Push(dlg)
+}
+
+// maxShownLinkNames is how many names of a hard-linked file the dialog
+// lists before it only says how many more there are.
+const maxShownLinkNames = 4
+
+// attributesHardLinkNames is every name of the file when it has more than
+// one and the file system can tell them (vfs.OSVFS on Windows).
+func attributesHardLinkNames(v vfs.VFS, path string, item vfs.VFSItem, multiple bool) []string {
+	if multiple || item.IsDir {
+		return nil
+	}
+	lister, ok := v.(interface {
+		HardLinkNames(ctx context.Context, path string) ([]string, error)
+	})
+	if !ok {
+		return nil
+	}
+	names, err := lister.HardLinkNames(context.Background(), path)
+	if err != nil || len(names) < 2 {
+		return nil
+	}
+	return names
 }
