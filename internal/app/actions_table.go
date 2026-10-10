@@ -844,7 +844,9 @@ func init() {
 		Description: "Paste clipboard text or save a clipboard image into the active panel",
 		DescKey:     "Action.Panel.Paste.Desc",
 		DefaultKeys: []string{"CtrlV", "ShiftIns"},
-		Handler:     func() bool { return panel.ActionPasteClipboard(panel.FindPanelsFrame()) },
+		// Next to Copy/Cut files to clipboard in the Files menu (f4#1767).
+		MenuPath: "Files",
+		Handler:  func() bool { return panel.ActionPasteClipboard(panel.FindPanelsFrame()) },
 	})
 	registerAction(action.Action{
 		Name:        "Panel.CopyFilesToClipboard",
