@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && !go2xp
 
 package vfs
 
@@ -15,7 +15,9 @@ import (
 
 // Every name of a file with hard links, as far3 lists them in its attributes
 // dialog (f4#1861): FindFirstFileNameW / FindNextFileNameW walk the names
-// NTFS keeps for the file.
+// NTFS keeps for the file. Both arrived in Vista, so the XP build (go2xp)
+// leaves this out: its import audit refuses an export XP lacks, and there
+// Ctrl+A simply lists no names.
 
 var (
 	procFindFirstFileNameW = kernel32.NewProc("FindFirstFileNameW")
