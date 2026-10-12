@@ -58,8 +58,8 @@ func (fp *FileSystemPanel) syncGroupedCursor(visual int) {
 		}
 	}
 	rel := visual - top + fp.stickyGroupRows(top)
-	if fp.FastFindMode && height > 2 && rel%height >= height-2 {
-		top += rel%height - (height - 3)
+	if covered := fp.fastFindBoxHeight() - 1; fp.FastFindMode && height > covered && rel%height >= height-covered {
+		top += rel%height - (height - covered - 1)
 		top = min(top, visual)
 		rel = visual - top + fp.stickyGroupRows(top)
 	}

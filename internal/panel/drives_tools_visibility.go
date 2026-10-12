@@ -82,3 +82,37 @@ func FilterVisibleDriveTools(entries []sysinfo.DriveEntry, disabled []string) []
 	}
 	return visible
 }
+
+// HiddenDriveToolsAfter returns the names the visibility file should hold once
+// the tools of drives are shown or hidden as shown says (shown[i] is for
+// drives[i]). It keeps the file's order and the names of tools that are not
+// registered right now, and puts the newly hidden ones at the end (f4#918).
+func HiddenDriveToolsAfter(disabled []string, drives []sysinfo.DriveEntry, shown []bool) []string {
+	stillHidden := map[string]bool{}
+	for i, drv := range drives {
+		if i < len(shown) && !shown[i] {
+			stillHidden[drv.Name] = true
+		}
+	}
+	var names []string
+	for _, n := range disabled {
+		known := false
+		for _, drv := range drives {
+			if drv.Name == n {
+				known = true
+				break
+			}
+		}
+		if !known || stillHidden[n] {
+			names = append(names, n)
+			delete(stillHidden, n)
+		}
+	}
+	for _, drv := range drives {
+		if stillHidden[drv.Name] {
+			names = append(names, drv.Name)
+			delete(stillHidden, drv.Name)
+		}
+	}
+	return names
+}

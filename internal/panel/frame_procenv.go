@@ -505,6 +505,9 @@ func (pf *PanelsFrame) WritePTY(pty terminal.PtyBackend, data []byte) (int, erro
 	if pf.Parser != nil && bytes.HasPrefix(data, terminal.WindowsSyncCommandPrefix) {
 		pf.Parser.ExpectWindowsSyncEcho()
 	}
+	if pf.Parser != nil && bytes.HasPrefix(data, terminal.UnixSyncCommandPrefix) {
+		pf.Parser.ExpectUnixSyncEcho()
+	}
 	if !pf.isLocalPTY(pty) {
 		return pty.Write(data)
 	}

@@ -17,22 +17,30 @@ import (
 // AI Studio, OpenRouter, llama.cpp, LM Studio, Ollama and the rest: they all
 // speak the OpenAI chat-completions dialect.
 type Config struct {
+	// Kind is the wire protocol: "" for OpenAI chat-completions, KindAnthropic
+	// for the Anthropic Messages API.
+	Kind    string
 	BaseURL string
 	Model   string
 	APIKey  string
 	System  string
+	// ToolEnv is added to the environment of the commands the agent's tools
+	// run, as NAME=value (the GitHub token, github.go); never sent anywhere.
+	ToolEnv []string
 }
 
 // Message is one chat-completions message.
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Images go with a user message as pictures (image.go).
+	Images []Image `json:"-"`
 }
 
 // Usage carries the token counts the endpoint reports back, when it does.
 type Usage struct {
-	In  int
-	Out int
+	In  int `json:"in"`
+	Out int `json:"out"`
 }
 
 var (
@@ -40,6 +48,10 @@ var (
 	// ErrNoKey is returned when no API key could be resolved. The host turns
 	// it into a localized hint instead of a raw error string.
 	ErrNoKey = errors.New("vtvibe: no API key configured")
+	// ErrNoModel is returned when no model is set and the service has no
+	// default one, as with a custom address (f4#1842: a request with an
+	// empty model came back as MODEL_NOT_FOUND).
+	ErrNoModel = errors.New("vtvibe: no model chosen")
 	// ErrBusy is returned while a request for this session is still running.
 	ErrBusy = errors.New("vtvibe: a request is already running")
 )
@@ -79,12 +91,52 @@ type chatResponse struct {
 type apiError struct {
 	Message string `json:"message"`
 	Status  string `json:"status"`
+	// Code is a number for some services and a string for others; it is
+	// what is left to show when the message is empty (bothub:
+	// {"code":"MODEL_NOT_FOUND","message":""}).
+	Code json.RawMessage `json:"code"`
+}
+
+// text is the message, or the code when the service sent no message.
+func (e *apiError) text() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	code := strings.Trim(strings.TrimSpace(string(e.Code)), `"`)
+	if code == "null" {
+		return ""
+	}
+	return code
+}
+
+// HTTPStatus is the HTTP status of a request that failed with one, or 0.
+func HTTPStatus(err error) int {
+	var se *statusError
+	if errors.As(err, &se) {
+		return se.code
+	}
+	return 0
+}
+
+// checkReady is the common check before a request: a key where the service
+// needs one, and a model.
+func (c Config) checkReady() error {
+	if c.APIKey == "" && !isLocal(c.BaseURL) {
+		return ErrNoKey
+	}
+	if strings.TrimSpace(c.Model) == "" {
+		return ErrNoModel
+	}
+	return nil
 }
 
 // Chat sends the whole conversation and returns the reply text.
 func (c Config) Chat(ctx context.Context, msgs []Message) (string, Usage, error) {
-	if c.APIKey == "" && !isLocal(c.BaseURL) {
-		return "", Usage{}, ErrNoKey
+	if c.Kind == KindAnthropic {
+		return c.chatAnthropic(ctx, msgs)
+	}
+	if err := c.checkReady(); err != nil {
+		return "", Usage{}, err
 	}
 	req := chatRequest{Model: c.Model, Messages: msgs}
 	if strings.Contains(strings.ToLower(c.Model), "gemini") {
@@ -111,8 +163,8 @@ func (c Config) Chat(ctx context.Context, msgs []Message) (string, Usage, error)
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return "", Usage{}, fmt.Errorf("cannot parse the reply: %w", err)
 	}
-	if parsed.Error != nil && parsed.Error.Message != "" {
-		return "", Usage{}, errors.New(parsed.Error.Message)
+	if parsed.Error != nil && parsed.Error.text() != "" {
+		return "", Usage{}, errors.New(parsed.Error.text())
 	}
 	if len(parsed.Choices) == 0 {
 		return "", Usage{}, errors.New("the model returned no answer")
@@ -128,6 +180,36 @@ func (c Config) Chat(ctx context.Context, msgs []Message) (string, Usage, error)
 // Models lists what the key can actually reach. Model names go stale faster
 // than documentation does, so the user needs a way to ask.
 func (c Config) Models(ctx context.Context) ([]string, error) {
+	infos, err := c.ModelsWithInfo(ctx)
+	out := make([]string, 0, len(infos))
+	for _, m := range infos {
+		out = append(out, m.ID)
+	}
+	return out, err
+}
+
+// ModelInfo is one model a key can reach.
+type ModelInfo struct {
+	ID string
+	// Free is true when the service says the model costs nothing: OpenRouter
+	// marks such models with a ":free" suffix and a zero price (f4#1842).
+	Free bool
+	// PriceIn and PriceOut are the price of one input and one output token
+	// when the service publishes it (Priced).
+	PriceIn, PriceOut float64
+	Priced            bool
+}
+
+// ModelsWithInfo is Models with what the service tells about each model.
+func (c Config) ModelsWithInfo(ctx context.Context) ([]ModelInfo, error) {
+	if c.Kind == KindAnthropic {
+		ids, err := c.modelsAnthropic(ctx)
+		out := make([]ModelInfo, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, ModelInfo{ID: id})
+		}
+		return out, err
+	}
 	if c.APIKey == "" && !isLocal(c.BaseURL) {
 		return nil, ErrNoKey
 	}
@@ -137,21 +219,43 @@ func (c Config) Models(ctx context.Context) ([]string, error) {
 	}
 	var parsed struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID      string `json:"id"`
+			Pricing *struct {
+				Prompt     json.RawMessage `json:"prompt"`
+				Completion json.RawMessage `json:"completion"`
+			} `json:"pricing"`
 		} `json:"data"`
 		Error *apiError `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, err
 	}
-	if parsed.Error != nil && parsed.Error.Message != "" {
-		return nil, errors.New(parsed.Error.Message)
+	if parsed.Error != nil && parsed.Error.text() != "" {
+		return nil, errors.New(parsed.Error.text())
 	}
-	out := make([]string, 0, len(parsed.Data))
+	out := make([]ModelInfo, 0, len(parsed.Data))
 	for _, m := range parsed.Data {
-		out = append(out, strings.TrimPrefix(m.ID, "models/"))
+		info := ModelInfo{ID: strings.TrimPrefix(m.ID, "models/")}
+		info.Free = strings.HasSuffix(info.ID, ":free") ||
+			(m.Pricing != nil && zeroPrice(m.Pricing.Prompt) && zeroPrice(m.Pricing.Completion))
+		if m.Pricing != nil {
+			in, okIn := price(m.Pricing.Prompt)
+			out, okOut := price(m.Pricing.Completion)
+			info.PriceIn, info.PriceOut, info.Priced = in, out, okIn && okOut
+		}
+		out = append(out, info)
 	}
 	return out, nil
+}
+
+// zeroPrice reads a price that may come as a string ("0") or a number (0).
+func zeroPrice(raw json.RawMessage) bool {
+	text := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+	if text == "" || text == "null" {
+		return false
+	}
+	f, err := strconv.ParseFloat(text, 64)
+	return err == nil && f == 0
 }
 
 func (c Config) post(ctx context.Context, url string, body []byte) ([]byte, error) {
@@ -227,7 +331,7 @@ func (e *statusError) Error() string {
 		Error *apiError `json:"error"`
 	}
 	if json.Unmarshal(e.body, &parsed) == nil && parsed.Error != nil {
-		msg = parsed.Error.Message
+		msg = parsed.Error.text()
 	}
 	if msg == "" {
 		msg = strings.TrimSpace(string(e.body))

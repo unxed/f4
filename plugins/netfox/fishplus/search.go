@@ -100,6 +100,10 @@ var ErrNoFind = errors.New("fishplus: the remote host cannot search a tree")
 // FindOptions describes a tree search: which names to match, and optionally
 // what the file has to contain.
 type FindOptions struct {
+	// OnFound publishes each parsed entry on the calling goroutine. It must
+	// not block or call into the same session. Find still returns all hits.
+	OnFound func(Entry)
+
 	// Masks are shell globs matched against the file name, as find's -name
 	// does it. At least one is required.
 	Masks []string
@@ -172,12 +176,42 @@ func (c *Client) Find(ctx context.Context, dir string, opts FindOptions) ([]Entr
 	}
 
 	if c.sess.Features().Has("ffindjob") && c.CanRunJobs() && os.Getenv("F4_NO_FFINDJOB") == "" {
-		return c.findViaJob(ctx, dir, masks, opts.Text, gmode, limit, opts.Progress)
+		return c.findViaJob(ctx, dir, masks, opts.Text, gmode, limit, opts.Progress, opts.OnFound)
 	}
 
 	paths := append([]string{dir}, masks...)
 	if opts.Text != "" {
 		paths = append(paths, opts.Text)
+	}
+
+	if opts.OnFound != nil {
+		var entries []Entry
+		mode := ""
+		resp, err := c.sess.ExecPathsLines(ctx, "ffind", paths, func(line string) {
+			if strings.HasPrefix(line, "M ") {
+				mode = strings.TrimSpace(strings.TrimPrefix(line, "M "))
+				return
+			}
+			if mode == "" || strings.HasPrefix(line, "T ") {
+				return
+			}
+			e, parseErr := parseFoundEntry(line, mode)
+			if parseErr != nil {
+				return
+			}
+			entries = append(entries, e)
+			opts.OnFound(e)
+		}, strconv.Itoa(limit), strconv.Itoa(len(masks)), gmode)
+		if err != nil {
+			return entries, err
+		}
+		if err := resp.Err("ffind " + dir); err != nil {
+			return entries, err
+		}
+		if mode == "" {
+			return entries, fmt.Errorf("fishplus: listing without a mode marker")
+		}
+		return entries, nil
 	}
 	resp, err := c.sess.ExecPaths(ctx, "ffind", paths,
 		strconv.Itoa(limit), strconv.Itoa(len(masks)), gmode)
@@ -198,7 +232,7 @@ func (c *Client) Find(ctx context.Context, dir string, opts FindOptions) ([]Entr
 // progress that the sync path cannot offer, at the cost of the same
 // poll-with-backoff dance FollowScan uses. On ctx cancel the job is
 // dropped on a fresh context, matching how Scan cleans up.
-func (c *Client) findViaJob(ctx context.Context, dir string, masks []string, text, gmode string, limit int, progress func(FindProgress)) ([]Entry, error) {
+func (c *Client) findViaJob(ctx context.Context, dir string, masks []string, text, gmode string, limit int, progress func(FindProgress), onFound ...func(Entry)) ([]Entry, error) {
 	paths := make([]string, 0, 1+len(masks)+1)
 	paths = append(paths, dir)
 	paths = append(paths, masks...)
@@ -210,7 +244,7 @@ func (c *Client) findViaJob(ctx context.Context, dir string, masks []string, tex
 	if err != nil {
 		return nil, err
 	}
-	entries, err := c.followFind(ctx, id, dir, progress)
+	entries, err := c.followFind(ctx, id, dir, progress, onFound...)
 	c.dropJobQuietly(id)
 	return entries, err
 }
@@ -219,13 +253,15 @@ func (c *Client) findViaJob(ctx context.Context, dir string, masks []string, tex
 // Entry records, and forwards P lines to progress if set. Poll cadence
 // backs off between empty polls exactly like FollowScan, so a big walk
 // does not spend more round trips than a small one.
-func (c *Client) followFind(ctx context.Context, id int, dir string, progress func(FindProgress)) ([]Entry, error) {
+func (c *Client) followFind(ctx context.Context, id int, dir string, progress func(FindProgress), onFound ...func(Entry)) ([]Entry, error) {
 	reqCtx := context.WithoutCancel(ctx)
 	var entries []Entry
 	mode := ""
 	wait := jobPollMin
 	for {
-		st, err := c.PollJob(reqCtx, id, DefaultPollLines)
+		pollCtx, cancel := context.WithTimeout(reqCtx, jobDropTimeout)
+		st, err := c.PollJob(pollCtx, id, DefaultPollLines)
+		cancel()
 		if err != nil {
 			return entries, err
 		}
@@ -266,6 +302,9 @@ func (c *Client) followFind(ctx context.Context, id int, dir string, progress fu
 				continue
 			}
 			entries = append(entries, e)
+			if len(onFound) > 0 && onFound[0] != nil {
+				onFound[0](e)
+			}
 			fresh = true
 		}
 		if err := ctx.Err(); err != nil {

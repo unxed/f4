@@ -129,10 +129,14 @@ func (pf *PanelsFrame) pasteFileClipboardContents(contents terminal.ClipboardCon
 	}
 	if clip != nil {
 		matches := len(contents.Files) > 0 && sameFileClipboardPaths(contents.Files, clip.paths)
-		// An unreadable clipboard (no clipboard tool, a terminal that refuses)
-		// cannot say the files are stale, and the remembered files are still what
-		// the user asked for.
-		if !matches && readErr == nil && normalizeClipboardText(contents.Text) != normalizeClipboardText(clip.text) {
+		// Other files on the system clipboard were copied after ours, in
+		// another program: they win, whatever the text reads (on Windows
+		// it can still be the paths f4 put there; tarlabnor, f4#1767). An
+		// unreadable clipboard (no clipboard tool, a terminal that refuses)
+		// cannot say the files are stale, and the remembered files are still
+		// what the user asked for.
+		otherFiles := len(contents.Files) > 0 && !matches
+		if otherFiles || (!matches && readErr == nil && normalizeClipboardText(contents.Text) != normalizeClipboardText(clip.text)) {
 			pf.fileClip = nil
 			clip = nil
 		}

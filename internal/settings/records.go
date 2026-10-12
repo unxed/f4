@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/unxed/f4/internal/action"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -157,6 +158,67 @@ func newCoreRecordSettingsProvider() coreRecordSettingsProvider {
 			}
 		}
 		return panel.SaveDisabledDriveTools(toolVisibilityPath, names)
+	}})
+	menuVisibility := recordCollection("plugin-menu", "plugins", "F11 menu", "Choose which entries of the plugins menu (F11) are shown. A hidden entry keeps its hot key.", "entry.Name", []f4settings.Field{
+		recordField("entry.Name", "Entry", "Entry of the F11 menu.", f4settings.String),
+		recordField("entry.Enabled", "Shown", "Show this entry in the F11 menu.", f4settings.Boolean),
+	})
+	menuVisibility.Fixed = true
+	menuVisibility.Ordered = false
+	p.stores = append(p.stores, settingsRecordStore{collection: menuVisibility, path: panel.PluginMenuVisibilityFilePath(), load: func() ([]f4settings.Record, error) {
+		disabled, err := panel.LoadPluginMenuHidden()
+		if err != nil {
+			return nil, err
+		}
+		hidden := map[string]bool{}
+		for _, name := range disabled {
+			hidden[name] = true
+		}
+		var rows []f4settings.Record
+		for i, entry := range panel.PluginMenuEntriesSnapshot() {
+			rows = append(rows, f4settings.Record{ID: fmt.Sprintf("plugin-menu:%d", i), Values: map[string]string{
+				"entry.Name": action.PlainLabel(entry.Label), "entry.Action": entry.ActionName, "entry.Enabled": strconv.FormatBool(!hidden[entry.ActionName]),
+			}})
+		}
+		return rows, nil
+	}, save: func(rows []f4settings.Record) error {
+		disabled, err := panel.LoadPluginMenuHidden()
+		if err != nil {
+			return err
+		}
+		hidden := map[string]bool{}
+		for _, name := range disabled {
+			hidden[name] = true
+		}
+		for _, row := range rows {
+			name := strings.TrimSpace(row.Values["entry.Action"])
+			if name == "" {
+				continue
+			}
+			if row.Values["entry.Enabled"] == "true" {
+				delete(hidden, name)
+			} else {
+				hidden[name] = true
+			}
+		}
+		// Names already in the file keep their place, new ones follow; names
+		// of plugins that are not loaded now stay, so they are still hidden
+		// when the plugin returns.
+		var names []string
+		for _, name := range disabled {
+			if hidden[name] {
+				names = append(names, name)
+				delete(hidden, name)
+			}
+		}
+		for _, row := range rows {
+			name := strings.TrimSpace(row.Values["entry.Action"])
+			if hidden[name] {
+				names = append(names, name)
+				delete(hidden, name)
+			}
+		}
+		return panel.SavePluginMenuHidden(names)
 	}})
 	linkPath := panel.DriveBookmarksFilePath()
 	links := recordCollection("drive-links", "drives", "Drive links", "Named links shown in the drive chooser.", "link.Name", []f4settings.Field{recordField("link.Name", "Link name", "Display name in the drive chooser.", f4settings.String), recordField("link.Path", "Link path", "Directory or provider path opened by the link.", f4settings.Path), recordField("link.Hotkey", "Shortcut", "Far-style shortcut spelling, such as Q or CtrlF5. Capture fills it in from a key press.", f4settings.Chord)})

@@ -22,6 +22,7 @@ import (
 	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/fileops"
+	"github.com/unxed/f4/internal/findfile"
 	"github.com/unxed/f4/internal/gui"
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
@@ -2224,6 +2225,13 @@ func actionViewFileMode(pf *panel.PanelsFrame, forceHex bool) {
 			return
 		}
 		if fsp.Entries[idx].IsDir {
+			// With folders marked, F3 sizes the marked ones and leaves the one
+			// under the cursor alone unless it is marked too, as Far does
+			// (f4#1795).
+			if marked := markedDirEntries(fsp); len(marked) > 0 {
+				actionCalcDirSizes(pf, fsp, marked)
+				return
+			}
 			actionCalcDirSize(pf, fsp, idx)
 			return
 		}
@@ -2299,19 +2307,78 @@ func actionCalcDirSize(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, idx in
 		func(totalStats vfs.OpStats) {
 			entry.Size = totalStats.Bytes
 			entry.SizeCalculated = true
-			// The size lands in the size column without a word, and a user who
-			// pressed F3 on a folder did not see where it went (f4#1795): say
-			// what was counted, and where a number is a lower bound, say that too.
-			msg := dirSizeResult(name, totalStats)
+			// The size lands in the size column and nothing is said about it: a
+			// message that has to be waited out or dismissed was not wanted
+			// (f4#1795). Only a number that is a lower bound is announced, since
+			// it must not pass for the exact size (f4#1670).
 			if note := unknownSizeNote(totalStats); note != "" {
-				msg += " -- " + note
+				toast.Show(dirSizeResult(name, totalStats)+" -- "+note, 5*time.Second)
 			}
-			toast.Show(msg, 5*time.Second)
 			if fsp.SortMode == panel.SortSize || fsp.GroupBy == panel.GroupSize {
 				fsp.SortEntries()
 				// Keep cursor on the same item after re-sorting
 				for i, e := range fsp.Entries {
 					if e == entry {
+						fsp.SetCursorIndex(i)
+						break
+					}
+				}
+			}
+		})
+}
+
+// markedDirEntries are the folders marked in the panel, in panel order. ".."
+// is never one of them.
+func markedDirEntries(fsp *panel.FileSystemPanel) []*panel.FileEntry {
+	var marked []*panel.FileEntry
+	for _, entry := range fsp.Entries {
+		if entry != nil && entry.Selected && entry.IsDir && entry.Name != ".." {
+			marked = append(marked, entry)
+		}
+	}
+	return marked
+}
+
+// actionCalcDirSizes sizes several folders in one scan and one progress
+// window; each folder's size lands in its own row (f4#1795).
+func actionCalcDirSizes(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, entries []*panel.FileEntry) {
+	if fsp.Vfs == nil {
+		return
+	}
+	basePath := fsp.Vfs.GetPath()
+	results := make([]vfs.OpStats, len(entries))
+	actionRunSizeScan(pf, fsp,
+		func(ctx context.Context, cb vfs.ScanCallback) (vfs.OpStats, error) {
+			var total vfs.OpStats
+			for i, entry := range entries {
+				stats, err := vfs.CalculateStats(ctx, fsp.Vfs, fsp.Vfs.Join(basePath, entry.Name), []string{""}, cb)
+				if err != nil {
+					return total, err
+				}
+				results[i] = stats
+				total.Bytes += stats.Bytes
+				total.Files += stats.Files
+				total.Dirs += stats.Dirs
+				total.UnknownSizeFiles += stats.UnknownSizeFiles
+			}
+			return total, nil
+		},
+		func(total vfs.OpStats) {
+			var cursorEntry *panel.FileEntry
+			if idx := fsp.GetCursorIndex(); idx >= 0 && idx < len(fsp.Entries) {
+				cursorEntry = fsp.Entries[idx]
+			}
+			for i, entry := range entries {
+				entry.Size = results[i].Bytes
+				entry.SizeCalculated = true
+			}
+			if note := unknownSizeNote(total); note != "" {
+				toast.Show(note, 5*time.Second)
+			}
+			if fsp.SortMode == panel.SortSize || fsp.GroupBy == panel.GroupSize {
+				fsp.SortEntries()
+				for i, e := range fsp.Entries {
+					if e == cursorEntry {
 						fsp.SetCursorIndex(i)
 						break
 					}
@@ -2466,6 +2533,20 @@ func treeCopyMoveTarget(pf *panel.PanelsFrame) (*panel.TreePanel, *panel.FileSys
 	return t, t.Source()
 }
 
+// copyMovePromptText is the line above the destination field of the F5/F6
+// dialog: the name of the item when exactly one is processed, the count
+// otherwise (f4#891).
+func copyMovePromptText(isMove bool, names []string) string {
+	key := "Copy.Prompt"
+	if isMove {
+		key = "Move.Prompt"
+	}
+	if len(names) == 1 {
+		return fmt.Sprintf(i18n.Msg(key+"One"), vtui.TruncateMiddle(names[0], 40))
+	}
+	return fmt.Sprintf(i18n.Msg(key), len(names))
+}
+
 func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	fspSrc := pf.GetActivePanel()
 	fspDst := pf.GetInactivePanel()
@@ -2486,11 +2567,10 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	}
 
 	title := i18n.Msg("Copy.Title")
-	prompt := i18n.Msg("Copy.Prompt")
 	if isMove {
 		title = i18n.Msg("Move.Title")
-		prompt = i18n.Msg("Move.Prompt")
 	}
+	promptText := copyMovePromptText(isMove, names)
 
 	srcVfs := fspSrc.Vfs
 	srcBasePath := srcVfs.GetPath()
@@ -2598,7 +2678,7 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	dlg := dialog.NewFileDialog(title, boxHeight)
 	width, height := dlg.Size()
 
-	promptLbl := vtui.NewLabel(0, 0, fmt.Sprintf(prompt, len(names)), nil)
+	promptLbl := vtui.NewLabel(0, 0, promptText, nil)
 	dlg.AddItem(promptLbl)
 
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
@@ -2898,7 +2978,11 @@ func actionCreateLink(pf *panel.PanelsFrame) {
 		initialDest += sep
 	}
 
-	dlg := vtui.NewCenteredDialog(52, 11, i18n.Msg("Link.Title"))
+	// Taller than its rows need: the link type sits above the buttons, as in
+	// far2l and far3 (DkmS1953, f4#1861), and the rows under it leave its
+	// list room to open without covering them, as f4#608 asked.
+	const linkDialogWidth, linkDialogHeight = 52, 16
+	dlg := vtui.NewCenteredDialog(linkDialogWidth, linkDialogHeight, i18n.Msg("Link.Title"))
 	dlg.ShowClose = true
 
 	promptLbl := vtui.NewLabel(0, 0, prompt, nil)
@@ -2935,6 +3019,16 @@ func actionCreateLink(pf *panel.PanelsFrame) {
 			srcVfs := fspSrc.Vfs
 			dstVfs := fspDst.Vfs
 			srcBasePath := srcVfs.GetPath()
+			// A name without a path is made next to the source, as far3 does:
+			// the passive panel's folder is only the default the field
+			// starts with (f4#1861).
+			_, srcLocal := srcVfs.(*vfs.OSVFS)
+			_, dstLocal := dstVfs.(*vfs.OSVFS)
+			if srcLocal && dstLocal {
+				if abs, err := srcVfs.Abs(dest); err == nil {
+					dest = abs
+				}
+			}
 
 			var errs []string
 			for _, name := range names {
@@ -2985,29 +3079,32 @@ func actionCreateLink(pf *panel.PanelsFrame) {
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
 
-	dlg.AddItem(btnOk)
-	dlg.AddItem(btnCancel)
 	dlg.AddItem(lblType)
 	dlg.AddItem(comboType)
+	sepButtons := vtui.NewSeparator(0, 0, linkDialogWidth, true, true)
+	dlg.AddItem(sepButtons)
+	dlg.AddItem(btnOk)
+	dlg.AddItem(btnCancel)
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, 52-4, 11-4)
+	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, linkDialogWidth-4, linkDialogHeight-4)
 	vbox.Add(promptLbl, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(editDest, vtui.Margins{Top: 1}, vtui.AlignFill)
 
-	rowType := vtui.NewHBoxLayout(0, 0, 52-4, 1)
+	rowType := vtui.NewHBoxLayout(0, 0, linkDialogWidth-4, 1)
 	rowType.Add(lblType, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	rowType.Add(comboType, vtui.Margins{}, vtui.AlignFill)
 
-	hbox := vtui.NewHBoxLayout(0, 0, 52-4, 1)
+	hbox := vtui.NewHBoxLayout(0, 0, linkDialogWidth-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
 	hbox.Spacing = 2
 	hbox.Add(btnOk, vtui.Margins{}, vtui.AlignTop)
 	hbox.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
 
-	// Keep the action row above the link-type selector. ComboBox.Open() places
-	// its popup below the field, so the popup cannot cover these buttons.
-	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
+	// ComboBox.Open() drops its list under the field: three types and the
+	// frame are five rows, so the rule and the buttons start below them.
 	vbox.Add(rowType, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(sepButtons, vtui.Margins{Top: len(linkTypes) + 2, Left: -2, Right: -2}, vtui.AlignFill)
+	vbox.Add(hbox, vtui.Margins{}, vtui.AlignFill)
 	vbox.Apply()
 	dlg.SetFocusedItem(editDest)
 
@@ -3946,8 +4043,7 @@ func actionFindFile(pf *panel.PanelsFrame) {
 	}
 
 	const width, height = 78, 20
-	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("FindFile.Title"))
-	dlg.ShowClose = true
+	dlg := findfile.NewParametersWindow()
 
 	lblMask := vtui.NewLabel(0, 0, i18n.Msg("FindFile.MaskPrompt"), nil)
 	editMask := vtui.NewEdit(0, 0, 20, LastFindFileMask)
@@ -3972,6 +4068,13 @@ func actionFindFile(pf *panel.PanelsFrame) {
 	chkFolders.State = boolToCheckboxState(LastFindFileFolders)
 	chkSymlinks := vtui.NewCheckbox(0, 0, i18n.Msg("FindFile.Symlinks"), false)
 	chkSymlinks.State = boolToCheckboxState(LastFindFileSymlinks)
+	selectedFolders := activePanel.GetMarkedFolderPaths()
+	var chkSelectedFolders *vtui.Checkbox
+	if len(selectedFolders) > 0 {
+		chkSelectedFolders = vtui.NewCheckbox(0, 0, i18n.Msg("FindFile.SelectedFolders"), false)
+		chkSelectedFolders.State = 1
+	}
+	separator := vtui.NewSeparator(0, 0, width-4, false, false)
 
 	btnFind := vtui.NewButton(0, 0, i18n.Msg("FindFile.BtnFind"))
 	btnFind.IsDefault = true
@@ -3979,23 +4082,24 @@ func actionFindFile(pf *panel.PanelsFrame) {
 
 	dlg.AddItem(lblMask)
 	dlg.AddItem(editMask)
+	dlg.AddItem(chkFolders)
+	dlg.AddItem(chkSymlinks)
+	if chkSelectedFolders != nil {
+		dlg.AddItem(chkSelectedFolders)
+	}
+	dlg.AddItem(separator)
 	dlg.AddItem(lblText)
 	dlg.AddItem(editText)
 	dlg.AddItem(chkCase)
 	dlg.AddItem(chkWhole)
 	dlg.AddItem(chkRegexp)
 	dlg.AddItem(chkNotContaining)
-	dlg.AddItem(chkFolders)
-	dlg.AddItem(chkSymlinks)
 	dlg.AddItem(btnFind)
 	dlg.AddItem(btnCancel)
 
 	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
 	vbox.Add(lblMask, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(editMask, vtui.Margins{Top: 1}, vtui.AlignFill)
-
-	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	vbox.Add(editText, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(editMask, vtui.Margins{}, vtui.AlignFill)
 
 	// Each row is its own HBox, so the right checkbox would otherwise
 	// land wherever its left neighbour ends and the column would
@@ -4010,9 +4114,15 @@ func actionFindFile(pf *panel.PanelsFrame) {
 		row.Add(right, vtui.Margins{}, vtui.AlignTop)
 		return row
 	}
+	vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{Top: 1}, vtui.AlignFill)
+	if chkSelectedFolders != nil {
+		vbox.Add(chkSelectedFolders, vtui.Margins{}, vtui.AlignLeft)
+	}
+	vbox.Add(separator, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(lblText, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(editText, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(optionsRow(chkCase, chkWhole), vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Add(optionsRow(chkRegexp, chkNotContaining), vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(optionsRow(chkFolders, chkSymlinks), vtui.Margins{}, vtui.AlignFill)
 
 	hbox := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hbox.HorizontalAlign = vtui.AlignCenter
@@ -4023,6 +4133,8 @@ func actionFindFile(pf *panel.PanelsFrame) {
 
 	vbox.Add(hbox, vtui.Margins{Top: 1}, vtui.AlignFill)
 	vbox.Apply()
+	dlg.SetLayout(hbox)
+	dlg.SetNavigation(editMask, editText, btnFind)
 
 	btnCancel.OnClick = func() { dlg.Close() }
 	btnFind.OnClick = func() {
@@ -4037,16 +4149,28 @@ func actionFindFile(pf *panel.PanelsFrame) {
 		LastFindFileFolders = chkFolders.State == 1
 		LastFindFileSymlinks = chkSymlinks.State == 1
 		SaveSession()
-		dlg.Close()
 		if LastFindFileMask != "" {
-			ExecuteFindFile(pf, activePanel.Vfs, activePanel.Vfs.GetPath(), LastFindFileMask, LastFindFileText, FindFileOptions{
-				CaseSensitive: LastFindFileCaseSensitive,
-				WholeWords:    LastFindFileWholeWords,
-				Regex:         LastFindFileRegexp,
-				NotContaining: LastFindFileNotContaining,
-				FindFolders:   LastFindFileFolders,
-				FindSymlinks:  LastFindFileSymlinks,
-			})
+			btnFind.SetVisible(false)
+			btnCancel.SetVisible(false)
+			btnFind.IsDefault = false
+			controls := []vtui.UIElement{lblMask, editMask, chkFolders, chkSymlinks, separator, lblText, editText, chkCase, chkWhole, chkRegexp, chkNotContaining}
+			if chkSelectedFolders != nil {
+				controls = append(controls, chkSelectedFolders)
+			}
+			if chkSelectedFolders == nil || chkSelectedFolders.State != 1 {
+				selectedFolders = nil
+			}
+			dlg.Expand(controls, activePanel.Vfs, activePanel.Vfs.GetPath(), LastFindFileMask, LastFindFileText, FindFileOptions{
+				SelectedFolders: selectedFolders,
+				CaseSensitive:   LastFindFileCaseSensitive,
+				WholeWords:      LastFindFileWholeWords,
+				Regex:           LastFindFileRegexp,
+				NotContaining:   LastFindFileNotContaining,
+				FindFolders:     LastFindFileFolders,
+				FindSymlinks:    LastFindFileSymlinks,
+			}, findFileHost(pf))
+		} else {
+			dlg.Close()
 		}
 	}
 
@@ -5259,6 +5383,7 @@ func actionAppearanceSettings(pf *panel.PanelsFrame) {
 		i18n.Msg("AppearanceSettings.WorkspaceTabsMultiple"),
 		i18n.Msg("AppearanceSettings.WorkspaceTabsCtrl"),
 		i18n.Msg("AppearanceSettings.WorkspaceTabsNever"),
+		i18n.Msg("AppearanceSettings.WorkspaceTabsWhileCtrl"),
 	}
 	comboWorkspaceTabs := vtui.NewComboBox(0, 0, 30, workspaceTabModes)
 	comboWorkspaceTabs.DropdownOnly = true

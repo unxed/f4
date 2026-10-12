@@ -17,6 +17,7 @@ import (
 	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/fileops"
+	"github.com/unxed/f4/internal/findfile"
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/keymap"
@@ -27,6 +28,14 @@ import (
 	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtui"
 )
+
+// actionKeepsFastFind lists the actions that leave a search or filter window
+// open: they act on the program window, not on the panels, so the user is not
+// leaving the search by them. Alt+F9 (maximize or restore the window) closed
+// the filter before this (f4#1131).
+func actionKeepsFastFind(name string) bool {
+	return strings.EqualFold(name, "App.ToggleWindowSize")
+}
 
 // RunAction executes an action by name if it exists.
 func RunAction(name string) bool {
@@ -45,7 +54,7 @@ func RunAction(name string) bool {
 		// Fast Find is a transient panel input mode. Any action means the user
 		// is leaving it, including actions that replace a file panel in place
 		// (Info/Quick View) and therefore do not push a focus-stealing frame.
-		if !strings.EqualFold(name, commandPaletteActionName) {
+		if !strings.EqualFold(name, commandPaletteActionName) && !actionKeepsFastFind(name) {
 			if pf := panel.FindPanelsFrame(); pf != nil && pf.CancelFastFind() && vtui.FrameManager != nil {
 				vtui.FrameManager.Redraw()
 			}
@@ -171,6 +180,22 @@ func cursorEntryEnabled() bool {
 	return idx >= 0 && idx < len(fsp.Entries) && fsp.Entries[idx].Name != ".."
 }
 
+// viewEnabled is the Enabled predicate for F3: the cursor of the active panel
+// is on an entry. Unlike F4 it is also live on "..", where F3 sizes the folder
+// the panel shows (f4#1795).
+func viewEnabled() bool {
+	pf := panel.FindPanelsFrame()
+	if pf == nil {
+		return false
+	}
+	fsp := pf.GetActivePanel()
+	if fsp == nil {
+		return false
+	}
+	idx := fsp.GetCursorIndex()
+	return idx >= 0 && idx < len(fsp.Entries)
+}
+
 // cursorOnDirectory reports whether the cursor of the active panel stands on
 // a folder, the case where F4 opens its attributes instead of an editor.
 func cursorOnDirectory() bool {
@@ -199,10 +224,30 @@ func editKeyBarLabel() string {
 // (the static label), "Size" when the cursor is on a folder, because F3 on a
 // folder works out its size (f4#1795).
 func viewKeyBarLabel() string {
-	if cursorOnDirectory() {
-		return i18n.Msg("KeyBar.F3Size")
+	// On "..", too, F3 sizes a folder (the one the panel shows): f4#1795.
+	if pf := panel.FindPanelsFrame(); pf != nil {
+		if fsp := pf.GetActivePanel(); fsp != nil {
+			if idx := fsp.GetCursorIndex(); idx >= 0 && idx < len(fsp.Entries) && fsp.Entries[idx].IsDir {
+				return i18n.Msg("KeyBar.F3Size")
+			}
+		}
 	}
 	return ""
+}
+
+// entryNamed finds the entry with the given name. With no selection the one
+// name asked about is the cursor's, so that is looked at before the listing is
+// walked (f4#1832).
+func entryNamed(fsp *panel.FileSystemPanel, name string) *panel.FileEntry {
+	if idx := fsp.GetCursorIndex(); idx >= 0 && idx < len(fsp.Entries) && fsp.Entries[idx].Name == name {
+		return fsp.Entries[idx]
+	}
+	for _, e := range fsp.Entries {
+		if e.Name == name {
+			return e
+		}
+	}
+	return nil
 }
 
 // oneRegularFileEnabled is the Enabled predicate for the commands that make a
@@ -222,10 +267,8 @@ func oneRegularFileEnabled() bool {
 	if len(names) != 1 {
 		return false
 	}
-	for _, e := range fsp.Entries {
-		if e.Name == names[0] {
-			return !e.IsDir
-		}
+	if e := entryNamed(fsp, names[0]); e != nil {
+		return !e.IsDir
 	}
 	return false
 }
@@ -256,10 +299,8 @@ func symlinkEditEnabled() bool {
 	if _, ok := fsp.Vfs.(vfs.SymlinkVFS); !ok {
 		return false
 	}
-	for _, e := range fsp.Entries {
-		if e.Name == names[0] {
-			return e.IsSymlink
-		}
+	if e := entryNamed(fsp, names[0]); e != nil {
+		return e.IsSymlink
 	}
 	return false
 }
@@ -476,6 +517,32 @@ func init() {
 	}
 
 	// --- Common actions (available in every area) ---
+	registerAction(action.Action{
+		Name: "FindFile.Stop", Area: "Common",
+		Label: "Stop File Search", LabelKey: "Action.FindFile.Stop",
+		Description: "Stop the active file search and keep its results", DescKey: "Action.FindFile.Stop.Desc",
+		DefaultKeys:  []string{"CtrlShiftF7"},
+		HideFromMenu: true,
+		Visible: func() bool {
+			if vtui.FrameManager == nil {
+				return false
+			}
+			w, ok := vtui.FrameManager.GetTopFrame().(*findfile.SearchResultsWindow)
+			return ok && w.Running()
+		},
+		Handler: func() bool {
+			if vtui.FrameManager == nil {
+				return false
+			}
+			w, ok := vtui.FrameManager.GetTopFrame().(*findfile.SearchResultsWindow)
+			if !ok {
+				return false
+			}
+			w.Stop()
+			return true
+		},
+	})
+
 	registerAction(action.Action{
 		Name:        "App.ScreenGrab",
 		Area:        "Common",
@@ -696,7 +763,7 @@ func init() {
 		DescKey:     "Action.File.View.Desc",
 		DefaultKeys: []string{"F3", "Num5"},
 		MenuPath:    "Files",
-		Enabled:     cursorEntryEnabled,
+		Enabled:     viewEnabled,
 		KeyBarLabel: viewKeyBarLabel,
 		Handler:     withPF(func(pf *panel.PanelsFrame) { actionViewFile(pf) }),
 	})
@@ -777,7 +844,9 @@ func init() {
 		Description: "Paste clipboard text or save a clipboard image into the active panel",
 		DescKey:     "Action.Panel.Paste.Desc",
 		DefaultKeys: []string{"CtrlV", "ShiftIns"},
-		Handler:     func() bool { return panel.ActionPasteClipboard(panel.FindPanelsFrame()) },
+		// Next to Copy/Cut files to clipboard in the Files menu (f4#1767).
+		MenuPath: "Files",
+		Handler:  func() bool { return panel.ActionPasteClipboard(panel.FindPanelsFrame()) },
 	})
 	registerAction(action.Action{
 		Name:        "Panel.CopyFilesToClipboard",
@@ -1121,6 +1190,21 @@ func init() {
 		Handler: withPF(func(pf *panel.PanelsFrame) {
 			if fsp := pf.GetActivePanel(); fsp != nil {
 				fsp.RestoreSelection()
+			}
+		}),
+	})
+	registerAction(action.Action{
+		Name:        "Panel.SelectFromClipboard",
+		Area:        "Shell",
+		Label:       "Select from clipboard",
+		LabelKey:    "Action.Panel.SelectFromClipboard",
+		Description: "Select panel items whose names are on the clipboard",
+		DescKey:     "Action.Panel.SelectFromClipboard.Desc",
+		DefaultKeys: []string{"CtrlS:NoTerminalApp"},
+		MenuPath:    "Files",
+		Handler: withPF(func(pf *panel.PanelsFrame) {
+			if fsp := pf.GetActivePanel(); fsp != nil {
+				fsp.SelectFromClipboard(vtui.GetClipboard())
 			}
 		}),
 	})

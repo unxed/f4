@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/internal/piecetable"
 	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
 
@@ -214,5 +216,53 @@ func TestEditorSave_PreservesTabSizeForCursorLayout(t *testing.T) {
 	_, after := ev.Engine.LogicalToVisual(ev.CursorPos)
 	if after != before {
 		t.Fatalf("cursor visual column after save = %d, want %d", after, before)
+	}
+}
+
+// A save is a write: the file's modification time must move to the time of the
+// save and not go back to what it was when the file was opened (f4#1817).
+func TestEditorSave_UpdatesModificationTime(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	path := filepath.Join(t.TempDir(), "note.txt")
+	if err := os.WriteFile(path, []byte("text"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	ev := NewEditorView(piecetable.New([]byte("text")), vfs.NewOSVFS(filepath.Dir(path)), path)
+	defer ev.Close()
+	f, err := ev.Vfs.Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev.File = f
+
+	ev.CursorPos = len("text")
+	ev.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, Char: '!'})
+	ev.SaveToFile(nil)
+
+	timeout := time.After(5 * time.Second)
+	for ev.Saving {
+		select {
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatal("save did not finish")
+		}
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "text!" {
+		t.Fatalf("saved content = %q, want %q", got, "text!")
+	}
+	if age := time.Since(info.ModTime()); age > time.Minute || age < -time.Minute {
+		t.Errorf("modification time after save = %v (%v ago), want about now", info.ModTime(), age)
 	}
 }

@@ -210,3 +210,26 @@ func TestPanelPasteExternalFileClipboardStartsCopy(t *testing.T) {
 		t.Fatalf("transfer = %+v, want a copy from %s into %s", op, sourceDir, destDir)
 	}
 }
+
+// f4#1767 (tarlabnor): files copied in another program after f4 copied its
+// own are what Ctrl+V pastes, even when the clipboard text still reads as
+// the paths f4 put there, or cannot be read at all.
+func TestFileClipboardYieldsToOtherFilesOnTheSystemClipboard(t *testing.T) {
+	for name, readErr := range map[string]error{"text still ours": nil, "text unreadable": errors.New("no text")} {
+		t.Run(name, func(t *testing.T) {
+			pf, _, srcDir, ops := newFileClipboardFixture(t)
+			ActionCopyFilesToClipboard(pf, false)
+			stale := pf.fileClip.text
+			other := []string{filepath.Join(srcDir, "c.txt")}
+			if !pf.pasteFileClipboardContents(terminal.ClipboardContents{Text: stale, Files: other}, readErr) {
+				t.Fatal("the external files were not pasted")
+			}
+			if pf.fileClip != nil {
+				t.Fatal("the files f4 remembered are still kept over newer ones")
+			}
+			if len(*ops) != 1 || strings.Join((*ops)[0].names, ",") != "c.txt" {
+				t.Fatalf("transfers %+v, want c.txt", *ops)
+			}
+		})
+	}
+}

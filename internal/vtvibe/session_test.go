@@ -3,6 +3,7 @@ package vtvibe
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -134,5 +135,23 @@ func TestAIVFS_ConcurrentReset(t *testing.T) {
 	close(errs)
 	for err := range errs {
 		t.Error(err)
+	}
+}
+
+// f4#1842: a file pasted into the AI panel lands in /ctx; a second one with
+// the same name gets a number instead of replacing the first.
+func TestAddContextFileKeepsBothNames(t *testing.T) {
+	s := NewSession()
+	first, err := s.AddContextFile("shot.png", []byte("one"))
+	if err != nil || first != "shot.png" {
+		t.Fatalf("first = %q, %v", first, err)
+	}
+	second, err := s.AddContextFile("dir/shot.png", []byte("two"))
+	if err != nil || second != "shot (2).png" {
+		t.Fatalf("second = %q, %v; want \"shot (2).png\"", second, err)
+	}
+	files := strings.Join(s.ContextFiles(), ",")
+	if !strings.Contains(files, "shot.png") || !strings.Contains(files, "shot (2).png") {
+		t.Errorf("context files = %s", files)
 	}
 }

@@ -163,13 +163,14 @@ func TestShowPanelModesMenuOpensAtActiveMode(t *testing.T) {
 
 // viewModeDialogWidgets picks the edit dialog's controls out by the fixed
 // order editPanelViewMode adds them in: name, type and width (label, edit each),
-// full-screen and uppercase-directory checkboxes, then the buttons in the order
-// they stand on the row: OK, Columns..., Reset, Cancel.
+// the status line's Columns... button, full-screen and uppercase-directory
+// checkboxes, then the buttons in the order they stand on the row: OK,
+// Columns..., Reset, Cancel.
 func viewModeDialogWidgets(t *testing.T, dlg *vtui.Window) (editTypes, editWidths *vtui.Edit, fullScreen, uppercaseDirs *vtui.Checkbox, ok, reset, cancel *vtui.Button) {
 	t.Helper()
 	children := dlg.GetChildren()
-	if len(children) != 16 {
-		t.Fatalf("dialog has %d children, want 16", len(children))
+	if len(children) != 17 {
+		t.Fatalf("dialog has %d children, want 17", len(children))
 	}
 	var assertOk bool
 	if editTypes, assertOk = children[3].(*vtui.Edit); !assertOk {
@@ -178,20 +179,20 @@ func viewModeDialogWidgets(t *testing.T, dlg *vtui.Window) (editTypes, editWidth
 	if editWidths, assertOk = children[5].(*vtui.Edit); !assertOk {
 		t.Fatalf("children[5] = %T, want *vtui.Edit", children[5])
 	}
-	if fullScreen, assertOk = children[10].(*vtui.Checkbox); !assertOk {
-		t.Fatalf("children[10] = %T, want *vtui.Checkbox", children[10])
-	}
-	if uppercaseDirs, assertOk = children[11].(*vtui.Checkbox); !assertOk {
+	if fullScreen, assertOk = children[11].(*vtui.Checkbox); !assertOk {
 		t.Fatalf("children[11] = %T, want *vtui.Checkbox", children[11])
 	}
-	if ok, assertOk = children[12].(*vtui.Button); !assertOk {
-		t.Fatalf("children[12] = %T, want *vtui.Button", children[12])
+	if uppercaseDirs, assertOk = children[12].(*vtui.Checkbox); !assertOk {
+		t.Fatalf("children[12] = %T, want *vtui.Checkbox", children[12])
 	}
-	if reset, assertOk = children[14].(*vtui.Button); !assertOk {
-		t.Fatalf("children[14] = %T, want *vtui.Button", children[14])
+	if ok, assertOk = children[13].(*vtui.Button); !assertOk {
+		t.Fatalf("children[13] = %T, want *vtui.Button", children[13])
 	}
-	if cancel, assertOk = children[15].(*vtui.Button); !assertOk {
+	if reset, assertOk = children[15].(*vtui.Button); !assertOk {
 		t.Fatalf("children[15] = %T, want *vtui.Button", children[15])
+	}
+	if cancel, assertOk = children[16].(*vtui.Button); !assertOk {
+		t.Fatalf("children[16] = %T, want *vtui.Button", children[16])
 	}
 	return
 }
@@ -227,13 +228,16 @@ func TestViewModeDialogTabOrderFollowsTheButtonRowAndFitsTheFrame(t *testing.T) 
 
 	children := dlg.GetChildren()
 	var buttons []*vtui.Button
+	statusColumns := strings.ReplaceAll(i18n.Msg("Panel.Modes.EditStatusColumns"), "&", "")
 	for _, child := range children {
-		if b, ok := child.(*vtui.Button); ok {
+		// The status line's Columns... stands under its own fields, not
+		// in the row of buttons (f4#410).
+		if b, ok := child.(*vtui.Button); ok && b.GetCaption() != statusColumns {
 			buttons = append(buttons, b)
 		}
 	}
 	if len(buttons) != 4 {
-		t.Fatalf("dialog has %d buttons, want 4", len(buttons))
+		t.Fatalf("dialog has %d buttons in its row, want 4", len(buttons))
 	}
 	want := []string{i18n.Msg("vtui.Ok"), i18n.Msg("Panel.Modes.EditColumns"), i18n.Msg("Panel.Modes.Reset"), i18n.Msg("vtui.Cancel")}
 	for i, b := range buttons {
@@ -436,5 +440,56 @@ func TestEditPanelViewModeFitsItsFrame(t *testing.T) {
 	if btnY2 > dlg.Y2-2 {
 		t.Errorf("button row ends at row %d, frame bottom is %d: the buttons do not fit",
 			btnY2, dlg.Y2)
+	}
+}
+
+// f4#410 (montoner0): the status line's columns get the list editor too, from
+// a button of their own that edits the status line fields, not the panel's.
+func TestViewModeDialogEditsStatusColumnsInTheList(t *testing.T) {
+	t.Cleanup(testutil.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	withTempPanelModesFile(t)
+	old := editModeColumns
+	t.Cleanup(func() { editModeColumns = old })
+	var gotTypes, gotWidths string
+	editModeColumns = func(types, widths string, onOk func(types, widths string)) {
+		gotTypes, gotWidths = types, widths
+		onOk("N,S", "0,8")
+	}
+
+	pf := base64TestPanel(t.TempDir(), "file.txt")
+	dlg := openViewModeEditDialog(t, pf, panelModesMenuPos(ViewModeDetailed))
+	statusColumns := strings.ReplaceAll(i18n.Msg("Panel.Modes.EditStatusColumns"), "&", "")
+	var button *vtui.Button
+	var edits []*vtui.Edit
+	for _, child := range dlg.GetChildren() {
+		switch c := child.(type) {
+		case *vtui.Button:
+			if c.GetCaption() == statusColumns {
+				button = c
+			}
+		case *vtui.Edit:
+			edits = append(edits, c)
+		}
+	}
+	if button == nil || len(edits) != 5 {
+		t.Fatalf("status columns button %v, %d edits", button != nil, len(edits))
+	}
+	statusTypes, statusWidths := edits[3], edits[4]
+	statusTypes.SetText("S,D")
+	statusWidths.SetText("6,8")
+	panelTypes := edits[1].GetText()
+	if button.Y1 <= statusWidths.Y1 || button.Y1 >= dlg.Y2 {
+		t.Errorf("button at row %d, status widths at %d, frame ends at %d", button.Y1, statusWidths.Y1, dlg.Y2)
+	}
+	button.OnClick()
+	if gotTypes != "S,D" || gotWidths != "6,8" {
+		t.Errorf("the list editor got %q / %q, want the status line's S,D / 6,8", gotTypes, gotWidths)
+	}
+	if statusTypes.GetText() != "N,S" || statusWidths.GetText() != "0,8" {
+		t.Errorf("status fields after the list = %q / %q", statusTypes.GetText(), statusWidths.GetText())
+	}
+	if edits[1].GetText() != panelTypes {
+		t.Error("the list changed the panel's column types instead of the status line's")
 	}
 }

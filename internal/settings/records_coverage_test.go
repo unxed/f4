@@ -2,9 +2,11 @@ package settings
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/unxed/f4/internal/panel"
+	"github.com/unxed/f4/internal/plughost"
 	"github.com/unxed/f4/internal/sysinfo"
 	"github.com/unxed/f4/sdk/f4settings"
 )
@@ -297,5 +299,50 @@ func TestSettingsMenuTreeBuildsNestedItems(t *testing.T) {
 	}
 	if top.IsSubmenu() {
 		t.Fatalf("plain top-level item treated as a submenu: %#v", top)
+	}
+}
+
+// The F11 menu page lists the registered entries and stores which of them are
+// hidden by action name, keeping the names of plugins that are not loaded
+// (f4#918).
+func TestSettingsCoreRecordProviderPluginMenuVisibilityRoundTrip(t *testing.T) {
+	saved := plughost.PluginMenuItems
+	t.Cleanup(func() { plughost.PluginMenuItems = saved })
+	plughost.PluginMenuItems = []plughost.PluginMenuItem{
+		{ActionName: "test.menu.alpha", Label: "&Alpha"},
+		{ActionName: "test.menu.beta", Label: "Beta"},
+	}
+	p := newCoreRecordSettingsProvider()
+	store := settingsRecordStoreByID(t, p, "plugin-menu")
+	t.Cleanup(func() { _ = os.Remove(store.path) })
+	if err := panel.SavePluginMenuHidden([]string{"gone.plugin.entry"}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := store.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].Values["entry.Name"] != "Alpha" || rows[0].Values["entry.Enabled"] != "true" {
+		t.Fatalf("fresh F11 visibility = %#v, want both shown and the label without its ampersand", rows)
+	}
+	rows[1].Values["entry.Enabled"] = "false"
+	if err := store.save(rows); err != nil {
+		t.Fatal(err)
+	}
+
+	hidden, err := panel.LoadPluginMenuHidden()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(hidden, ",") != "gone.plugin.entry,test.menu.beta" {
+		t.Fatalf("hidden names = %v, want the unloaded plugin's name kept and Beta added", hidden)
+	}
+	loaded, err := store.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded[0].Values["entry.Enabled"] != "true" || loaded[1].Values["entry.Enabled"] != "false" {
+		t.Fatalf("saved F11 visibility = %#v", loaded)
 	}
 }

@@ -284,8 +284,8 @@ func applyCommandDialect(dialect vfs.CommandDialect) cmdline.ApplyCommandDialect
 }
 
 func showApplyCommandDialog(session *ApplyCommandSession) {
-	const width, height = 72, 15
-	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("ApplyCommand.Title"))
+	const width = applyDialogWidth
+	dlg := &applyCommandDialog{Window: vtui.NewCenteredDialog(width, applyDialogHeight, i18n.Msg("ApplyCommand.Title"))}
 	dlg.ShowClose = true
 	dlg.SetHelp("ApplyCmd")
 
@@ -304,7 +304,7 @@ func showApplyCommandDialog(session *ApplyCommandSession) {
 	txtTargets := vtui.NewText(0, 0, fmt.Sprintf(i18n.Msg("ApplyCommand.TargetsFmt"), len(session.Targets)), 0)
 
 	modes := []string{i18n.Msg("ApplyCommand.ModeSequential"), i18n.Msg("ApplyCommand.ModeParallel"), i18n.Msg("ApplyCommand.ModeQueue")}
-	comboMode := vtui.NewComboBox(0, 0, 24, modes)
+	comboMode := vtui.NewComboBox(0, 0, applyDialogModeWidth, modes)
 	comboMode.DropdownOnly = true
 	comboMode.Menu.SetSelectPos(0)
 	comboMode.Edit.SetText(modes[0])
@@ -314,7 +314,7 @@ func showApplyCommandDialog(session *ApplyCommandSession) {
 	if workerDefault <= 0 {
 		workerDefault = runtime.NumCPU()
 	}
-	editWorkers := vtui.NewEdit(0, 0, 10, strconv.Itoa(workerDefault))
+	editWorkers := vtui.NewEdit(0, 0, applyDialogWorkersWidth, strconv.Itoa(workerDefault))
 	lblWorkers := vtui.NewLabel(0, 0, i18n.Msg("ApplyCommand.Workers"), editWorkers)
 	chkUnlimited := vtui.NewCheckbox(0, 0, i18n.Msg("ApplyCommand.Unlimited"), false)
 	if config.App.ApplyCommandParallelism == 0 {
@@ -329,26 +329,21 @@ func showApplyCommandDialog(session *ApplyCommandSession) {
 		dlg.AddItem(item)
 	}
 
-	vbox := vtui.NewVBoxLayout(dlg.X1+2, dlg.Y1+2, width-4, height-4)
-	vbox.Add(lblCommand, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(editCommand, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(txtTargets, vtui.Margins{Top: 1}, vtui.AlignLeft)
-	rowMode := vtui.NewHBoxLayout(0, 0, width-4, 1)
-	rowMode.Add(lblMode, vtui.Margins{Right: 1}, vtui.AlignLeft)
-	rowMode.Add(comboMode, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(rowMode, vtui.Margins{Top: 1}, vtui.AlignFill)
-	rowWorkers := vtui.NewHBoxLayout(0, 0, width-4, 1)
-	rowWorkers.Add(lblWorkers, vtui.Margins{Right: 1}, vtui.AlignLeft)
-	rowWorkers.Add(editWorkers, vtui.Margins{Right: 2}, vtui.AlignFill)
-	rowWorkers.Add(chkUnlimited, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(rowWorkers, vtui.Margins{Top: 1}, vtui.AlignFill)
+	dlg.commandLabel, dlg.command, dlg.targets = lblCommand, editCommand, txtTargets
+	dlg.modeLabel, dlg.mode = lblMode, comboMode
+	dlg.workersLabel, dlg.workers, dlg.unlimited = lblWorkers, editWorkers, chkUnlimited
+	dlg.parametersRule = vtui.NewSeparator(0, 0, width, true, true)
+	dlg.buttonsRule = vtui.NewSeparator(0, 0, width, true, true)
+	dlg.AddItem(dlg.parametersRule)
+	dlg.AddItem(dlg.buttonsRule)
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
 	buttons.Spacing = 2
 	buttons.Add(btnRun, vtui.Margins{}, vtui.AlignTop)
 	buttons.Add(btnCancel, vtui.Margins{}, vtui.AlignTop)
-	vbox.Add(buttons, vtui.Margins{Top: 2}, vtui.AlignFill)
-	vbox.Apply()
+	dlg.buttons = buttons
+	dlg.MinW = dlg.minimumWidth()
+	dlg.layoutControls()
 
 	updateWorkers := func() {
 		parallel := comboMode.Menu.SelectPos == int(cmdline.ApplyCommandParallel)

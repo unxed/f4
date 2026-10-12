@@ -5,6 +5,7 @@ f4 — efficient and cozy file manager in go
 ~Settings Center~SettingsCenter@
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
+~Panel modes~PanelModes@
 ~Mouse wheel settings~MouseWheel@
 ~Portable mode~PortableSettings@
 ~Visual File Renamer (VisRen)~VisRen@
@@ -549,6 +550,7 @@ f4 is an experimental Far Manager / far2l clone in Go.
 
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
+~Panel modes~PanelModes@
 ~MediaInfo plugin~MediaInfo@
 ~Console modes (Ctrl+O)~ConsoleModes@
 ~Environment Manager plugin~EnvironmentManager@
@@ -969,3 +971,37 @@ $Clipboard images
   plus one. Existing files are never overwritten. The new image receives
   focus; existing marked files remain marked. Unsupported destinations
   show an explanation.
+
+@PanelModes
+$Panel modes
+  A panel mode is a set of columns. Ctrl+1..Ctrl+0 switch modes; the mode
+  list (F9, Options, File panel modes) edits them: Enter opens a mode.
+
+  Column types and Column widths are comma separated lists that match
+  by position. Columns... and Status line columns... edit them as a
+  list: Ins adds a column, Del removes it, Ctrl+Up/Down moves it, F4 sets
+  its width.
+  Empty status line types keep the default status line.
+
+  Types:
+    N   name               S   size            P   physical size
+    D   date               T   time            A   attributes
+    DM  modified           DC  created         DA  accessed
+    DE  changed            O   owner           U   group
+    LN  hard link count
+
+  Modifiers follow the type, several may be combined (NM, SCF, DMB):
+    N:  M  selection mark before the name
+    S, P:  C  digit group separators     E  no space before the unit
+           F  fractional size, 1.25 K    T  units of 1000, not 1024
+    DM, DC, DA, DE:  B  short date       M  month as a name
+  O and R after N, A after S/P and L after O are accepted for far2l
+  compatibility and change nothing.
+
+  Widths: 0 is the type's default (a name takes a share of the free
+  space), a number is that many characters, N% is a share of the free
+  space. When the columns do not fit, the last one is shortened and then
+  dropped.
+  A repeated group of types forms stripes: N,N,N is three name stripes,
+  N,S,N,S two stripes of a name and a size.
+

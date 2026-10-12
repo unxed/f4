@@ -313,14 +313,17 @@ type PanelsFrame struct {
 	// place of panels[i]; panels[i] stays alive underneath and is
 	// still the "logical" panel for command dispatch. Alt panels
 	// never take focus (see AltPanel in info_panel.go).
-	AltPanels             [2]AltPanel
-	ActiveIdx             int    // 0 for left, 1 for right
-	FolderHistoryPos      [2]int // position in provider's newest-first folder history
-	Executing             bool
-	afterExecution        func() // run once by endExecution; queues the next user-menu step
-	ShellPromptReady      bool
-	ignoreNextPrompt      bool
-	ReturnToPanels        bool
+	AltPanels        [2]AltPanel
+	ActiveIdx        int    // 0 for left, 1 for right
+	FolderHistoryPos [2]int // position in provider's newest-first folder history
+	Executing        bool
+	afterExecution   func() // run once by endExecution; queues the next user-menu step
+	ShellPromptReady bool
+	ignoreNextPrompt bool
+	ReturnToPanels   bool
+	// TerminalOnly marks a workspace opened by Ctrl+Shift+O: a console with no
+	// panels to come back to (issue #128). See PanelsLocked.
+	TerminalOnly          bool
 	CmdSession            *cmdShellSession // local cmd.exe completion tracking (Windows)
 	workspaceCommandTitle string
 	// managedExecStartedAt/managedExecIdleStreak back the #1603 job-control
@@ -386,7 +389,11 @@ type PanelsFrame struct {
 	// Integrated Terminal
 	Pty        terminal.PtyBackend
 	RemotePtys map[vfs.VFS]terminal.PtyBackend
-	PtyMutex   sync.Mutex
+	// remotePtyRetryAt holds back a new attempt to open a shell on a host
+	// whose last one failed or ended at once (see remotePtyBackoff).
+	// Guarded by PtyMutex.
+	remotePtyRetryAt map[vfs.VFS]time.Time
+	PtyMutex         sync.Mutex
 	// localReflow records that the local shell's output may be reflowed on
 	// a width change: its backend delivers long lines whole and the view is
 	// f4's own terminal. Guarded by PtyMutex.
@@ -594,7 +601,9 @@ func (pf *PanelsFrame) SetCommandLineFocus(focused bool) {
 		return
 	}
 	pf.CommandLineFocused = focused
-	pf.CmdLine.SetFocus(focused)
+	// Enter can reset the saved search-first target while panels are hidden.
+	// The visible console edit still owns the caret in the active workspace.
+	pf.CmdLine.SetFocus(focused || (!pf.ShowPanels && pf.IsFocused()))
 	for i, panel := range pf.Panels {
 		if panel == nil {
 			continue
@@ -950,6 +959,10 @@ func (pf *PanelsFrame) GetMenuBar() *vtui.MenuBar {
 		return nil
 	}
 	pf.MenuBar.Items = pf.BuildMenuItems()
+	// A cache hit returns the rows as they were built, with the dimmed flags
+	// of that moment; those follow the cursor and the selection, which the
+	// cache key does not cover.
+	RefreshMenuRowStates(pf.MenuBar.Items)
 	pf.UpdateMenuCheckmarks()
 	// After the checkmarks: they set the text of the left and right side
 	// menus' rows again (indices 0 and 4 — see UpdateMenuCheckmarks), which is
@@ -1762,6 +1775,9 @@ func (pf *PanelsFrame) Close() {
 }
 
 func (pf *PanelsFrame) SetWidePanel(idx int) {
+	if idx >= 0 && pf.PanelsLocked() {
+		return
+	}
 	if idx < 0 || idx > 1 {
 		idx = -1
 	}
@@ -2543,6 +2559,15 @@ func (pf *PanelsFrame) Show(scr *vtui.ScreenBuf) {
 			vtui.FrameManager.KeyBar = pf.KeyBar
 		} else {
 			vtui.FrameManager.KeyBar = nil
+			if pf.ShellMode == terminal.ShellModeOwn && !pf.ShowPanels && pf.TermView.Y2 < pf.LastH-1 {
+				// Own-terminal mode keeps the keybar row reserved during a
+				// command to avoid a PTY resize. Paint the uncovered row so
+				// stale UI colors do not remain below the terminal viewport.
+				previousOverlay := scr.OverlayMode
+				scr.SetOverlayMode(false)
+				scr.FillRect(0, pf.TermView.Y2+1, pf.LastW-1, pf.LastH-1, ' ', terminal.DefaultTermAttr)
+				scr.SetOverlayMode(previousOverlay)
+			}
 		}
 	}
 
@@ -2713,7 +2738,7 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	// An active AutoCompleteMenu must consume Esc, arrows, and Enter
 	// before any global action (such as Esc:EscToggle) can intercept it.
 	if vtui.FrameManager != nil {
-		if _, isAc := vtui.FrameManager.GetTopFrame().(*vtui.AutoCompleteMenu); isAc {
+		if _, isAc := cmdline.AsCompletionMenu(vtui.FrameManager.GetTopFrame()); isAc {
 			return true
 		}
 	}
@@ -2805,6 +2830,11 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt {
+		return true
+	}
+	// Ctrl+E flips the filter's exact-match option; it is the command line's
+	// history key elsewhere.
+	if e.VirtualKeyCode == vtinput.VK_E && ctrl && !alt && !shift && fsp.autoFilterMode {
 		return true
 	}
 	switch e.VirtualKeyCode {
@@ -2986,7 +3016,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		// Propagate application focus without losing the explicit search-first target.
 		if pf.SearchFirstMode() {
-			pf.CmdLine.SetFocus(e.SetFocus && pf.CommandLineFocused)
+			pf.CmdLine.SetFocus(e.SetFocus && (pf.CommandLineFocused || !pf.ShowPanels))
 		} else {
 			pf.CmdLine.SetFocus(e.SetFocus)
 		}
@@ -3661,7 +3691,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			}
 		}
 		if config.App.CommandLineAutoComplete && !pf.CmdLine.IsEmpty() {
-			acMenu := vtui.NewAutoCompleteMenu(pf.CmdLine.Edit)
+			acMenu := cmdline.NewCompletionMenu(pf.CmdLine.Edit)
 			if acMenu.HasMatches() {
 				vtui.FrameManager.Push(acMenu)
 				return true
@@ -4827,6 +4857,17 @@ func (pf *PanelsFrame) GetKeyLabels() *vtui.KeySet {
 			i18n.Msg("KeyBar.CtrlF1"), i18n.Msg("KeyBar.CtrlF2"), i18n.Msg("KeyBar.CtrlF3"), i18n.Msg("KeyBar.CtrlF4"), i18n.Msg("KeyBar.CtrlF5"), i18n.Msg("KeyBar.CtrlF6"), i18n.Msg("KeyBar.CtrlF7"), "", "", "", i18n.Msg("KeyBar.CtrlF11"), i18n.Msg("KeyBar.CtrlF12"),
 		},
 	}
+	if pf.PanelsLocked() {
+		// A terminal-only workspace (Ctrl+Shift+O) has no panels to copy,
+		// move or delete in: the key bar said 5Copy, 7MkDir, 8Delete and
+		// 10Quit there although those keys do nothing (montoner0, #128).
+		// Only what still works is named -- help, the window list and the
+		// menu, plus the Terminal bindings that resolve below (F3/F4, the
+		// terminal log).
+		fallbacks = &vtui.KeySet{Normal: vtui.KeyBarLabels{
+			i18n.Msg("KeyBar.F1"), "", "", "", "", "", "", "", i18n.Msg("KeyBar.F9"), "", "", i18n.Msg("KeyBar.F12"),
+		}}
+	}
 	if inst := pf.focusedPluginPanel(); inst != nil {
 		return pf.pluginPanelKeyLabels(inst, fallbacks)
 	}
@@ -5516,6 +5557,29 @@ func vfsHasRemotePTY(v vfs.VFS) bool {
 	return true
 }
 
+// A host that takes the connection but allows no shell (an SFTP-only service
+// answers "This service allows sftp connections only" and closes the channel)
+// used to be asked for one again by every call of getActivePTYUnsafe: the
+// shell it opened ended at once, its entry was dropped, and the next call
+// dialled again, on the interface thread and under PtyMutex. The panel
+// lagged more with each cursor step and the console filled with the host's
+// answer (unxed/f4#1766). A shell that failed to open, or ended within
+// remotePtyShortLived of opening, is not asked for again before the time
+// below has passed.
+const (
+	remotePtyShortLived         = 3 * time.Second
+	remotePtyFailedBackoff      = 30 * time.Second
+	remotePtyEndedAtOnceBackoff = 10 * time.Minute
+)
+
+// holdRemotePty is called with PtyMutex held.
+func (pf *PanelsFrame) holdRemotePty(v vfs.VFS, wait time.Duration) {
+	if pf.remotePtyRetryAt == nil {
+		pf.remotePtyRetryAt = make(map[vfs.VFS]time.Time)
+	}
+	pf.remotePtyRetryAt[v] = time.Now().Add(wait)
+}
+
 func (pf *PanelsFrame) getActivePTYUnsafe() terminal.PtyBackend {
 	if pf.RemotePtys == nil {
 		pf.RemotePtys = make(map[vfs.VFS]terminal.PtyBackend)
@@ -5531,9 +5595,16 @@ func (pf *PanelsFrame) getActivePTYUnsafe() terminal.PtyBackend {
 			return pty
 		}
 
+		if until, held := pf.remotePtyRetryAt[activeVfs]; held && time.Now().Before(until) {
+			return pf.Pty
+		}
 		res, err := pp.OpenPty(pf.TermView.Width, pf.TermView.Height)
+		if err != nil {
+			pf.holdRemotePty(activeVfs, remotePtyFailedBackoff)
+		}
 		if err == nil {
 			pty := res.(terminal.PtyBackend)
+			openedAt := time.Now()
 			vtui.DebugLog("Created new remote term.PTY background session for VFS")
 			pf.RemotePtys[activeVfs] = pty
 
@@ -5580,6 +5651,9 @@ func (pf *PanelsFrame) getActivePTYUnsafe() terminal.PtyBackend {
 				pty.Close()
 				pf.PtyMutex.Lock()
 				delete(pf.RemotePtys, activeVfs)
+				if time.Since(openedAt) < remotePtyShortLived {
+					pf.holdRemotePty(activeVfs, remotePtyEndedAtOnceBackoff)
+				}
 				pf.PtyMutex.Unlock()
 				// The session that switched these on is gone and cannot
 				// switch them off.
@@ -6030,7 +6104,26 @@ func (pf *PanelsFrame) ShowPluginMenu() {
 		vtui.ShowMessage(" Plugins ", "No plugins registered for F11 menu.", []string{"&Ok"})
 		return
 	}
-	entries := buildPluginMenuEntries(items, commands)
+	allEntries := buildPluginMenuEntries(items, commands)
+	// Entries the user hid in the settings (F9) are left out of the menu but
+	// keep their hot keys and their place in the command palette. origin maps
+	// a visible row back to its place among all the entries.
+	hidden := hiddenPluginMenuEntries()
+	entries := make([]PluginMenuEntry, 0, len(allEntries))
+	origin := make([]int, 0, len(allEntries))
+	for i, entry := range allEntries {
+		if !hidden[entry.ActionName] {
+			entries = append(entries, entry)
+			origin = append(origin, i)
+		}
+	}
+	if len(entries) == 0 {
+		// Everything is hidden: the only useful thing left is the window that
+		// brings the entries back.
+		pf.ShowToolsOptions(nil)
+		return
+	}
+	RefreshPluginMenuEntries(entries)
 	shortcutWidth := pluginMenuShortcutWidth(entries)
 	menuItems := make([]vtui.MenuItem, 0, len(entries))
 	for _, entry := range entries {
@@ -6066,6 +6159,15 @@ func (pf *PanelsFrame) ShowPluginMenu() {
 		}
 		idx := menu.SelectPos
 		switch e.VirtualKeyCode {
+		case vtinput.VK_F9:
+			// F9 opens the plugins window on top of this menu: which entries
+			// the menu shows, and the settings of each plugin. The menu stays
+			// where it is and is rebuilt when Ok stores a new choice (f4#918).
+			pf.ShowToolsOptions(func() {
+				menu.Close()
+				pf.ShowPluginMenu()
+			})
+			return true
 		case vtinput.VK_F4:
 			if idx >= 0 && idx < len(entries) {
 				assignPluginHotkey(entries[idx].ActionName, entries[idx].Label, func() { refresh(menu) })
@@ -6116,7 +6218,11 @@ func (pf *PanelsFrame) ShowPluginMenu() {
 			return true
 		}
 		return false
-	}, func(idx int) {
+	}, func(row int) {
+		if row < 0 || row >= len(origin) {
+			return
+		}
+		idx := origin[row]
 		switch {
 		case idx >= 0 && idx < len(items):
 			handler := items[idx].Handler
@@ -6134,6 +6240,46 @@ func (pf *PanelsFrame) ShowPluginMenu() {
 
 func (pf *PanelsFrame) ShowDriveMenu(panelIdx int) {
 	pf.showDriveMenuAt(panelIdx, pf.driveMenuDefaultPos(panelIdx))
+}
+
+// RevealPanel makes the panel on side (0 left, 1 right) visible, as choosing
+// a location for it in Far or Norton Commander does: the drive menu used to
+// change a hidden panel's folder blind, and Ctrl+O, Ctrl+F1 or Ctrl+F2 was
+// needed to see the result (unxed/f4#1847). Panels hidden as a whole come
+// back through the same path as Ctrl+O, but only this side: the other one
+// stays hidden, as fromgate asked after trying the first fix (Alt+F1 shows
+// the left panel alone, Alt+F2 the right one); a single hidden side is
+// shown again.
+func (pf *PanelsFrame) RevealPanel(side int) {
+	mine, other := &pf.ShowLeftPanel, &pf.ShowRightPanel
+	if side == 1 {
+		mine, other = &pf.ShowRightPanel, &pf.ShowLeftPanel
+	}
+	if pf.ShowPanels && *mine {
+		return
+	}
+	if !pf.ShowPanels {
+		// Set the sides before Ctrl+O's path brings the panels back, so
+		// it lays out this side alone and does not show both.
+		wasMine, wasOther := *mine, *other
+		*mine, *other = true, false
+		pf.TogglePanelsVisibility()
+		if !pf.ShowPanels {
+			*mine, *other = wasMine, wasOther
+			return // panels are locked here (PanelsLocked)
+		}
+		pf.RefreshAll()
+		return
+	}
+	pf.ExitWide()
+	*mine = true
+	if pf.LastW > 0 && pf.LastH > 0 {
+		pf.ResizeConsole(pf.LastW, pf.LastH)
+	}
+	if vtui.FrameManager != nil {
+		vtui.FrameManager.HardRefresh()
+	}
+	pf.RefreshAll()
 }
 
 // driveMenuDefaultPos returns the drive-menu row the cursor should land on
@@ -6154,9 +6300,9 @@ func (pf *PanelsFrame) driveMenuDefaultPos(panelIdx int) int {
 	cur := osVFS.GetPath()
 	for i, drv := range sysinfo.GetPlatformDrives() {
 		if driveMatchesPath(drv, cur) {
-			// The "Other panel" and "Temporary panel" entries precede
-			// platform drives.
-			return i + 2
+			// The platform drives open the menu; "Other panel" and
+			// "Temporary panel" sit in the Tools section below (f4#1148).
+			return i
 		}
 	}
 	return 0
@@ -6165,7 +6311,7 @@ func (pf *PanelsFrame) driveMenuDefaultPos(panelIdx int) int {
 // driveMatchesPath reports whether the platform drive entry drv is the one
 // the path cur currently belongs to. Only the Windows drive-letter case is
 // matched (the menu entries there carry letters, as the user expects); in
-// posix/UNIX mode the default "Other panel" row stays selected.
+// posix/UNIX mode the first row stays selected.
 func driveMatchesPath(drv sysinfo.DriveEntry, cur string) bool {
 	if runtime.GOOS != "windows" || hostmode.Posix() {
 		return false
@@ -6185,30 +6331,9 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 
 	usedHotkeys := make(map[rune]bool)
 	driveHotkeyRows := make(map[int]string)
-
-	// 1. Other panel (focused by default). It has no automatic accelerator;
-	// F4 can assign one explicitly, just like the tool rows below.
-	otherAction := keymap.DriveMenuActionName("other")
-	driveHotkeyRows[menu.GetItemCount()] = otherAction
-	menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(otherAction, i18n.Msg("Panel.Other")), UserData: func(fsp *FileSystemPanel) {
-		otherFsp := pf.Panels[1-panelIdx].(*FileSystemPanel)
-		fsp.cancelProviderOpen()
-		if fsp.Vfs != nil {
-			_ = fsp.Vfs.Close()
-		}
-		fsp.Vfs = otherFsp.Vfs.Clone()
-		fsp.showCurrentVFSLoadingRows()
-		fsp.ReadDirectory()
-		pf.RefreshAll()
-	}})
-
-	// TempPanel is a native VFS panel, so it is available from the same
-	// Alt+F1/Alt+F2 drive menu as far2l's plugin panels.
-	temporaryAction := keymap.DriveMenuActionName("temporary")
-	driveHotkeyRows[menu.GetItemCount()] = temporaryAction
-	menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(temporaryAction, i18n.Msg("TempPanel.Drive")), UserData: func(fsp *FileSystemPanel) {
-		pf.SwitchToVFS(fsp, NewTempPanelVFS(nil, GlobalTempPanelStore, 0))
-	}})
+	// driveHotkeyLabels is the name F4 shows for a row, without the hotkey the
+	// row's text carries in front of it (f4#1148).
+	driveHotkeyLabels := make(map[int]string)
 
 	// 2. Fixed platform paths (Root, Home, physical disks). The metadata is
 	// rendered at menu-open time, just like Far's ChangeDiskMenu, so labels,
@@ -6234,13 +6359,16 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	// Del on one of those unmounts it. Populated in the same loop that adds
 	// the rows below, the same way bookmarkRows/driveBookmarkRows are.
 	mountRows := map[int]int{}
+	var registryDrive *sysinfo.DriveEntry
+	registryName := ""
 	for i, drv := range platformDrives {
 		factory := drv.Factory
 		name := platformNames[i]
 		if strings.EqualFold(driveMenuNameWithoutMarker(drv.Name), "Windows Registry") {
-			actionName := keymap.DriveMenuActionName("platform.windows-registry")
-			driveHotkeyRows[menu.GetItemCount()] = actionName
-			name = driveMenuAssignableText(actionName, name)
+			// A tool, not a drive: it is listed in the Tools section (f4#1148).
+			registryDrive = &platformDrives[i]
+			registryName = name
+			continue
 		}
 		// WINE.md §18.2, "список дисков, Alt+F1": posix personality has no
 		// drive letters -- its "/ Root" and "~ Home" rows need the same
@@ -6284,7 +6412,8 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 					continue
 				}
 				if firstBookmark {
-					menu.AddSeparator()
+					// Captioned in the rule, as Tools and Links are (f4#1148).
+					menu.AddItem(vtui.MenuItem{Separator: true, Text: strings.TrimSpace(i18n.Msg("Bookmarks.Title"))})
 					firstBookmark = false
 				}
 				bookmark := set[i]
@@ -6292,7 +6421,7 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 				usedHotkeys[rune('0'+i)] = true
 				bookmarkRows[menu.GetItemCount()] = i
 				menu.AddItem(vtui.MenuItem{
-					Text: fmt.Sprintf("&%d  %s", i, dialog.EscapeAmpersand(dialog.TruncPathLeft(path, 64))),
+					Text: fmt.Sprintf("&%d %s", i, dialog.EscapeAmpersand(dialog.TruncPathLeft(path, 64))),
 					UserData: func(fsp *FileSystemPanel) {
 						pf.NavigateToBookmark(fsp, bookmark)
 					},
@@ -6315,37 +6444,117 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 				return strings.ToLower(driveMenuNameWithoutMarker(drives[i].Name)) <
 					strings.ToLower(driveMenuNameWithoutMarker(drives[j].Name))
 			})
-		} else if order, err := LoadDriveToolsOrder(DriveToolsOrderFilePath()); err != nil {
-			vtui.DebugLog("DRIVE TOOLS: load order failed: %v", err)
-		} else {
-			drives = orderDriveTools(drives, order)
 		}
 	}
-	// toolRows maps a menu row to its position in drives, for Ctrl+Up and
-	// Ctrl+Down on the tool rows (#1148).
-	toolRows := map[int]int{}
-	if len(drives) > 0 {
+	// toolRows maps a menu row to the key of its tool, for Ctrl+Up and Ctrl+Down
+	// on the tool rows (#1148). Every row of the Tools section is a tool: the
+	// built-in ones (Other panel, Temporary panel, the registry) are ordered
+	// together with the plugins', each under a key no plugin name can have.
+	toolRows := map[int]string{}
+	{
 		menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Tools")})
-		for index, drv := range drives {
-			factory := drv.Factory
-			toolRows[menu.GetItemCount()] = index
-
-			// Clean name: strip existing hotkeys/numbering if any
-			cleanName := drv.Name
-			if idx := strings.Index(cleanName, ". "); idx != -1 {
-				cleanName = cleanName[idx+2:]
-			}
-			cleanName = strings.ReplaceAll(cleanName, "&", "")
-
-			// Tools deliberately have no automatic accelerator. A user can
-			// assign one with F4, without it moving randomly when a drive or
-			// link takes the same letter.
-			actionName := keymap.DriveMenuActionName("tool." + cleanName)
-			driveHotkeyRows[menu.GetItemCount()] = actionName
-
-			menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(actionName, cleanName), UserData: func(fsp *FileSystemPanel) {
-				pf.SwitchToVFS(fsp, factory())
+		type toolRow struct {
+			key string
+			add func()
+		}
+		// None has an automatic accelerator; F4 can assign one to each, just
+		// like to the plugin tools below (f4#1148).
+		rows := []toolRow{
+			{key: driveToolKeyOtherPanel, add: func() {
+				otherAction := keymap.DriveMenuActionName("other")
+				driveHotkeyRows[menu.GetItemCount()] = otherAction
+				driveHotkeyLabels[menu.GetItemCount()] = i18n.Msg("Panel.Other")
+				menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(otherAction, i18n.Msg("Panel.Other")), UserData: func(fsp *FileSystemPanel) {
+					otherFsp := pf.Panels[1-panelIdx].(*FileSystemPanel)
+					fsp.cancelProviderOpen()
+					if fsp.Vfs != nil {
+						_ = fsp.Vfs.Close()
+					}
+					fsp.Vfs = otherFsp.Vfs.Clone()
+					fsp.showCurrentVFSLoadingRows()
+					fsp.ReadDirectory()
+					pf.RefreshAll()
+				}})
+			}},
+			// TempPanel is a native VFS panel, so it is available from the same
+			// Alt+F1/Alt+F2 drive menu as far2l's plugin panels.
+			{key: driveToolKeyTemporaryPanel, add: func() {
+				temporaryAction := keymap.DriveMenuActionName("temporary")
+				driveHotkeyRows[menu.GetItemCount()] = temporaryAction
+				driveHotkeyLabels[menu.GetItemCount()] = i18n.Msg("TempPanel.Drive")
+				menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(temporaryAction, i18n.Msg("TempPanel.Drive")), UserData: func(fsp *FileSystemPanel) {
+					pf.SwitchToVFS(fsp, NewTempPanelVFS(nil, GlobalTempPanelStore, 0))
+				}})
+			}},
+		}
+		if registryDrive != nil {
+			rows = append(rows, toolRow{key: driveToolKeyRegistry, add: func() {
+				registryAction := keymap.DriveMenuActionName("platform.windows-registry")
+				driveHotkeyRows[menu.GetItemCount()] = registryAction
+				driveHotkeyLabels[menu.GetItemCount()] = driveMenuNameWithoutMarker(registryDrive.Name)
+				registryFactory := registryDrive.Factory
+				menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(registryAction, registryName), UserData: func(fsp *FileSystemPanel) {
+					pf.SwitchToVFS(fsp, registryFactory())
+				}})
 			}})
+		}
+		for _, drv := range drives {
+			drv := drv
+			rows = append(rows, toolRow{key: drv.Name, add: func() {
+				factory := drv.Factory
+				// Clean name: strip existing hotkeys/numbering if any
+				cleanName := drv.Name
+				if idx := strings.Index(cleanName, ". "); idx != -1 {
+					cleanName = cleanName[idx+2:]
+				}
+				cleanName = strings.ReplaceAll(cleanName, "&", "")
+
+				// Tools deliberately have no automatic accelerator. A user can
+				// assign one with F4, without it moving randomly when a drive or
+				// link takes the same letter.
+				actionName := keymap.DriveMenuActionName("tool." + cleanName)
+				driveHotkeyRows[menu.GetItemCount()] = actionName
+				driveHotkeyLabels[menu.GetItemCount()] = cleanName
+
+				menu.AddItem(vtui.MenuItem{Text: driveMenuAssignableText(actionName, cleanName), UserData: func(fsp *FileSystemPanel) {
+					pf.SwitchToVFS(fsp, factory())
+				}})
+			}})
+		}
+		// The order the user chose with Ctrl+Up / Ctrl+Down, for every tool;
+		// the sorted-by-name option keeps the plugins in name order instead.
+		if !driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuSortPluginsByHotkey) {
+			if order, err := LoadDriveToolsOrder(DriveToolsOrderFilePath()); err != nil {
+				vtui.DebugLog("DRIVE TOOLS: load order failed: %v", err)
+			} else if len(order) > 0 {
+				keys := make([]sysinfo.DriveEntry, len(rows))
+				for i, r := range rows {
+					keys[i] = sysinfo.DriveEntry{Name: r.key}
+				}
+				byKey := map[string]toolRow{}
+				for _, r := range rows {
+					byKey[r.key] = r
+				}
+				rows = rows[:0]
+				for _, k := range orderDriveTools(keys, order) {
+					rows = append(rows, byKey[k.Name])
+				}
+			}
+		}
+		// The built-in tools can be hidden on the Tools page too; the
+		// plugins' hidden ones are already out of drives (f4#1148).
+		hiddenTools := map[string]bool{}
+		if disabled, err := LoadDisabledDriveTools(DriveToolsVisibilityFilePath()); err == nil {
+			for _, name := range disabled {
+				hiddenTools[name] = true
+			}
+		}
+		for _, r := range rows {
+			if hiddenTools[r.key] {
+				continue
+			}
+			toolRows[menu.GetItemCount()] = r.key
+			r.add()
 		}
 	}
 
@@ -6394,25 +6603,32 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 			pf.openDriveBookmarkEditor(panelIdx, menu, driveBookmarks, -1, reopen)
 			return true
 		}
-		// Ctrl+Up and Ctrl+Down move the tool (plugin) row under the cursor
-		// one place up or down within the tools, and the new order is saved
-		// (#1148). The sorted-by-name option keeps its own order, so there is
-		// nothing to move then.
+		// Ctrl+Up and Ctrl+Down move the tool row under the cursor, a built-in
+		// one or a plugin's, one place up or down within the tools, and the new
+		// order is saved (#1148).
 		if e.KeyDown && (e.VirtualKeyCode == vtinput.VK_UP || e.VirtualKeyCode == vtinput.VK_DOWN) &&
 			e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0 &&
-			e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed|vtinput.ShiftPressed) == 0 &&
-			!driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuSortPluginsByHotkey) {
-			if index, ok := toolRows[menu.SelectPos]; ok {
+			e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed|vtinput.ShiftPressed) == 0 {
+			if key, ok := toolRows[menu.SelectPos]; ok {
+				// The sorted-by-name option puts the plugin tools in name order
+				// itself, so a move would be undone at once; say so instead of
+				// doing nothing.
+				if driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuSortPluginsByHotkey) {
+					vtui.ShowMessageOn(menu, i18n.Msg("DriveLink.ErrorTitle"), i18n.Msg("Drive.ToolsSortedByName"), []string{"&Ok"})
+					return true
+				}
 				delta := 1
 				if e.VirtualKeyCode == vtinput.VK_UP {
 					delta = -1
 				}
-				shown := make([]string, len(drives))
-				for i, drv := range drives {
-					shown[i] = drv.Name
+				shown := make([]string, 0, len(toolRows))
+				for row := 0; row < menu.GetItemCount(); row++ {
+					if k, isTool := toolRows[row]; isTool {
+						shown = append(shown, k)
+					}
 				}
 				pos := menu.SelectPos
-				if moved, err := moveDriveToolInFile(shown, drives[index].Name, delta); err != nil {
+				if moved, err := moveDriveToolInFile(shown, key, delta); err != nil {
 					vtui.ShowMessageOn(menu, i18n.Msg("DriveLink.ErrorTitle"), fmt.Sprintf(i18n.Msg("DriveLink.SaveError"), err), []string{"&Ok"})
 				} else if moved {
 					menu.Close()
@@ -6453,7 +6669,7 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 			case vtinput.VK_F9:
 				// Far uses F9 for the drive-menu options dialog. Consume it
 				// here so the global F9 main-menu action never sees it.
-				pf.openDriveMenuOptions(panelIdx, menu)
+				pf.openDriveMenuTools(panelIdx, menu)
 				return true
 			case vtinput.VK_F4:
 				if onDriveBookmark {
@@ -6466,7 +6682,10 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 					return true
 				}
 				if actionName, ok := driveHotkeyRows[pos]; ok {
-					label := menu.Items[pos].Text
+					label := driveHotkeyLabels[pos]
+					if label == "" {
+						label = menu.Items[pos].Text
+					}
 					assignPluginHotkey(actionName, label, func() {
 						menu.Close()
 						vtui.FrameManager.PostTask(reopen)
@@ -6588,6 +6807,7 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 		}
 
 		if action, ok := menu.Items[idx].UserData.(func(*FileSystemPanel)); ok {
+			pf.RevealPanel(panelIdx)
 			action(fsp)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -272,6 +273,28 @@ func TestAdoptClientTerminal_ForgetsFar2lNegotiation(t *testing.T) {
 // itself — an exec'd "sleep 30" would drop the extra argv and break the
 // identity check under test — so the script blocks on reading its stdin,
 // which the returned closer keeps open.
+// procDiagnosis describes a process from procfs for a failure message.
+func procDiagnosis(pid int) string {
+	var parts []string
+	// #nosec G304 -- path is derived from an integer pid.
+	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil {
+		parts = append(parts, fmt.Sprintf("cmdline %q", strings.ReplaceAll(string(data), "\x00", " ")))
+	} else {
+		parts = append(parts, "cmdline: "+err.Error())
+	}
+	// #nosec G304 -- path is derived from an integer pid.
+	if data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid)); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			for _, key := range []string{"State:", "PPid:", "SigBlk:", "SigIgn:", "SigCgt:"} {
+				if strings.HasPrefix(line, key) {
+					parts = append(parts, strings.Join(strings.Fields(line), " "))
+				}
+			}
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
 func startFakeDaemon(t *testing.T, script string, args ...string) (*exec.Cmd, <-chan struct{}, *error) {
 	t.Helper()
 	argv := append([]string{"/bin/sh", "-c", script}, args...)
@@ -298,7 +321,33 @@ func startFakeDaemon(t *testing.T, script string, args ...string) (*exec.Cmd, <-
 		<-done
 		_ = stdin.Close()
 	})
+	waitForCmdline(t, cmd.Process.Pid, script)
 	return cmd, done, &waitErr
+}
+
+// waitForCmdline waits until /proc/<pid>/cmdline shows want. cmd.Start returns
+// once the child has left the parent's memory, but the kernel writes the new
+// program's arguments a little later in exec; a check in between read an
+// empty command line, did not recognise the daemon and left it running (Race
+// shard 3, train #1872, after two earlier CI failures). A real daemon has been
+// running for a long time when f4 stops it.
+func waitForCmdline(t *testing.T, pid int, want string) {
+	t.Helper()
+	path := fmt.Sprintf("/proc/%d/cmdline", pid)
+	if _, err := os.Stat(path); err != nil {
+		return // no procfs: nothing reads the command line
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		data, err := os.ReadFile(path) // #nosec G304 -- path is built from an integer pid.
+		if err == nil && strings.Contains(string(data), want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("fake daemon %d never showed %q in its command line (%q, %v)", pid, want, data, err)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func writeSessionFiles(t *testing.T, info SessionInfo) (jsonPath, startupPath, sudoPath, apPath string) {
@@ -348,6 +397,10 @@ func TestStopSession_TerminatesDaemonAndRemovesFiles(t *testing.T) {
 	info := SessionInfo{PID: cmd.Process.Pid, Title: "fake", SockPath: sockPath}
 	jsonPath, startupPath, sudoPath, apPath := writeSessionFiles(t, info)
 
+	// Whether stopSession recognised the daemon, and what the daemon looked
+	// like, tell which half of stopSession let it live. That showed a daemon
+	// checked before exec had written its arguments (waitForCmdline).
+	matched := sessionProcessMatches(info)
 	stopAllSessions([]SessionInfo{info})
 
 	select {
@@ -356,7 +409,7 @@ func TestStopSession_TerminatesDaemonAndRemovesFiles(t *testing.T) {
 			t.Error("fake daemon exited cleanly; want killed by signal")
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("fake daemon still running after stopAllSessions")
+		t.Fatalf("fake daemon still running after stopAllSessions (recognised before the stop: %v; %s)", matched, procDiagnosis(info.PID))
 	}
 
 	for name, path := range map[string]string{

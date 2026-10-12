@@ -62,11 +62,12 @@ func (p *SolarisPTY) Wait() error {
 }
 
 func (p *SolarisPTY) Run(name string, args ...string) error {
+	args = historyQuietArgs(name, args)
 	p.Cmd = exec.Command(name, args...)
 	p.Cmd.Stdin = p.Slave
 	p.Cmd.Stdout = p.Slave
 	p.Cmd.Stderr = p.Slave
-	p.Cmd.Env = TerminalChildEnv()
+	p.Cmd.Env = historyQuietEnv(name, args, TerminalChildEnv())
 	p.Cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid:  true, // Создаем новую сессию для управления TTY
 		Setctty: true, // Тот же терминал становится управляющим для сессии

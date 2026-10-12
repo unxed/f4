@@ -223,6 +223,7 @@ var architectureLayers = map[string]int{
 
 	"internal/textsearch": 0,
 
+	"internal/findfile": 3,
 	"internal/dialog":   3,
 	"internal/settings": 3,
 

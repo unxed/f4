@@ -32,6 +32,8 @@ type commandPaletteDialog struct {
 	recent   []string
 
 	onExecute func(commandPaletteEntry)
+	// rebuild lists the commands again after a key was assigned to one.
+	rebuild   func() []commandPaletteEntry
 	lastQuery string
 
 	tableMouseCaptured bool
@@ -292,6 +294,15 @@ func (d *commandPaletteDialog) layoutControls() {
 	}
 }
 
+// Show draws the dialog and, on its bottom border, the key that assigns a
+// shortcut to the selected command.
+func (d *commandPaletteDialog) Show(scr *vtui.ScreenBuf) {
+	d.Window.Show(scr)
+	if d.Y2-d.Y1 >= 6 {
+		vtui.NewPainter(scr).DrawTitle(d.X1, d.Y2, d.X2, i18n.Msg("CommandPalette.AssignHint"), vtui.Palette[vtui.ColDialogBoxTitle])
+	}
+}
+
 // ResizeConsole recomputes both the d and all child coordinates. The
 // embedded BaseWindow implementation only recenters the old rectangle, which
 // can leave a palette outside a newly narrowed terminal.
@@ -494,6 +505,15 @@ func (d *commandPaletteDialog) ProcessKey(event *vtinput.InputEvent) bool {
 		case vtinput.VK_RETURN:
 			d.executeCurrent()
 			return true
+		case vtinput.VK_K:
+			if commandPaletteUnassignKey(event) {
+				d.unassignKeyFromSelected()
+				return true
+			}
+			if commandPaletteAssignKey(event) {
+				d.assignKeyToSelected()
+				return true
+			}
 		case vtinput.VK_UP, vtinput.VK_DOWN,
 			vtinput.VK_PRIOR, vtinput.VK_NEXT,
 			vtinput.VK_HOME, vtinput.VK_END:

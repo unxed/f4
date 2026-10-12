@@ -73,13 +73,13 @@ Path=/missing-name
 }
 
 func TestDriveBookmarkMenuTextUsesNameAndKeepsHotkeyLeft(t *testing.T) {
-	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "Long folder", Path: "/tmp/x", Hotkey: "Q"}); got != "&Q  Long folder" {
+	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "Long folder", Path: "/tmp/x", Hotkey: "Q"}); got != "&Q Long folder" {
 		t.Fatalf("menu text = %q, want left-side letter shortcut", got)
 	}
-	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "Русская папка", Path: "/tmp/x", Hotkey: "Ф"}); got != "&Ф  Русская папка" {
+	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "Русская папка", Path: "/tmp/x", Hotkey: "Ф"}); got != "&Ф Русская папка" {
 		t.Fatalf("Cyrillic menu text = %q, want left-side letter shortcut", got)
 	}
-	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "Long folder", Path: "/tmp/x", Hotkey: "CtrlF5"}); got != "Ctrl+F5  Long folder" {
+	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "Long folder", Path: "/tmp/x", Hotkey: "CtrlF5"}); got != "Ctrl+F5 Long folder" {
 		t.Fatalf("chord menu text = %q, want formatted left-side shortcut", got)
 	}
 	if got := panel.DriveBookmarkMenuText(panel.DriveBookmark{Name: "A & B", Path: "/tmp/x"}); strings.Contains(got, "/tmp/x") || !strings.Contains(got, "A && B") {

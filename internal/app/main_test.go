@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/unxed/f4/internal/panel"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -98,7 +99,12 @@ func installTestSeams() {
 	// binary left on the runner's.
 	terminal.DisableSystemFileClipboard()
 
-	vfs.InitSudoClient("/usr/bin/f4", "")
+	// On Windows the client elevates through UAC after asking the user
+	// (f4#1768); a test that meets a refused path must not wait on that
+	// question, so the client stays off there as it always was.
+	if runtime.GOOS != "windows" {
+		vfs.InitSudoClient("/usr/bin/f4", "")
+	}
 
 	// main() wires this before it reads the config directory; without it here
 	// the tests would exercise the "resolver not wired" fallback instead of the
@@ -132,6 +138,7 @@ func installTestSeams() {
 	panel.AppCommand = handlePanelsAppCommand
 	panel.RunAction = RunAction
 	panel.BuildMenuBarItems = BuildMenuBarItems
+	panel.RefreshMenuRowStates = refreshMenuRowStates
 	panel.SaveSession = SaveSession
 	panel.OpenEditor = actionOpenEditor
 	panel.OpenViewer = actionOpenViewer

@@ -449,30 +449,36 @@ func TestCreateDefaultHighlightIniDocumentsColorOptions(t *testing.T) {
 	for _, key := range []string{
 		"# [Highlight_100]",
 		"Appearance.HighlightPriority",
-		"user rules first, the default",
-		"ContinueProcessing = 1 when a later rule",
-		"# NormalColor =",
-		"# SelectedColor =",
-		"# CursorColor =",
-		"# SelectedCursorColor =",
-		"NormalColorUnderCursor",
-		"SelectedColorUnderCursor",
-		// Far Manager spellings of the same four colors, and the folder
-		// example that shows why a rule needs an attribute of its own.
+		"unless it sets ContinueProcessing = 1",
+		// The four colors are documented and exemplified under the Far
+		// Manager names only (f4#912); the older spellings still work but
+		// are not advertised.
 		"# NormalFileName =",
 		"# SelectedFileName =",
 		"# FileNameUnderCursor =",
 		"# FileNameSelectedUnderCursor =",
 		"# IncludeAttributes = Directory",
+		// UseDefaults and the order of the attributes it follows.
+		"# UseDefaults = 1",
+		"Junction, Symlink, Hidden or",
+		"Sort groups put files of one kind together",
 	} {
 		if !strings.Contains(content, key) {
 			t.Errorf("generated highlight.ini is missing documented %q", key)
 		}
 	}
+	for _, key := range []string{"NormalColor", "SelectedColor", "CursorColor", "SelectedCursorColor", "UnderCursor, "} {
+		if strings.Contains(content, key) {
+			t.Errorf("generated highlight.ini still advertises the old color name %q", key)
+		}
+	}
+	if got := strings.Count(content, "# [Highlight_"); got != 2 {
+		t.Errorf("generated highlight.ini has %d examples, want 2", got)
+	}
 
 	// The ordinary colors take a background just like the cursor ones, and the
 	// example is the only place a reader sees that (#912).
-	for _, key := range []string{"# NormalColor = ", "# SelectedColor = "} {
+	for _, key := range []string{"# NormalFileName = ", "# SelectedFileName = "} {
 		idx := strings.Index(content, key)
 		if idx < 0 {
 			continue
@@ -1043,5 +1049,36 @@ func TestRefreshHighlightIniHeaderLeavesOtherFilesAlone(t *testing.T) {
 	after, _ := os.ReadFile(fresh)
 	if string(before) != string(after) {
 		t.Error("the stock file must stay byte-for-byte the same")
+	}
+}
+
+// f4#1870: the tab strip shown while a plain Ctrl is held is a mode of its
+// own, saved as "whilectrl"; "ctrl" stays the Ctrl+Tab mode of vtui#496.
+func TestConfig_WorkspaceTabModeWhileCtrlRoundTrips_Issue1870(t *testing.T) {
+	userIniPath := filepath.Join(t.TempDir(), "settings.ini")
+	origUserPathFunc := GetUserConfigIniPath
+	origPathsFunc := GetConfigIniPaths
+	oldCfg := App
+	defer func() {
+		GetUserConfigIniPath = origUserPathFunc
+		GetConfigIniPaths = origPathsFunc
+		App = oldCfg
+	}()
+	GetUserConfigIniPath = func() string { return userIniPath }
+	GetConfigIniPaths = func() []string { return []string{userIniPath} }
+
+	App.WorkspaceTabMode = int(vtui.WorkspaceTabsWhileCtrl)
+	SaveConfig()
+	data, err := os.ReadFile(userIniPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "WorkspaceTabMode = whilectrl") {
+		t.Fatalf("saved settings do not name the mode whilectrl:\n%s", data)
+	}
+	App.WorkspaceTabMode = int(vtui.WorkspaceTabsOnCtrl)
+	LoadConfig()
+	if App.WorkspaceTabMode != int(vtui.WorkspaceTabsWhileCtrl) {
+		t.Fatalf("WorkspaceTabMode after load = %d, want WorkspaceTabsWhileCtrl %d", App.WorkspaceTabMode, vtui.WorkspaceTabsWhileCtrl)
 	}
 }

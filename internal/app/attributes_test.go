@@ -1259,3 +1259,73 @@ func walkUI(el vtui.UIElement, fn func(vtui.UIElement) bool) bool {
 	}
 	return true
 }
+
+// junctionTargetVFS records Junction calls and stands a symlink in for the
+// junction so the replacement can be checked on any platform.
+type junctionTargetVFS struct {
+	*symlinkTargetVFS
+	junctionArgs []string
+}
+
+func (v *junctionTargetVFS) Junction(ctx context.Context, target, linkPath string) error {
+	v.junctionArgs = append(v.junctionArgs, target)
+	return v.OSVFS.Symlink(ctx, target, linkPath)
+}
+
+func TestWindowsAttributesDialogShowsLinkTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink metadata requires privileges on Windows")
+	}
+
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	tmpDir := t.TempDir()
+	linkPath := filepath.Join(tmpDir, "link")
+	if err := os.Symlink("somewhere-else", linkPath); err != nil {
+		t.Skipf("Symlink creation not supported: %v", err)
+	}
+	v := vfs.NewOSVFS(tmpDir)
+	item, err := vfs.Lstat(context.Background(), v, linkPath)
+	if err != nil {
+		t.Fatalf("Lstat failed: %v", err)
+	}
+
+	dialog.ShowAttributesWindowsWithProperties(nil, v, linkPath, item, func(string) error { return nil })
+	dlg := fm.GetTopFrame().(vtui.Container)
+	found := false
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		if control, ok := el.(*vtui.Edit); ok {
+			found = found || control.GetText() == "somewhere-else"
+		}
+		return true
+	})
+	if !found {
+		t.Error("Windows-shaped attributes dialog has no editable Target field for a link (f4#1828)")
+	}
+	fm.GetTopFrame().SetExitCode(-1)
+	fm.Pop()
+}
+
+func TestReplaceLinkTargetRecreatesJunctionAsJunction(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink replacement test requires symlink privileges on Windows")
+	}
+
+	root := t.TempDir()
+	linkPath := filepath.Join(root, "junction")
+	if err := os.Symlink("old-target", linkPath); err != nil {
+		t.Skipf("Symlink creation not supported: %v", err)
+	}
+	v := &junctionTargetVFS{symlinkTargetVFS: &symlinkTargetVFS{OSVFS: vfs.NewOSVFS(root)}}
+
+	if err := dialog.ReplaceJunctionTarget(context.Background(), v, linkPath, "new-target"); err != nil {
+		t.Fatalf("ReplaceJunctionTarget: %v", err)
+	}
+	if strings.Join(v.junctionArgs, ",") != "new-target" || len(v.symlinkArgs) != 0 {
+		t.Fatalf("junctions=%v symlinks=%v, want one junction and no symlink", v.junctionArgs, v.symlinkArgs)
+	}
+	if got, _ := os.Readlink(linkPath); got != "new-target" {
+		t.Fatalf("target = %q, want new-target", got)
+	}
+}

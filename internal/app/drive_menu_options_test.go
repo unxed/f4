@@ -84,6 +84,11 @@ func TestDriveMenuOptions_DefaultsAndFormatting(t *testing.T) {
 
 func TestPanelsFrame_DriveMenu_F9OpensOptions(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	// With no tools registered there is nothing for the tools window to list
+	// (f4#918), so F9 goes straight to the drive options.
+	oldDrives := sysinfo.DriveRegistrySnapshot()
+	t.Cleanup(func() { sysinfo.SetDrives(oldDrives) })
+	sysinfo.SetDrives(nil)
 	pf := panel.NewPanelsFrame()
 	defer pf.Close()
 	pf.ResizeConsole(80, 25)
@@ -113,10 +118,40 @@ func TestPanelsFrame_DriveMenu_F9OpensOptions(t *testing.T) {
 		t.Fatalf("drive options frame is not a container: %T", vtui.FrameManager.GetTopFrame())
 	}
 	center, ok := dlg.(*settings.Center)
-	if !ok || center.Category() != "drives" {
-		t.Fatal("F9 must deep-link to Drive chooser in Settings Center")
+	if !ok || center.Category() != "drives.options" {
+		t.Fatal("F9 must open the Drive options page of the Drive chooser window")
 	}
 	center.Show(vtui.NewSilentScreenBuf())
 	vtui.FrameManager.Pop()
 	menu.Close()
+}
+
+// With drive tools registered, F9 opens the same settings window at once, with
+// the Tools page among its pages and no window of the tools in between
+// (f4#1148).
+func TestPanelsFrame_DriveMenu_F9OpensTheSettingsWindowWithAToolsPage(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	oldDrives := sysinfo.DriveRegistrySnapshot()
+	t.Cleanup(func() { sysinfo.SetDrives(oldDrives) })
+	sysinfo.SetDrives([]sysinfo.DriveEntry{{Name: "&A Alpha drive"}})
+	pf := panel.NewPanelsFrame()
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+
+	oldOptions := config.App.DriveMenuOptions
+	config.App.DriveMenuOptions = config.DefaultDriveMenuOptions
+	t.Cleanup(func() { config.App.DriveMenuOptions = oldOptions })
+
+	pf.ShowDriveMenu(0)
+	menu, ok := paneltest.DriveMenuFromFrame(vtui.FrameManager.GetTopFrame())
+	if !ok {
+		t.Fatalf("drive menu not opened: %T", vtui.FrameManager.GetTopFrame())
+	}
+	if !menu.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F9}) {
+		t.Fatal("F9 was not consumed by the drive menu")
+	}
+	center, ok := vtui.FrameManager.GetTopFrame().(*settings.Center)
+	if !ok || center.Category() != "drives.options" {
+		t.Fatalf("F9 opened %T, want the Drive chooser settings window on its first page", vtui.FrameManager.GetTopFrame())
+	}
 }

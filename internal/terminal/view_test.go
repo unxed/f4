@@ -1365,3 +1365,42 @@ func TestGridHistoryBoundIsWidthIndependent(t *testing.T) {
 		t.Fatalf("a resize drag destroyed history: %d logical lines -> %d", before, after)
 	}
 }
+
+// f4#1749: a program redrawing its progress erases the rows below the cursor
+// and writes them again. The frame drawn in between must not move the screen.
+func TestTerminalView_GravityDoesNotJumpOnRedraw(t *testing.T) {
+	height := 24
+	tv := NewTerminalView(80, height)
+	defer tv.Close()
+	tv.SetVisible(true)
+	tv.SetPosition(0, 0, 79, height-1)
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, height)
+
+	tv.EraseDisplay(2, DefaultTermAttr)
+	for y := 0; y < 10; y++ {
+		tv.SetCursor(0, y)
+		tv.PutChar(rune('a'+y), 0)
+	}
+	tv.Show(scr)
+	if c := scr.GetCell(0, 14).Char; c != 'a' {
+		t.Fatalf("first row drawn at Y=14 as U+%04X, want 'a'", c)
+	}
+
+	// The progress block (rows 5..9) is erased before it is written again.
+	tv.SetCursor(0, 5)
+	tv.EraseDisplay(0, DefaultTermAttr)
+	tv.Show(scr)
+	if c := scr.GetCell(0, 14).Char; c != 'a' {
+		t.Fatalf("the screen jumped while the progress was redrawn: Y=14 holds U+%04X", c)
+	}
+
+	// A cleared screen starts over at the bottom.
+	tv.EraseDisplay(2, DefaultTermAttr)
+	tv.SetCursor(0, 0)
+	tv.PutChar('z', 0)
+	tv.Show(scr)
+	if c := scr.GetCell(0, height-1).Char; c != 'z' {
+		t.Fatalf("after a clear the text is not at the bottom: U+%04X", c)
+	}
+}

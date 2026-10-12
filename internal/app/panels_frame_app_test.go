@@ -19,6 +19,7 @@ import (
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
 	"github.com/unxed/f4/internal/plughost"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/vfs"
@@ -244,7 +245,7 @@ func TestPanelsFrame_CtrlShiftArrowsOpenDriveMenuForPanelSide(t *testing.T) {
 			otherRow := -1
 			wantOther := strings.ReplaceAll(i18n.Msg("Panel.Other"), "&", "")
 			for i, item := range menu.Items {
-				if strings.ReplaceAll(item.Text, "&", "") == wantOther {
+				if strings.TrimSpace(strings.ReplaceAll(item.Text, "&", "")) == wantOther {
 					otherRow = i
 					break
 				}
@@ -1976,6 +1977,7 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	terminal.WaitForAsyncClipboard()
 	if got := vtui.GetClipboard(); got != "target.txt" {
 		t.Fatalf("Ctrl+Ins failed: expected 'target.txt', got %q", got)
 	}
@@ -1994,6 +1996,7 @@ func TestPanelsFrame_CopyShortcuts(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	terminal.WaitForAsyncClipboard()
 	if got := vtui.GetClipboard(); got != expectedPath {
 		t.Fatalf("Ctrl+D failed: expected %q, got %q", expectedPath, got)
 	}

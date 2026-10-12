@@ -5,6 +5,7 @@ go 1.26.6
 require (
 	github.com/abadojack/whatlanggo v1.0.1
 	github.com/alecthomas/chroma/v2 v2.15.0
+	github.com/anthropics/anthropic-sdk-go v1.80.0
 	github.com/charlievieth/strcase v0.0.6
 	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701
 	github.com/coregx/coregex v0.12.19
@@ -33,20 +34,20 @@ require (
 	github.com/unxed/sevenzip v0.1.7
 	github.com/unxed/tar v0.1.141
 	github.com/unxed/vtinput v0.1.11
-	github.com/unxed/vtui v0.1.397
-	github.com/unxed/zip v0.1.143
-	github.com/unxed/zipper v0.1.176
+	github.com/unxed/vtui v0.1.399-0.20261011170907-d9f0e6cae281
+	github.com/unxed/zip v0.1.145
+	github.com/unxed/zipper v0.1.178
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/woozymasta/png v1.2.0
 	github.com/yuin/gopher-lua v1.1.1
 	github.com/zzl/go-win32api/v2 v2.1.0
 	golang.org/x/arch v0.30.0
-	golang.org/x/crypto v0.56.0
+	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.45.0
-	golang.org/x/net v0.58.0
-	golang.org/x/sys v0.47.0
-	golang.org/x/term v0.45.0
-	golang.org/x/text v0.41.0
+	golang.org/x/net v0.60.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/term v0.46.0
+	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -78,6 +79,8 @@ require (
 // module imports them any more.
 
 require (
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect
@@ -86,6 +89,7 @@ require (
 	github.com/hajimehoshi/ebiten/v2 v2.10.0-alpha.13.0.20260811162617-464c2ddfc34c // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/icza/bitio v1.1.0 // indirect
+	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.7.6 // indirect
@@ -97,10 +101,17 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mewkiz/pkg v0.0.0-20250417130911-3f050ff8c56d // indirect
 	github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/soniakeys/quant v1.0.0 // indirect
+	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/unxed/kiwi-go v0.1.0 // indirect
 	github.com/yuin/goldmark v1.8.6 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
@@ -134,7 +145,7 @@ require (
 	github.com/ncruces/go-sqlite3 v0.35.2
 	github.com/ncruces/go-sqlite3-wasm/v3 v3.2.35303 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
-	github.com/neurlang/wayland v0.4.4 // indirect
+	github.com/neurlang/wayland v0.4.5-0.20261007184820-37f4fac9bad0 // indirect
 	github.com/neurlang/winc v0.1.2 // indirect
 	github.com/nwaples/rardecode/v2 v2.4.1
 	github.com/pierrec/lz4/v4 v4.1.27 // indirect
@@ -157,14 +168,12 @@ require (
 	golang.design/x/clipboard v0.7.0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20260727155853-b88d891fe743 // indirect
 	golang.org/x/mobile v0.0.0-20260611195102-4dd8f1dbf5d2 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 )
 
 replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.21
 
 replace github.com/ebitengine/hideconsole => ./internal/hideconsole
-
-replace github.com/neurlang/wayland => github.com/unxed/wayland v0.4.5-0.20260929195943-eab109b70429
 
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 

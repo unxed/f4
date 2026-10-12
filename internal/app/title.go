@@ -185,10 +185,19 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 	vtui.SetWindowTitle(currentWindowTitle())
 	drawWorktreeIdentity(scr)
 
-	// Macro recording indicator — drawn after MenuBar so it's always on top
-	if macro.MacroMgr != nil && macro.MacroMgr.Recording {
-		scr.Write(0, 0, vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
+	drawMacroRecordingIndicator(scr)
+}
+
+// drawMacroRecordingIndicator marks the screen while a macro is being recorded
+// (Ctrl+.), as far does. It is drawn after the menu bar, on the first row the
+// workspace tab strip leaves to the application: vtui paints that strip after
+// OnRender and wiped a mark on row 0 whenever the strip was shown (DkmS1953,
+// f4#1870).
+func drawMacroRecordingIndicator(scr *vtui.ScreenBuf) {
+	if macro.MacroMgr == nil || !macro.MacroMgr.Recording || vtui.FrameManager == nil {
+		return
 	}
+	scr.Write(0, vtui.FrameManager.WorkspaceTopInset(), vtui.StringToCharInfo(" R ", vtui.SetRGBBoth(0, 0xFFFFFF, 0xFF0000)))
 }
 
 // currentWindowTitle returns the exact title f4 exposes to the host terminal

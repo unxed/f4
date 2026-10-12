@@ -198,7 +198,7 @@ func TestMacroRecordingAndPlayback(t *testing.T) {
 	}
 
 	assignFrame := macro.NewMacroAssignFrame(mgr)
-	assignFrame.ProcessKey(ctrlF1)
+	macroAssign(assignFrame, ctrlF1)
 
 	f1Key := keymap.EventToFarString(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_F1, ControlKeyState: vtinput.LeftCtrlPressed})
 	if _, ok := mgr.Macros["Common"][f1Key]; !ok {
@@ -778,7 +778,7 @@ func TestMacro_AssignRobustness(t *testing.T) {
 	// 3. Test Alt+X assignment
 	f.Done = false
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 'y', KeyDown: true}}
-	f.ProcessKey(&vtinput.InputEvent{
+	macroAssign(f, &vtinput.InputEvent{
 		Type:            vtinput.KeyEventType,
 		KeyDown:         true,
 		VirtualKeyCode:  vtinput.VK_X,
@@ -865,7 +865,7 @@ func TestMacro_Clear(t *testing.T) {
 	mgr.Buffer = nil // Empty recording
 
 	assignFrame := macro.NewMacroAssignFrame(mgr)
-	assignFrame.ProcessKey(&vtinput.InputEvent{
+	macroAssign(assignFrame, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_F3,
@@ -974,7 +974,7 @@ func TestMacro_AssignFrame_Structure(t *testing.T) {
 	}
 
 	mgr.Buffer = []*vtinput.InputEvent{{Char: 't', KeyDown: true}}
-	handled := f.ProcessKey(tabEvent)
+	handled := macroAssign(f, tabEvent)
 
 	if !handled {
 		t.Error("macro.MacroAssignFrame should handle (capture) Tab key")
@@ -1147,7 +1147,7 @@ WaitLoop:
 
 	// Симулируем обработку нажатия диалогом
 	frame := macro.NewMacroAssignFrame(mgr)
-	frame.ProcessKey(clearEvent)
+	macroAssign(frame, clearEvent)
 
 	// После обработки флаг назначения должен сброситься, а макрос удалиться
 	if mgr.Assigning {
@@ -1197,7 +1197,7 @@ func TestMacro_ReassignAndCleanup(t *testing.T) {
 
 	mgr.Buffer = nil
 	assignFrame := macro.NewMacroAssignFrame(mgr)
-	assignFrame.ProcessKey(&vtinput.InputEvent{
+	macroAssign(assignFrame, &vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
 		VirtualKeyCode: vtinput.VK_F3,
@@ -1256,4 +1256,39 @@ func TestMacroFilterLetsCommandLineDeleteBeforeRecordedMacro(t *testing.T) {
 	if !macroFilter(mgr, backspace()) {
 		t.Fatal("the recorded Backspace macro did not run on an empty command line")
 	}
+}
+
+// f4#1870 (DkmS1953): with the workspace tab strip shown, the recording mark
+// was written on row 0, which vtui paints the strip over right after OnRender,
+// so it never showed. It now goes on the first row under the strip.
+func TestMacroRecordingIndicatorBelowWorkspaceStrip_Issue1870(t *testing.T) {
+	scr := initFrameworkActionTestScreen(t)
+	vtui.FrameManager.ConfigureWorkspaceTabs(vtui.WorkspaceTabsAlways, vtui.WorkspaceCtrlTabDirect)
+	inset := vtui.FrameManager.WorkspaceTopInset()
+	if inset == 0 {
+		t.Fatal("the tab strip reserves no row; the case of the report is not set up")
+	}
+	previous := macro.MacroMgr
+	t.Cleanup(func() { macro.MacroMgr = previous })
+	macro.MacroMgr = macro.NewMacroManager(filepath.Join(t.TempDir(), "macros.ini"))
+
+	drawMacroRecordingIndicator(scr)
+	if got := scr.GetCell(1, inset).Char; got == 'R' {
+		t.Fatal("the mark is drawn while nothing is being recorded")
+	}
+
+	macro.MacroMgr.Recording = true
+	drawMacroRecordingIndicator(scr)
+	if got := scr.GetCell(1, inset).Char; got != 'R' {
+		t.Fatalf("row %d under the tab strip has U+%04X, want the R mark", inset, got)
+	}
+}
+
+// macroAssign presses e in the assign dialog's key field and then Enter on
+// OK, the two steps the far2-style dialog takes (f4#1870). It reports what
+// the key field did with e.
+func macroAssign(f *macro.MacroAssignFrame, e *vtinput.InputEvent) bool {
+	handled := f.ProcessKey(e)
+	f.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN})
+	return handled
 }

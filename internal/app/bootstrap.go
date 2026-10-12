@@ -368,7 +368,7 @@ func Main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}
-		if err := vfs.RunElevatedDispatcher(sock, token, nil); err != nil {
+		if err := vfs.RunElevatedDispatcher(sock, token, vfs.ElevatedFileOps); err != nil {
 			fmt.Fprintf(os.Stderr, "f4 elevated dispatcher failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -412,6 +412,10 @@ func Main() {
 	// "sftp:". Nothing else of the UI is started — a mount command must not
 	// build panels it will never draw.
 	if code, handled := runMountCLI(); handled {
+		os.Exit(code)
+	}
+	// f4 --ai "question": the answer on stdout, no UI (f4#1842).
+	if code, handled := runAICLI(os.Args[1:], pipedStdin(), os.Stdout, os.Stderr, vtvibeReadConfig); handled {
 		os.Exit(code)
 	}
 
@@ -677,6 +681,15 @@ F3 would, and its panel shows the file's folder with the cursor on it.
 The following switches may be used in the command line:
  -h, -?, --help         This help and exit
  -v, --version          Displays the current version and exit
+ --ai "question"        Ask the model of Settings → AI and print the answer,
+                         without the UI; piped stdin goes with the question,
+                         --ai-file PATH attaches a file (pictures too),
+                         --ai-model NAME picks another model for this run
+ --ai-bot FILE|URL --ai-yes
+                        Run one round of a bot instruction in the current
+                         folder and print its report; --ai-yes allows its
+                         commands and file changes, which nobody approves
+                         here; --ai-whole runs the round in one context
  --attached             Force run in Attached-mode
  --client [clientPath]
  --cpuprofile [cpuprofile]
@@ -1184,6 +1197,7 @@ func setupUI(firstRunStyle func() (string, bool)) {
 	panel.AppCommand = handlePanelsAppCommand
 	panel.RunAction = RunAction
 	panel.BuildMenuBarItems = BuildMenuBarItems
+	panel.RefreshMenuRowStates = refreshMenuRowStates
 	panel.SaveSession = SaveSession
 	panel.GetMenuContentSignal = func() panel.MenuContentSignalValue {
 		return panel.MenuContentSignalValue{

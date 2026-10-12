@@ -57,3 +57,22 @@ func WindowFollowingCursor(win ConsoleWindowRect, cursorY, bufferH int16) (Conso
 		Bottom: top + height,
 	}, true
 }
+
+// CommandOutputRow answers "on which row should a command run in the host
+// console start writing", given the console's visible window and the cursor
+// row. ok is false when the cursor is already on the window's last row or
+// below it and should stay where it is.
+//
+// Far starts a command's output at the bottom of the window, so the newest
+// lines are always next to the command line and older output scrolls up. f4
+// used to start it wherever the console's cursor had been left -- in a console
+// window opened just to run f4 that is the second row, under "C:\>f4", and
+// the output of the first command filled the window from the top (Zeroes1,
+// f4#897, item 2, on XP, where running commands directly in the console is
+// the only mode).
+func CommandOutputRow(win ConsoleWindowRect, cursorY int16) (int16, bool) {
+	if win.Bottom < win.Top || cursorY >= win.Bottom {
+		return cursorY, false
+	}
+	return win.Bottom, true
+}

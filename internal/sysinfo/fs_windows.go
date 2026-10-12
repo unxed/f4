@@ -41,6 +41,7 @@ func FS(path string) (FSInfo, bool) {
 		return fsPosix(path)
 	}
 	info := FSInfo{}
+	path = resolveForVolume(path)
 
 	// Drive root — e.g. "C:\\" — is what most Volume APIs expect.
 	root := filepath.VolumeName(path)

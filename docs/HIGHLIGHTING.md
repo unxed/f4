@@ -36,6 +36,7 @@ A comment occupies a whole line and starts with `#`. There are no trailing comme
 | `DateBefore` | String | Match if file timestamp is before this. |
 | `Mark` (or `MarkChar`) | String | A single character/glyph to prepend before the filename on panels. |
 | `ContinueProcessing`| Boolean | If `1`, matching continues to subsequent rules, merging colors. |
+| `UseDefaults` | Boolean | If `1`, the rule changes the built-in colors of its attribute instead of taking part in the first-match walk (see [Changing the Built-in Colors](#changing-the-built-in-colors)). |
 | `NormalColor` (or `NormalFileName`) | String | Color expression for unmodified files. |
 | `SelectedColor` (or `SelectedFileName`) | String | Color expression for selected files. |
 | `CursorColor` (or `NormalColorUnderCursor`, `FileNameUnderCursor`) | String | Color expression for unselected files currently under the cursor. |
@@ -54,6 +55,32 @@ omitted keeps the panel's own color for that state: `Panel.Text`,
 particular `SelectedColor` does not paint a selected file under the cursor, so
 a group can give selected files a background of their own and the cursor still
 stands out on them. Set `SelectedCursorColor` to color that state as well.
+
+### Changing the Built-in Colors
+
+A rule normally replaces the style's own rules for the items it matches, and
+the first matching rule in the file wins, so a lone `IncludeAttributes =
+Directory` section also paints symlinks to folders and hidden folders in its
+color. Add `UseDefaults = 1` to a section to avoid that:
+
+```ini
+[Highlight_101]
+UseDefaults = 1
+Name = Directories
+IncludeAttributes = Directory
+NormalFileName = foreground:#FF00FF | background:#000080
+```
+
+* The place of the section in the file does not matter, and the style's rules
+  stay in force.
+* Only the colors the section names are replaced. A color it leaves out stays
+  as the style (or the panel) has it, so the section above changes the name of
+  an ordinary folder and nothing under the cursor.
+* An item with several of these attributes follows the first that applies:
+  `Junction`, `Symlink`, `Hidden` or `System`, `Directory`. A `Directory`
+  section therefore does not recolor symlinks, junctions or hidden folders, and
+  a `Symlink` section does not recolor junctions; give each its own section.
+* `Mark` set in such a section replaces the marker the same way.
 
 ### Matching Order and the Missing Mask
 
@@ -89,7 +116,8 @@ You can filter files by specifying the following flags in `IncludeAttributes` or
 * `ReadOnly` (or `ro`): Match write-protected files (lacking write perms on Unix, or having the read-only attribute on Windows).
 * `System` (or `sys`): Match Windows system files.
 * `Archive` (or `arc`): Match Windows archive files.
-* `Symlink` (or `symlink`, `link`, `sym`, `l`): Match symbolic links.
+* `Symlink` (or `link`, `sym`, `l`): Match links of every kind, a Windows junction included.
+* `Junction` (or `junc`, `j`): Match only Windows directory junctions and volume mount points (nothing on other systems).
 
 ---
 

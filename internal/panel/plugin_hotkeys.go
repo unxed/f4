@@ -21,7 +21,7 @@ import (
 // pluginMenuBottomHint is drawn on the lower border of the F11 menu, so that the
 // hotkey assignment on F4 (and removal on Del) is not known only to those who
 // read the ticket it was asked for in.
-const pluginMenuBottomHint = " F4 Del "
+const pluginMenuBottomHint = " Del F4 F9 "
 
 // declaredHotkeyString turns the shortcut a plugin declares for a command
 // ("Shift+F1") into the string the hotkey manager spells that key with
@@ -204,9 +204,12 @@ func IsPluginMenuHotkey(key string) bool { return pluginMenuHotkeyRune(key) != 0
 type PluginMenuEntry struct {
 	Label      string
 	ActionName string
-	Declared   string // shortcut declared by the plugin itself
-	Chord      string
-	Hotkey     string
+	// CommandID is the registered plugin command behind the entry; empty for a
+	// row a plugin added with RegisterPluginMenuItem.
+	CommandID string
+	Declared  string // shortcut declared by the plugin itself
+	Chord     string
+	Hotkey    string
 }
 
 // applyBinding splits what is currently configured for the entry into an
@@ -283,6 +286,7 @@ func buildPluginMenuEntries(items []plughost.PluginMenuItem, commands []vfs.Plug
 		entries = append(entries, PluginMenuEntry{
 			Label:      plughost.PluginCommandDisplayLabel(command),
 			ActionName: keymap.PluginCommandActionName(command.ID),
+			CommandID:  command.ID,
 			Declared:   command.Shortcut,
 		})
 	}
@@ -522,10 +526,13 @@ func PluginMenuKeyLabels(pf *PanelsFrame) *vtui.KeySet {
 		if base := pf.GetKeyLabels(); base != nil {
 			labels := *base
 			labels.Normal[3] = "F4"
+			labels.Normal[8] = "F9"
 			return &labels
 		}
 	}
-	return &vtui.KeySet{Normal: vtui.KeyBarLabels{"", "", "", "F4"}}
+	labels := &vtui.KeySet{Normal: vtui.KeyBarLabels{"", "", "", "F4"}}
+	labels.Normal[8] = "F9"
+	return labels
 }
 
 // PluginHotkeyActionsSnapshot includes commands that are currently hidden from

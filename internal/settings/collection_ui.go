@@ -98,7 +98,11 @@ func (c *settingsCenter) addCollections(category string) {
 				continue
 			}
 			meta := f4settings.Field{ID: col.ID, Category: category, Group: col.Group, Label: col.Label, Description: col.Description}
-			table := vtui.NewTable(0, 0, 20, 5, []vtui.TableColumn{{Width: 0}})
+			listHeight := 5
+			if c.fullLists {
+				listHeight = max(listHeight, len(s.draft.Records[col.ID]))
+			}
+			table := vtui.NewTable(0, 0, 20, listHeight, []vtui.TableColumn{{Width: 0}})
 			table.ShowHeader = false
 			table.ShowSeparators = false
 			settingsDialogTable(table)
@@ -124,7 +128,12 @@ func (c *settingsCenter) addCollections(category string) {
 				selected = max(0, len(rows)-1)
 			}
 			table.SetSelectPos(selected)
-			r := &settingsRow{field: meta, session: s, control: table, controlHeight: 5, match: true}
+			if c.fullLists {
+				// The whole list is on the page: the table must not scroll
+				// inside itself to keep a low row in sight (f4#1148).
+				table.TopPos = 0
+			}
+			r := &settingsRow{field: meta, session: s, control: table, controlHeight: listHeight, match: true}
 			c.page.AddItem(table)
 			c.page.rows = append(c.page.rows, r)
 			table.OnSelect = func(i int) {

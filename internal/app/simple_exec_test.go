@@ -116,6 +116,55 @@ func TestSimpleInline_ReturnsWithoutPauseAndLeavesRoomForOverlay(t *testing.T) {
 	}
 }
 
+// f4#897 item 2 (Zeroes1, XP): the first command in a console window opened
+// to run f4 printed its output from the top of the window, starting under
+// "C:\>f4". Far starts it at the bottom. The cursor is moved to the window's
+// last row before the command writes anything.
+func TestSimpleInline_MovesCursorToBottomBeforeCommand_Issue897(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+	theme.SetDefaultF4Palette()
+
+	pf := paneltest.SetupMockPanelsFrame(t)
+	defer pf.Close()
+	pf.ShellMode = terminal.ShellModeSimpleInline
+	pf.ResizeConsole(80, 25)
+
+	out, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = out.Close() }()
+	oldStdout := os.Stdout
+	os.Stdout = out
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	const marker = "output_starts_at_bottom"
+	moves, movesBeforeOutput := 0, 0
+	oldMove := panel.MoveConsoleCursorToBottom
+	panel.MoveConsoleCursorToBottom = func() {
+		moves++
+		written, _ := os.ReadFile(out.Name())
+		if !strings.Contains(string(written), marker) {
+			movesBeforeOutput++
+		}
+	}
+	t.Cleanup(func() { panel.MoveConsoleCursorToBottom = oldMove })
+
+	pf.RunSimpleInlineCommand(t.TempDir(), "echo "+marker)
+
+	written, _ := os.ReadFile(out.Name())
+	if !strings.Contains(string(written), marker) {
+		t.Fatalf("the command's output did not reach the console: %q", written)
+	}
+	if moves != 1 || movesBeforeOutput != 1 {
+		t.Fatalf("cursor moved to the bottom %d time(s), %d before the output; want once, before it",
+			moves, movesBeforeOutput)
+	}
+}
+
 func TestSimpleCaptured_CommandExecution(t *testing.T) {
 	t.Cleanup(paneltest.SwapFrameManager(t))
 	scr := vtui.NewSilentScreenBuf()

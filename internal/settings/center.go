@@ -41,6 +41,26 @@ type settingsRow struct {
 type settingsCheckbox struct {
 	*vtui.Checkbox
 	lines []string
+
+	// boxOnly leaves a click on the label to select the row: only the
+	// "[x]" itself toggles it (the drive menu's Tools page, f4#1148).
+	boxOnly bool
+	// onFocused is called when the check box gets the focus.
+	onFocused func()
+}
+
+func (b *settingsCheckbox) ProcessMouse(e *vtinput.InputEvent) bool {
+	if b.boxOnly && (int(e.MouseY) != b.Y1 || int(e.MouseX) >= b.X1+3) {
+		return false
+	}
+	return b.Checkbox.ProcessMouse(e)
+}
+
+func (b *settingsCheckbox) SetFocus(f bool) {
+	b.Checkbox.SetFocus(f)
+	if f && b.onFocused != nil {
+		b.onFocused()
+	}
 }
 
 func (b *settingsCheckbox) Show(scr *vtui.ScreenBuf) {
@@ -178,7 +198,8 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 			}
 		}
 		if b, ok := r.control.(*settingsCheckbox); ok {
-			b.lines = settingsWrap(r.field.Label.Resolve(config.App.Language, i18n.Msg), max(1, x2-x1-9))
+			r.controlX = settingsFieldIndent(r.field.ID)
+			b.lines = settingsWrap(r.field.Label.Resolve(config.App.Language, i18n.Msg), max(1, x2-x1-9-r.controlX))
 			b.SetText(b.lines[0])
 			r.label = nil
 			r.controlHeight = len(b.lines)
@@ -581,6 +602,17 @@ type settingsCenter struct {
 	offsets                 map[string]int
 	closed                  bool
 	scoped                  bool
+	// onApplied runs after Apply or OK has written every change.
+	onApplied func()
+	// driveToolSelected is the field of the tool last selected on the drive
+	// menu's Tools page, the one Up and Down move (f4#1148).
+	driveToolSelected string
+	// fullLists shows the record lists of a page in full, not in five rows.
+	fullLists bool
+	// fieldPrefix and fieldTitle narrow a scoped window further, to the fields
+	// of one plugin (ids that start with the prefix), under the plugin's name
+	// (f4#918). Empty: the whole category.
+	fieldPrefix, fieldTitle string
 	running                 *vtui.TaskContext
 	closePending            bool
 	screenW, screenH        int
@@ -678,7 +710,9 @@ func newSettingsCenter(sessions []*settingsSession) *settingsCenter {
 	c.OnResult = func(int) {
 		if !c.closed {
 			c.closed = true
-			lastSettingsCategory = c.category
+			if !c.fullLists {
+				lastSettingsCategory = c.category
+			}
 			c.offsets[c.category] = c.page.scroll
 			lastSettingsOffsets = map[string]int{}
 			for k, v := range c.offsets {
@@ -705,6 +739,9 @@ func newSettingsCenter(sessions []*settingsSession) *settingsCenter {
 // to, so a contextual entry point does not present itself as the whole of
 // Settings.
 func (c *settingsCenter) windowTitle() string {
+	if c.fieldTitle != "" {
+		return c.fieldTitle
+	}
 	if c.scoped && len(c.categories) == 1 {
 		return c.categoryLabel(c.categories[0].ID)
 	}
@@ -1238,6 +1275,9 @@ func (c *settingsCenter) selectCategory(id string) {
 			if f.Category != id {
 				continue
 			}
+			if c.fieldPrefix != "" && !strings.HasPrefix(f.ID, c.fieldPrefix) {
+				continue
+			}
 			if f.Group != group {
 				group = f.Group
 				c.page.rows = append(c.page.rows, &settingsRow{field: f4settings.Field{Category: id, Group: group, Label: f4settings.Text{English: c.groupLabel(group)}}, heading: true, match: true})
@@ -1252,8 +1292,13 @@ func (c *settingsCenter) selectCategory(id string) {
 			c.page.rows = append(c.page.rows, r)
 		}
 	}
-	c.addCollections(id)
-	c.addCommands(id)
+	if c.fieldPrefix == "" {
+		c.addCollections(id)
+		c.addCommands(id)
+		if id == driveToolsPage {
+			c.addDriveToolMoves(id)
+		}
+	}
 	c.layoutWindow()
 	c.page.scroll = c.offsets[id]
 	c.layoutPage()
@@ -1302,11 +1347,15 @@ func (c *settingsCenter) makeControl(r *settingsRow) vtui.UIElement {
 		r.controlHeight = 4
 		control = e
 	case f4settings.Boolean:
-		b := &settingsCheckbox{Checkbox: vtui.NewCheckbox(0, 0, f.Label.Resolve(config.App.Language, i18n.Msg), false)}
+		b := &settingsCheckbox{Checkbox: vtui.NewCheckbox(0, 0, f.Label.Resolve(config.App.Language, i18n.Msg), false), boxOnly: settingsCheckboxBoxOnly(f.ID)}
 		if value == "true" {
 			b.State = 1
 		}
 		b.OnChange = func(n int) { change(strconv.FormatBool(n == 1)) }
+		if b.boxOnly {
+			id := f.ID
+			b.onFocused = func() { c.driveToolSelected = id }
+		}
 		control = b
 	case f4settings.ChoiceKind:
 		f = settingsFieldChoiceHelp(f)
@@ -1395,6 +1444,9 @@ func (c *settingsCenter) commit(closeAfter bool) {
 		if index >= len(c.sessions) {
 			c.status = Phrase("Settings applied.")
 			c.rebuildCategory()
+			if c.onApplied != nil {
+				c.onApplied()
+			}
 			if closeAfter {
 				c.Close()
 			}
@@ -1647,6 +1699,9 @@ func OpenCategoryOnly(category string) bool {
 		vtui.ShowMessage(Phrase("Settings"), err.Error(), []string{i18n.Msg("vtui.Ok")})
 		return true
 	}
+	if category == "drives" {
+		return showDriveChooser(sessions)
+	}
 	return showSettingsCenterScoped(sessions, category)
 }
 func OpenAt(category, collection, record string, create bool) bool {
@@ -1666,6 +1721,35 @@ func OpenAt(category, collection, record string, create bool) bool {
 	}
 	return showSettingsCenter(sessions, category, collection, record, create)
 }
+
+// OpenFieldsOnly opens the Settings Center narrowed to the fields of one
+// plugin: those of the category whose ids start with prefix, under title. It is
+// what the Settings button of the plugins window opens (f4#918).
+func OpenFieldsOnly(category, prefix, title string) bool {
+	if vtui.FrameManager == nil || category == "" || prefix == "" {
+		return false
+	}
+	if current, ok := vtui.FrameManager.GetTopFrame().(*settingsCenter); ok {
+		if current.running == nil {
+			current.navigate(category, "", "", false)
+		}
+		return true
+	}
+	sessions, err := beginSettingsSessions(context.Background())
+	if err != nil {
+		vtui.ShowMessage(Phrase("Settings"), err.Error(), []string{i18n.Msg("vtui.Ok")})
+		return true
+	}
+	c := newSettingsCenter(sessions)
+	c.fieldPrefix, c.fieldTitle = prefix, title
+	c.restrictTo(category)
+	c.navigate(category, "", "", false)
+	c.ResizeConsole(vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight())
+	vtui.FrameManager.Push(c)
+	c.refreshSchemeChoices()
+	return true
+}
+
 func showSettingsCenterScoped(sessions []*settingsSession, category string) bool {
 	c := newSettingsCenter(sessions)
 	c.restrictTo(category)

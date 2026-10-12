@@ -2,7 +2,10 @@
 
 package vfs
 
-import "os"
+import (
+	"github.com/unxed/vtui"
+	"os"
+)
 
 func RunSudoAskpass() {
 	// Not used on Windows
@@ -13,6 +16,10 @@ func (c *SudoClient) runAskpassServer(path string) {
 	// Not used on Windows
 }
 
+// RunOnUI runs fn on the UI goroutine: the "retry as administrator"
+// question before UAC (f4#1768).
 func (c *SudoClient) RunOnUI(fn func()) {
-	// Not used on Windows
+	if vtui.FrameManager != nil {
+		vtui.FrameManager.PostTask(fn)
+	}
 }

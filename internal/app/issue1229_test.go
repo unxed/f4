@@ -3,9 +3,11 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/paneltest"
 	"github.com/unxed/f4/internal/theme"
@@ -63,13 +65,25 @@ func setupRenameConflict(t *testing.T) (*panel.PanelsFrame, *panel.FileSystemPan
 	return pf, fsp, dir
 }
 
-func topDialog(t *testing.T) *vtui.Window {
+// waitOverwriteQuestion waits for the rename's own question: a new warning
+// dialog on top, not before. Any window with OnResult used to count, and on
+// CI (linux/arm64, 10-10-2026) the test once timed out waiting for the
+// rename after answering: a dialog posted by an earlier test's leftover task
+// had come up first and got the answer meant for the question.
+func waitOverwriteQuestion(t *testing.T, before vtui.Frame) *vtui.Window {
 	t.Helper()
-	dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-	if !ok {
-		t.Fatalf("top frame is %T, want a dialog", vtui.FrameManager.GetTopFrame())
-	}
-	return dlg
+	var question *vtui.Window
+	pumpUntil(t, "the overwrite question", func() bool {
+		top := vtui.FrameManager.GetTopFrame()
+		dlg, ok := top.(*vtui.Window)
+		if !ok || top == before || dlg.OnResult == nil ||
+			strings.TrimSpace(dlg.GetTitle()) != strings.TrimSpace(i18n.Msg("Warning.Title")) {
+			return false
+		}
+		question = dlg
+		return true
+	})
+	return question
 }
 
 func readFile(t *testing.T, path string) (string, bool) {
@@ -92,16 +106,14 @@ func readFile(t *testing.T, path string) (string, bool) {
 func TestIssue1229RenameOntoExistingFileAsksToOverwrite(t *testing.T) {
 	pf, fsp, dir := setupRenameConflict(t)
 
+	before := vtui.FrameManager.GetTopFrame()
 	renameEntry(pf, fsp, "a.txt", "b.txt")
-	pumpUntil(t, "the overwrite question", func() bool {
-		dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-		return ok && dlg.OnResult != nil
-	})
+	question := waitOverwriteQuestion(t, before)
 	if got, _ := readFile(t, filepath.Join(dir, "b.txt")); got != "B" {
 		t.Fatalf("b.txt was replaced before the user agreed: %q", got)
 	}
 
-	topDialog(t).OnResult(0) // "Overwrite" is the first button
+	question.OnResult(0) // "Overwrite" is the first button
 	pumpUntil(t, "the rename", func() bool {
 		// Stat, not a read: on Windows a file that is being renamed cannot be
 		// opened, and the sharing violation is not a failure of the test.
@@ -125,12 +137,10 @@ func TestIssue1229RenameOntoExistingFileAsksToOverwrite(t *testing.T) {
 func TestIssue1229RenameOntoExistingFileCanBeCancelled(t *testing.T) {
 	pf, fsp, dir := setupRenameConflict(t)
 
+	before := vtui.FrameManager.GetTopFrame()
 	renameEntry(pf, fsp, "a.txt", "b.txt")
-	pumpUntil(t, "the overwrite question", func() bool {
-		dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-		return ok && dlg.OnResult != nil
-	})
-	topDialog(t).OnResult(1) // Cancel
+	question := waitOverwriteQuestion(t, before)
+	question.OnResult(1) // Cancel
 	for i := 0; i < 20; i++ {
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
@@ -165,21 +175,20 @@ func TestIssue1229CaseOnlyRenameOntoAnotherFileAsks(t *testing.T) {
 	_, _ = f.WriteString("UPPER")
 	_ = f.Close()
 
+	before := vtui.FrameManager.GetTopFrame()
 	renameEntry(pf, fsp, "a.txt", "A.txt")
-	pumpUntil(t, "the overwrite question", func() bool {
-		dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-		return ok && dlg.OnResult != nil
-	})
+	question := waitOverwriteQuestion(t, before)
 	if got, _ := readFile(t, upper); got != "UPPER" {
 		t.Fatalf("A.txt was replaced before the user agreed: %q", got)
 	}
-	topDialog(t).OnResult(1) // Cancel
+	question.OnResult(1) // Cancel
 }
 
 // With nothing in the way a case-only rename just happens, on any file system.
 func TestIssue1229CaseOnlyRenameWithNothingInTheWayJustRenames(t *testing.T) {
 	pf, fsp, dir := setupRenameConflict(t)
 
+	before := vtui.FrameManager.GetTopFrame()
 	renameEntry(pf, fsp, "a.txt", "A.txt")
 	pumpUntil(t, "the rename", func() bool {
 		// #nosec G304 G703 -- the path is inside the private test temp directory.
@@ -194,7 +203,32 @@ func TestIssue1229CaseOnlyRenameWithNothingInTheWayJustRenames(t *testing.T) {
 		}
 		return false
 	})
-	if dlg, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window); ok && dlg.OnResult != nil {
+	// Only the rename's own question counts: a new warning on top. Any window
+	// with OnResult used to, and on CI (windows/amd64, 12-10-2026) a dialog
+	// from an earlier test's leftover task failed the test after the rename
+	// had already happened.
+	top := vtui.FrameManager.GetTopFrame()
+	if dlg, ok := top.(*vtui.Window); ok && top != before && dlg.OnResult != nil &&
+		strings.TrimSpace(dlg.GetTitle()) == strings.TrimSpace(i18n.Msg("Warning.Title")) {
 		t.Fatal("asked to overwrite although nothing was in the way")
 	}
+}
+
+// A dialog some earlier task left in the UI queue must not get the answer
+// meant for the rename's question (see waitOverwriteQuestion).
+func TestIssue1229AnswerGoesToTheRenameQuestion(t *testing.T) {
+	pf, fsp, dir := setupRenameConflict(t)
+	vtui.FrameManager.PostTask(func() {
+		stale := vtui.ShowMessage(" Error ", "left over from another test", []string{"&Ok"})
+		stale.OnResult = func(int) {}
+	})
+
+	before := vtui.FrameManager.GetTopFrame()
+	renameEntry(pf, fsp, "a.txt", "b.txt")
+	question := waitOverwriteQuestion(t, before)
+	question.OnResult(0)
+	pumpUntil(t, "the rename", func() bool {
+		_, err := os.Stat(filepath.Join(dir, "a.txt"))
+		return os.IsNotExist(err)
+	})
 }

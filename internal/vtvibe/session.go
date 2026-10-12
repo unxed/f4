@@ -61,6 +61,30 @@ type Session struct {
 	usage  Usage
 	patch  *Patch // the ap patch of the latest answer, nil when it had none
 	apMode bool   // ask the model for ap patches instead of whole files
+	title  string // the dialog's name; the model may set it (f4#1842)
+	// pending is the answer being streamed in, shown before it is complete;
+	// onUpdate is told whenever it grows (f4#1842, stage H2).
+	pending  string
+	onUpdate func()
+	// storePath is where the dialog is saved after each change; storeErr the
+	// last failure to save it (store.go).
+	storePath string
+	storeErr  error
+	// orders is the register of the user's orders (orders.go).
+	orders []Order
+	// mode is the dialog's working mode (mode.go).
+	mode Mode
+	// githubToken is the dialog's own GitHub token (github.go).
+	githubToken string
+	// delegate lets the model hand tasks to workers; delegations are the
+	// tasks it handed out and the host has not taken yet (delegate.go).
+	delegate    bool
+	delegations []Delegation
+	// spent is what the dialog has spent, by model (usage.go).
+	spent map[string]Usage
+	// applied lists the ap patches of the model's answers the user applied
+	// (compact.go).
+	applied []AppliedPatch
 }
 
 // PatchModePrompt is appended to the system prompt once the human attached the
@@ -76,6 +100,7 @@ func (s *Session) SetPatchMode(on bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.apMode = on
+	s.saveLocked()
 }
 
 // PatchMode reports whether the model is being asked for ap patches.
@@ -121,6 +146,13 @@ func (s *Session) reset() {
 	s.turns = nil
 	s.usage = Usage{}
 	s.patch = nil
+	s.title = ""
+	s.orders = nil
+	s.mode = ModeDefault
+	s.githubToken = ""
+	s.delegations = nil
+	s.spent = nil
+	s.applied = nil
 	_ = s.tree.mkdirAll(ctxDir)
 	_ = s.tree.mkdirAll(chatDir)
 	_ = s.tree.mkdirAll(outDir)
@@ -156,6 +188,7 @@ func (s *Session) Reset(keepContext bool) {
 		_ = s.tree.writeFile(p, data)
 	}
 	s.writeSessionFile()
+	s.saveLocked()
 }
 
 // SetStatus records what the host resolved from the config file.
@@ -186,6 +219,32 @@ func (s *Session) ContextFiles() []string {
 	return out
 }
 
+// AddContextFile puts a file into /ctx under name -- or under name with a
+// number added, when a file by that name is there already -- and returns the
+// name it got. The clipboard paste of the AI panel attaches files this way
+// (f4#1842).
+func (s *Session) AddContextFile(name string, data []byte) (string, error) {
+	name = path.Base(strings.ReplaceAll(name, "\\", "/"))
+	if name == "" || name == "." || name == "/" || name == ".." {
+		name = "clipboard"
+	}
+	s.treeMu.RLock()
+	defer s.treeMu.RUnlock()
+	ext := path.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	candidate := name
+	for i := 2; ; i++ {
+		if _, exists := s.tree.stat(ctxDir + "/" + candidate); !exists {
+			break
+		}
+		candidate = fmt.Sprintf("%s (%d)%s", stem, i, ext)
+	}
+	if err := s.tree.writeFile(ctxDir+"/"+candidate, data); err != nil {
+		return "", err
+	}
+	return candidate, nil
+}
+
 // LastPatch returns the ap patch of the most recent answer, or nil when that
 // answer carried none. The panel asks on every redraw: an answer without a
 // patch takes the button away again.
@@ -214,19 +273,36 @@ func (s *Session) ClearDraft() {
 //
 // It is called from a background task; the UI thread never blocks on it.
 func (s *Session) Ask(ctx context.Context, cfg Config, question string) error {
+	_, err := s.ask(ctx, cfg, question, true, "")
+	return err
+}
+
+// ask sends one message and returns the answer as it was stored. order says
+// the message is the user's and enters the register; a message f4 sends by
+// itself (mode.go) does not. extra is added to the system prompt.
+func (s *Session) ask(ctx context.Context, cfg Config, question string, order bool, extra string) (string, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
-		return fmt.Errorf("vtvibe: nothing to send")
+		return "", fmt.Errorf("vtvibe: nothing to send")
 	}
 
 	s.mu.Lock()
 	if s.busy {
 		s.mu.Unlock()
-		return ErrBusy
+		return "", ErrBusy
 	}
 	s.busy = true
 	history := append([]Turn(nil), s.turns...)
 	apMode := s.apMode
+	// The question being asked is an order too, and the model should see it
+	// among the open ones; it enters the register only once it was sent, so a
+	// failed request asked again is not entered twice.
+	asking := ""
+	if order {
+		asking = question
+	}
+	orders := s.ordersPromptLocked(asking)
+	delegate := s.delegate
 	s.mu.Unlock()
 
 	defer func() {
@@ -235,40 +311,112 @@ func (s *Session) Ask(ctx context.Context, cfg Config, question string) error {
 		s.mu.Unlock()
 	}()
 
-	system := cfg.System
-	if system == "" {
-		system = DefaultSystemPrompt
+	base := cfg.System
+	if base == "" {
+		base = DefaultSystemPrompt
 	}
-	if pack := s.Pack(); pack != "" {
-		system += "\n\nFiles the user attached to this dialog:\n\n" + pack
-	}
+	var tail strings.Builder
 	if apMode {
-		system += "\n\n" + PatchModePrompt
+		tail.WriteString("\n\n" + PatchModePrompt)
+	}
+	tail.WriteString("\n\n" + ModelNotice(cfg.Model))
+	if orders != "" {
+		tail.WriteString("\n\n" + orders)
+	}
+	if delegate {
+		tail.WriteString("\n\n" + managerPrompt())
+	}
+	if extra != "" {
+		tail.WriteString("\n\n" + extra)
 	}
 
-	msgs := make([]Message, 0, len(history)+2)
-	msgs = append(msgs, Message{Role: "system", Content: system})
-	for _, t := range history {
-		if t.Text == "RCtrl+A to hide" {
-			continue
+	// The request is built for a level of shortening (compact.go): 0 sends
+	// the dialog as it is, 1 shortens the model's earlier answers, 2 also
+	// leaves out the attached files nobody mentioned lately.
+	level := 0
+	var keep func(rel string) bool
+	var notes map[string]string
+	refusedNote := ""
+	images := s.Images()
+	send := func() (string, Usage, error) {
+		system := base
+		if pack := s.packFor(keep); pack != "" {
+			system += "\n\nFiles the user attached to this dialog:\n\n" + pack
 		}
-		msgs = append(msgs, Message{Role: t.Role, Content: t.Text})
+		system += tail.String() + refusedNote
+		msgs := append([]Message{{Role: "system", Content: system}}, historyMessages(history, level > 0, notes)...)
+		msgs = append(msgs, Message{Role: "user", Content: question, Images: images})
+		reply, usage, err := cfg.ChatStream(ctx, msgs, func(piece string) {
+			s.mu.Lock()
+			s.pending += piece
+			notify := s.onUpdate
+			s.mu.Unlock()
+			if notify != nil {
+				notify()
+			}
+		})
+		if err != nil {
+			s.mu.Lock()
+			s.pending = ""
+			s.mu.Unlock()
+		}
+		return reply, usage, err
 	}
-	msgs = append(msgs, Message{Role: "user", Content: question})
-
-	reply, usage, err := cfg.Chat(ctx, msgs)
+	reply, usage, err := send()
+	if err != nil && len(images) > 0 && !contextExhausted(err) && ctx.Err() == nil {
+		// The model may not take pictures: ask once more without them and
+		// let it tell the user so (image.go).
+		refusedNote = "\n\n" + imagesRefusedPrompt(images)
+		images = nil
+		reply, usage, err = send()
+	}
+	var leftOut []string
+	if err != nil && contextExhausted(err) && ctx.Err() == nil {
+		// Too long for the model: send it again with the model's own
+		// earlier answers shortened, the user's words in full (H4); code
+		// of a patch the user applied becomes the commit it went into.
+		level = 1
+		notes = s.appliedNotes(ctx)
+		reply, usage, err = send()
+	}
+	if err != nil && contextExhausted(err) && ctx.Err() == nil {
+		// Still too long: leave out the attached files nobody mentioned
+		// in the question or the user's latest messages (§ 19a.3).
+		level = 2
+		keep, leftOut = s.relevantFiles(question, history)
+		if keep != nil {
+			images = keepImages(images, keep)
+			reply, usage, err = send()
+		}
+	}
+	if err != nil && level > 0 && contextExhausted(err) {
+		err = errStillTooLong(err)
+	}
+	compacted := level > 0
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pending = ""
+	if order {
+		s.addOrderLocked(question)
+	}
+	reply = s.closeOrdersFromReplyLocked(reply)
+	if delegate {
+		s.delegations = append(s.delegations, s.parseDelegationsLocked(reply)...)
+	}
 	s.appendTurn(Turn{Role: "user", Text: question, Time: time.Now()})
 	s.appendTurn(Turn{Role: "assistant", Text: reply, Time: time.Now()})
+	if compacted {
+		s.appendTurn(Turn{Role: "assistant", Text: compactNoteFor(leftOut), Time: time.Now()})
+	}
 	s.usage = usage
+	s.addSpentLocked(cfg.Model, usage)
 	s.saveArtifacts(reply)
 	s.writeSessionFile()
-	return nil
+	return reply, nil
 }
 
 // appendTurn stores the message and mirrors it as a file, so F3 works on the
@@ -278,6 +426,7 @@ func (s *Session) appendTurn(t Turn) {
 	name := fmt.Sprintf("%04d-%s.md", len(s.turns), shortRole(t.Role))
 	header := fmt.Sprintf("<!-- %s, %s -->\n\n", t.Role, t.Time.Format("2006-01-02 15:04:05"))
 	_ = s.tree.writeFile(path.Join(chatDir, name), []byte(header+t.Text+"\n"))
+	s.saveLocked()
 }
 
 func shortRole(role string) string {
@@ -285,6 +434,47 @@ func shortRole(role string) string {
 		return "user"
 	}
 	return "model"
+}
+
+// Note adds a turn that did not come from Ask, such as a bot round's report,
+// so it shows in the chat like any other message.
+func (s *Session) Note(role, text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.appendTurn(Turn{Role: role, Text: text, Time: time.Now()})
+	s.writeSessionFile()
+}
+
+// SetTitle names the dialog; an empty title clears the name.
+func (s *Session) SetTitle(title string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.title = strings.TrimSpace(title)
+	s.writeSessionFile()
+	s.saveLocked()
+}
+
+// Title returns the dialog's name, empty when it has none.
+func (s *Session) Title() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.title
+}
+
+// Pending returns the part of the answer streamed in so far; empty when no
+// answer is being written.
+func (s *Session) Pending() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pending
+}
+
+// SetOnUpdate sets what to call when the streamed answer grows. It is called
+// from the request's goroutine, often: the host throttles and posts to its UI.
+func (s *Session) SetOnUpdate(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onUpdate = fn
 }
 
 // Turns returns a copy of the dialog.
@@ -380,6 +570,9 @@ func (s *Session) writeSessionFile() {
 
 	var sb strings.Builder
 	sb.WriteString("# vtvibe session\n\n")
+	if s.title != "" {
+		fmt.Fprintf(&sb, "title    : %s\n", s.title)
+	}
 	fmt.Fprintf(&sb, "endpoint : %s\n", s.status.BaseURL)
 	fmt.Fprintf(&sb, "model    : %s\n", model)
 	fmt.Fprintf(&sb, "api key  : %s\n", key)
@@ -404,4 +597,10 @@ How to use this panel
   ai:new                    start a fresh dialog
 `)
 	_ = s.tree.writeFile(sessionFile, []byte(sb.String()))
+}
+
+// AskOnce sends one message the way f4 --ai does: the answer comes back as
+// the model gave it, and the message does not enter the register of orders.
+func (s *Session) AskOnce(ctx context.Context, cfg Config, question string) (string, error) {
+	return s.ask(ctx, cfg, question, false, "")
 }

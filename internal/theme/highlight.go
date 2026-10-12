@@ -25,6 +25,7 @@ const (
 	AttrSystem
 	AttrArchive
 	AttrSymlink
+	AttrJunction
 )
 
 type DateType int
@@ -63,12 +64,26 @@ type HighlightRule struct {
 
 	// Каскадная обработка (Continue Processing)
 	ContinueProcessing bool
+
+	// UseDefaults makes the rule an override of the built-in colours of its
+	// attribute (f4#912): it does not take part in the first-match walk, so its
+	// place in the file does not matter, and it paints only the colour states it
+	// names, leaving the rest to the rules of the active colour style.
+	UseDefaults bool
+	// implicitClear is set by CombineRules on an override: the attributes that
+	// outrank the rule's own (see overrideTier), so a Directory override does
+	// not repaint a symlink to a directory.
+	implicitClear AttrFlags
 }
 
 type FileHighlighter struct {
 	UserRules  []HighlightRule
 	ThemeRules []HighlightRule
-	Rules      []HighlightRule
+	// Rules is the first-match list. overrides are the UseDefaults rules of the
+	// user's file, in the order they are applied (f4#912); a matched index at or
+	// above len(Rules) names overrides[index-len(Rules)].
+	Rules     []HighlightRule
+	overrides []HighlightRule
 
 	// matchCache and hasVolatileRules are GetColor/GetMarker's cache over
 	// HighlightRule.Match, added for #884: vtui's render loop asks the
@@ -153,15 +168,83 @@ func (fh *FileHighlighter) LoadThemeRules(ini *ini.File) {
 	fh.CombineRules()
 }
 
+// Attribute tiers of the UseDefaults overrides, highest first (f4#912): a
+// junction outranks a symlink, a symlink outranks a hidden or system item, and
+// those outrank an ordinary directory. A rule that names none of them is
+// outside the ladder and is applied first, under all of them.
+const (
+	tierJunction = iota
+	tierSymlink
+	tierHiddenSystem
+	tierDirectory
+	tierOther
+)
+
+func overrideTier(r *HighlightRule) int {
+	switch {
+	case r.AttrSet&AttrJunction != 0:
+		return tierJunction
+	case r.AttrSet&AttrSymlink != 0:
+		return tierSymlink
+	case r.AttrSet&(AttrHidden|AttrSystem) != 0:
+		return tierHiddenSystem
+	case r.AttrSet&AttrDirectory != 0:
+		return tierDirectory
+	}
+	return tierOther
+}
+
+// outranking is what an override of the given tier must not match: the
+// attributes of the tiers above it.
+func outranking(tier int) AttrFlags {
+	var flags AttrFlags
+	if tier > tierJunction && tier != tierOther {
+		flags |= AttrJunction
+	}
+	if tier > tierSymlink && tier != tierOther {
+		flags |= AttrSymlink
+	}
+	if tier > tierHiddenSystem && tier != tierOther {
+		flags |= AttrHidden | AttrSystem
+	}
+	return flags
+}
+
 func (fh *FileHighlighter) CombineRules() {
 	fh.Rules = nil
+	var plain, overrides []HighlightRule
+	for _, r := range fh.UserRules {
+		if r.UseDefaults {
+			r.implicitClear = outranking(overrideTier(&r))
+			overrides = append(overrides, r)
+		} else {
+			plain = append(plain, r)
+		}
+	}
 	if config.App.HighlightPriority == 1 { // Theme wins
 		fh.Rules = append(fh.Rules, fh.ThemeRules...)
-		fh.Rules = append(fh.Rules, fh.UserRules...)
+		fh.Rules = append(fh.Rules, plain...)
 	} else { // User wins
-		fh.Rules = append(fh.Rules, fh.UserRules...)
+		fh.Rules = append(fh.Rules, plain...)
 		fh.Rules = append(fh.Rules, fh.ThemeRules...)
 	}
+	// The overrides are applied last, lowest tier first and, inside a tier,
+	// the later section first, so that the highest tier and the earliest
+	// section decide a colour both name.
+	sort.SliceStable(overrides, func(i, j int) bool {
+		return overrideTier(&overrides[i]) > overrideTier(&overrides[j])
+	})
+	for start := 0; start < len(overrides); {
+		end := start
+		for end < len(overrides) && overrideTier(&overrides[end]) == overrideTier(&overrides[start]) {
+			end++
+		}
+		for i, j := start, end-1; i < j; i, j = i+1, j-1 {
+			overrides[i], overrides[j] = overrides[j], overrides[i]
+		}
+		start = end
+	}
+	fh.overrides = overrides
 
 	// Rules just got a new identity (theme switch or rule reload is the only
 	// way CombineRules runs), so every entry matchCache holds was matched
@@ -178,7 +261,7 @@ func (fh *FileHighlighter) CombineRules() {
 	// whenever it happens is simpler, and safer, than trying to add a time
 	// bucket to the cache key.
 	fh.hasVolatileRules = false
-	for _, r := range fh.Rules {
+	for _, r := range append(append([]HighlightRule(nil), fh.Rules...), fh.overrides...) {
 		if r.DateRelative && (r.DateAfterDur > 0 || r.DateBeforeDur > 0) {
 			fh.hasVolatileRules = true
 			break
@@ -203,6 +286,13 @@ func (fh *FileHighlighter) matchedRules(item *vfs.VFSItem) []int {
 			if !fh.Rules[i].ContinueProcessing {
 				break
 			}
+		}
+	}
+	// UseDefaults overrides come on top of whatever the walk found, wherever
+	// the walk stopped (f4#912).
+	for i := range fh.overrides {
+		if fh.overrides[i].Match(item) {
+			matched = append(matched, len(fh.Rules)+i)
 		}
 	}
 	return matched
@@ -362,6 +452,7 @@ func ParseRuleSections(ini *ini.File, prefix string) []ruleSection {
 		}
 
 		rule.ContinueProcessing = ini.GetString(secName, "ContinueProcessing", "0") == "1"
+		rule.UseDefaults = ini.GetString(secName, "UseDefaults", "0") == "1"
 
 		rule.Mark = firstIniValue(ini, secName, "Mark", "MarkChar")
 
@@ -412,6 +503,8 @@ func parseAttrFlags(s string) AttrFlags {
 			flags |= AttrArchive
 		case "symlink", "link", "sym", "l":
 			flags |= AttrSymlink
+		case "junction", "junc", "j":
+			flags |= AttrJunction
 		}
 	}
 	return flags
@@ -456,20 +549,24 @@ func (r *HighlightRule) Match(item *vfs.VFSItem) bool {
 			return isArchive == set
 		case AttrSymlink:
 			return item.IsSymlink == set
+		case AttrJunction:
+			// Only a Windows directory junction or volume mount point;
+			// Symlink keeps matching every link, a junction included.
+			return (vfs.LinkKindOf(item) == vfs.LinkJunction) == set
 		}
 		return true
 	}
 
 	// Проверка AttrSet (должны присутствовать)
-	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive, AttrSymlink} {
+	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive, AttrSymlink, AttrJunction} {
 		if r.AttrSet&f != 0 && !matchAttr(f, true) {
 			return false
 		}
 	}
 
 	// Проверка AttrClear (должны отсутствовать)
-	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive, AttrSymlink} {
-		if r.AttrClear&f != 0 && !matchAttr(f, false) {
+	for _, f := range []AttrFlags{AttrDirectory, AttrHidden, AttrExecutable, AttrReadOnly, AttrSystem, AttrArchive, AttrSymlink, AttrJunction} {
+		if (r.AttrClear|r.implicitClear)&f != 0 && !matchAttr(f, false) {
 			return false
 		}
 	}
@@ -532,6 +629,32 @@ func (r *HighlightRule) Match(item *vfs.VFSItem) bool {
 	return false
 }
 
+// colorFor is the colour expression a rule keeps for one of the four states.
+// Each of the four states answers only to its own key, as in far2l, where
+// every state starts from its own panel colour (hilight.cpp, FarColor[]). A
+// selected file under the cursor that fell back to SelectedColor was painted
+// exactly like the selection around it once that colour had a background, and
+// the cursor disappeared (#1150).
+func (r *HighlightRule) colorFor(isSelected, isCursor bool) string {
+	switch {
+	case isCursor && isSelected:
+		return r.SelectedCursorStr
+	case isCursor:
+		return r.CursorStr
+	case isSelected:
+		return r.SelectedStr
+	}
+	return r.NormalStr
+}
+
+// ruleAt resolves an index from matchedRules into either list.
+func (fh *FileHighlighter) ruleAt(idx int) *HighlightRule {
+	if idx >= len(fh.Rules) {
+		return &fh.overrides[idx-len(fh.Rules)]
+	}
+	return &fh.Rules[idx]
+}
+
 func (fh *FileHighlighter) GetColor(item *vfs.VFSItem, defaultAttr uint64, isSelected, isCursor bool) uint64 {
 	if item.Name == ".." {
 		return defaultAttr
@@ -546,34 +669,8 @@ func (fh *FileHighlighter) GetColor(item *vfs.VFSItem, defaultAttr uint64, isSel
 	// that stopping point never depended on isSelected/isCursor/defaultAttr
 	// to begin with, only on rule.Match and rule.ContinueProcessing (#884).
 	for _, idx := range fh.matchedRulesCached(item) {
-		rule := &fh.Rules[idx]
-		colorExpr := ""
-		// Each of the four states answers only to its own key, as in
-		// far2l, where every state starts from its own panel colour
-		// (hilight.cpp, FarColor[]). A selected file under the cursor
-		// that fell back to SelectedColor was painted exactly like the
-		// selection around it once that colour had a background, and
-		// the cursor disappeared (#1150).
-		if isCursor {
-			if isSelected {
-				if rule.SelectedCursorStr != "" {
-					colorExpr = rule.SelectedCursorStr
-				}
-			} else {
-				if rule.CursorStr != "" {
-					colorExpr = rule.CursorStr
-				}
-			}
-		} else if isSelected {
-			if rule.SelectedStr != "" {
-				colorExpr = rule.SelectedStr
-			}
-		} else {
-			if rule.NormalStr != "" {
-				colorExpr = rule.NormalStr
-			}
-		}
-
+		rule := fh.ruleAt(idx)
+		colorExpr := rule.colorFor(isSelected, isCursor)
 		if colorExpr != "" {
 			attr = ParseFarColor(colorExpr, attr)
 			matchedAny = true
@@ -602,7 +699,18 @@ func (fh *FileHighlighter) GetMarker(item *vfs.VFSItem) string {
 	// this loop used to (the first non-cascading match, or the end of
 	// Rules), so replaying it here needs no ContinueProcessing check of its
 	// own.
-	for _, idx := range fh.matchedRulesCached(item) {
+	matched := fh.matchedRulesCached(item)
+	// A UseDefaults override is applied last, so its mark wins; the one applied
+	// last is the one that decides.
+	for i := len(matched) - 1; i >= 0 && matched[i] >= len(fh.Rules); i-- {
+		if mark := fh.ruleAt(matched[i]).Mark; mark != "" {
+			return mark
+		}
+	}
+	for _, idx := range matched {
+		if idx >= len(fh.Rules) {
+			break
+		}
 		if fh.Rules[idx].Mark != "" {
 			return fh.Rules[idx].Mark
 		}

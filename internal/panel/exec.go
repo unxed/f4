@@ -27,6 +27,12 @@ func shellCommandFlag() string {
 // printed.
 var FitConsoleWindow = terminal.ScrollHostConsoleToCursor
 
+// MoveConsoleCursorToBottom puts the host console's cursor on the last row of
+// its window before a command runs there, so the output starts at the bottom,
+// as in Far (terminal.MoveHostConsoleCursorToBottom, f4#897 item 2). A
+// variable for the same reason as FitConsoleWindow.
+var MoveConsoleCursorToBottom = terminal.MoveHostConsoleCursorToBottom
+
 // RunSimpleInlineCommand executes a command directly in the host console
 // without a terminal.PTY: it suspends vtui, runs the command with inherited
 // stdio, and gives the screen back to f4 as soon as the command exits. The
@@ -47,6 +53,12 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	// child's own first output character at the start of that already-
 	// blank row instead of wherever a previous, unrelated line of text
 	// used to end.
+	//
+	// That row is near the top of a console window opened just to run f4
+	// (under "C:\>f4"), and the first command's output then filled the
+	// window from the top. Far starts it at the bottom: move the cursor to
+	// the window's last row first when it is above it (f4#897, item 2).
+	MoveConsoleCursorToBottom()
 	os.Stdout.WriteString("\r")
 
 	inConsoleView := !pf.ShowPanels && pf.ShellMode == terminal.ShellModeSimpleInline &&
@@ -163,6 +175,12 @@ func (pf *PanelsFrame) RunSimpleInlineCommand(dir, command string) {
 	captureHostConsoleBuffer(pf.LastW, pf.LastH)
 
 	vtui.Resume()
+	// The command ran in this very console and may have left its input mode
+	// changed: with ENABLE_MOUSE_INPUT off, a right click on XP opened the
+	// console's own Edit menu instead of reaching f4 (Zeroes1, f4#897, item
+	// 4). Ask for the mouse again, as the host-console path does on its way
+	// back (console.go), before the redraw.
+	restoreHostInputModes()
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.HardRefresh()
 	}

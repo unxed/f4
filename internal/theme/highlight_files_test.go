@@ -110,6 +110,33 @@ func TestHighlightRule_MatchSymlinkAttribute(t *testing.T) {
 	}
 }
 
+func TestHighlightRule_MatchJunctionAttribute(t *testing.T) {
+	junction := vfs.VFSItem{Name: "junc", IsDir: true, IsSymlink: true, ReparseTag: vfs.ReparseTagMountPoint}
+	symlink := vfs.VFSItem{Name: "sym", IsDir: true, IsSymlink: true}
+	plain := vfs.VFSItem{Name: "dir", IsDir: true}
+
+	only := HighlightRule{AttrSet: AttrJunction}
+	if !only.Match(&junction) || only.Match(&symlink) || only.Match(&plain) {
+		t.Error("IncludeAttributes = Junction must match junctions and nothing else")
+	}
+	without := HighlightRule{AttrClear: AttrJunction}
+	if without.Match(&junction) || !without.Match(&symlink) || !without.Match(&plain) {
+		t.Error("ExcludeAttributes = Junction must reject junctions only")
+	}
+	// Symlink keeps meaning every link, so rules written before Junction
+	// existed colour a junction exactly as they did.
+	anyLink := HighlightRule{AttrSet: AttrSymlink}
+	if !anyLink.Match(&junction) || !anyLink.Match(&symlink) {
+		t.Error("Symlink must still match a junction")
+	}
+
+	for _, spelling := range []string{"junction", "junc", "j", "Directory, Junction"} {
+		if parseAttrFlags(strings.ToLower(spelling))&AttrJunction == 0 {
+			t.Errorf("parseAttrFlags(%q) lost the junction flag", spelling)
+		}
+	}
+}
+
 func TestBuiltInStylesHighlightSymlinks(t *testing.T) {
 	styles := loadStylesFromFS(builtInStyles, "styles/*.ini")
 	if len(styles) == 0 {

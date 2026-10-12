@@ -22,7 +22,9 @@ func TestKeyBarNamesWhatF3AndF4DoOnAFolder(t *testing.T) {
 		name           string
 		wantF3, wantF4 string
 	}{
-		{"..", "", ""},
+		// F3 sizes the folder the panel shows from "..", F4 has nothing there
+		// (f4#1795).
+		{"..", i18n.Msg("KeyBar.F3Size"), ""},
 		{"file.txt", "", ""},
 		{"sub", i18n.Msg("KeyBar.F3Size"), i18n.Msg("KeyBar.F4Attr")},
 	}

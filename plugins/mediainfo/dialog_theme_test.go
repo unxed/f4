@@ -35,8 +35,22 @@ func TestReportViewUsesDialogThemeAndDimsFieldNames(t *testing.T) {
 	if got, want := screen.GetCell(2, 2).Attributes, subduedReportFieldAttr(normal); got != want {
 		t.Fatalf("field-name attr = %#x, want subdued dialog text %#x", got, want)
 	}
-	if got, oldDim, full := vtui.GetRGBFore(subduedReportFieldAttr(normal)), vtui.GetRGBFore(vtui.DimColor(normal)), vtui.GetRGBFore(normal); got <= oldDim || got >= full {
-		t.Fatalf("subdued foreground %#x must be brighter than old dim %#x and darker than normal %#x", got, oldDim, full)
+	// Subdued sits between the normal text and the fully dimmed one, measured
+	// by how far each is from the background (vtui.DimColor fades into it).
+	away := func(attr uint64) int {
+		sum := 0
+		fg, bg := vtui.GetRGBFore(attr), vtui.GetRGBBack(attr)
+		for shift := 0; shift < 24; shift += 8 {
+			diff := int((fg>>shift)&0xff) - int((bg>>shift)&0xff)
+			if diff < 0 {
+				diff = -diff
+			}
+			sum += diff
+		}
+		return sum
+	}
+	if got, dim, full := away(subduedReportFieldAttr(normal)), away(vtui.DimColor(normal)), away(normal); got <= dim || got >= full {
+		t.Fatalf("subdued distance from the background %d must be more than the fully dimmed %d and less than the normal %d", got, dim, full)
 	}
 	valueX := 2 + strings.Index(line, " : ") + len(" : ")
 	if got := screen.GetCell(valueX, 2).Attributes; got != normal {

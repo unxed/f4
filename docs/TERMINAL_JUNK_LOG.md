@@ -151,6 +151,30 @@ and the panel are unchanged. The way of synchronizing is not changed (section 1,
 point 2). If the stray path still shows up after this, the cause is somewhere
 else in the startup sequence (look at the erase-line and the first resize again).
 
+## 4a. zsh echoes the sync line in pieces (#1886, macOS)
+
+*Symptom.* f4-gui on macOS (zsh): every directory change in the panel left
+`user@host / %  cd '/Users' && true f4_sync` in the embedded console.
+*Cause* (reproduced on Linux with zsh 5.9, the raw output recorded through a
+PTY): bash echoes the typed line in one write, and the POSIX excision in
+`AnsiParser.ProcessFiltered` only matched the whole line inside one chunk.
+zsh's line editor echoes it one or two characters per write (`" \x08 cd '/t"`,
+`"m"`, `"p' && tru"`, ...), and where the line wraps it redraws it (`" \r\x1b[K"`
+and the character again), so the line was never in one chunk and nothing was
+cut.
+
+*Fix (2026-10-12).* The POSIX line is now announced like the cmd.exe one:
+`WritePTY` calls `ExpectUnixSyncEcho` for a line starting with
+`UnixSyncCommandPrefix`. While such an echo is due, `exciseUnixSync` holds the
+output from ` cd '` to the end of its line (the first `\n`), and drops it with
+an erase-line when it carries the `f4_sync` marker in order (zsh's redraw puts
+bytes between the letters); a line without the marker is let through as it
+was. Nothing is held unless f4 typed the line, so a ` cd '` the user types is
+shown as it is typed (section 1, points 3 and 4). The search for a whole
+unannounced line stays as it was. Tests: `TestAnsiParser_UnixSyncEchoInZshPieces`
+(the recorded chunks, short and wrapped), `TestAnsiParser_UnixSyncEchoHoldsOnlyItsOwnLine`.
+Not yet confirmed by the reporter on macOS.
+
 ## 5. Tickets with the same family of problem (for the trail)
 
 | Ticket | State | What it was |
@@ -159,6 +183,8 @@ else in the startup sequence (look at the erase-line and the first resize again)
 | unxed/f4#165 | closed | Changing the directory scrolled the output up (the hidden `cd /d ... & rem f4_sync`); on long paths the command became visible |
 | unxed/f4#55 | closed | Windows: `cd %Temp%` typed by the user was appended to the sync line (`cd /d "C:\1" & cd %Temp%`) and visible in the console: the user's command and f4's own line met in one typed line |
 | unxed/f4#158 | closed | POSIX: the bash history filled with f4's own lines (`set +H; cd '...' && { printf "\033]133;C\007"; ... }`) after running commands from f4; the typed line must stay out of the history (leading space, `HISTCONTROL=ignorespace`) |
+| unxed/f4#1805 | closed | macOS (zsh, and bash 3.2): `.zsh_history` filled with ` cd '/Users/x' && true f4_sync`; the leading space of f4's own lines keeps them out of the history only where the shell is set to ignore it (stock zsh and macOS bash are not). The shell f4 starts now gets `-o HIST_IGNORE_SPACE` (zsh) or `HISTCONTROL=...:ignorespace` (bash), see `internal/terminal/shell_history.go`; the user's startup files still win |
+| unxed/f4#1886 | open | macOS (zsh): the sync line stayed on the console; zsh echoes it in pieces and redraws it at the wrap, the whole-line search never matched (section 4a) |
 | unxed/f4#424 | closed | Several workspaces (Ctrl-N): the sync line and its echo showed up in the terminal of another workspace and a directory change in one workspace changed another; the sync belongs to the workspace's own PTY |
 | unxed/f4#425 | closed | Umbrella: the embedded terminal on Windows, the ConPTY observation log (docs/TERMINAL.md Appendix A) |
 | unxed/f4#507 | closed | macOS: `cd '/tmp' # f4_sync` gave "cd: too many arguments" (zsh: interactive comments off), `~` did not work. Marker became `&& true f4_sync` |

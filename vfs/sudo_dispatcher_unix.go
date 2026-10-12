@@ -244,6 +244,12 @@ func handleSudoClient(conn *net.UnixConn) {
 				resp.Error = err.Error()
 			}
 
+		case CmdReadAt, CmdWriteAt:
+			// Contents by requests, as the elevated dispatcher of f4#1768
+			// takes them; here Open passes a descriptor instead, but the
+			// same request must not answer success with nothing done.
+			resp = ElevatedFileOps(req)
+
 		case CmdReadDir:
 			entries, err := os.ReadDir(req.Path)
 			if err != nil {

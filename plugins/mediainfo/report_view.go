@@ -123,18 +123,25 @@ func (view *reportTextView) drawLine(screen *vtui.ScreenBuf, y, width int, line 
 	screen.Write(view.X1+line.fieldColumn, y, vtui.StringToCharInfo(value, attr))
 }
 
-// subduedReportFieldAttr keeps captions distinguishable without the 50%
-// brightness drop of vtui.DimColor. True-color themes retain 75% of their
-// foreground intensity; indexed themes merely drop the bright flag.
+// subduedReportFieldAttr keeps captions distinguishable without the 50% fade
+// of vtui.DimColor, which moves the foreground half way to the background.
+// True-color themes with a true-color background move it a quarter of the way
+// (so the text gets dimmer whichever way round the colours are); with only the
+// foreground in true color it keeps 75% of its intensity; indexed themes merely
+// drop the bright flag.
 func subduedReportFieldAttr(attr uint64) uint64 {
 	if attr&vtui.IsFgRGB == 0 {
 		return attr &^ vtui.ForegroundIntensity
 	}
 	fg := vtui.GetRGBFore(attr)
-	r := ((fg >> 16) & 0xff) * 3 / 4
-	g := ((fg >> 8) & 0xff) * 3 / 4
-	b := (fg & 0xff) * 3 / 4
-	return vtui.SetRGBFore(attr, r<<16|g<<8|b)
+	fr, fgG, fb := (fg>>16)&0xff, (fg>>8)&0xff, fg&0xff
+	if attr&vtui.IsBgRGB != 0 {
+		bg := vtui.GetRGBBack(attr)
+		br, bgG, bb := (bg>>16)&0xff, (bg>>8)&0xff, bg&0xff
+		mix := func(f, b uint32) uint32 { return (f*3 + b) / 4 }
+		return vtui.SetRGBFore(attr, mix(fr, br)<<16|mix(fgG, bgG)<<8|mix(fb, bb))
+	}
+	return vtui.SetRGBFore(attr, (fr*3/4)<<16|(fgG*3/4)<<8|(fb*3/4))
 }
 
 func (view *reportTextView) ProcessKey(event *vtinput.InputEvent) bool {

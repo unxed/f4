@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-runewidth"
+	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/textdiff"
@@ -595,7 +596,7 @@ func (p *aiReviewDiffPane) Show(scr *vtui.ScreenBuf) {
 // drawn over the frame.
 func aiReviewLabel(s string, w int) string {
 	s = runewidth.Truncate(s, w, "…")
-	return strings.ReplaceAll(padLabelTo(s, w), "&", "&&")
+	return strings.ReplaceAll(dialog.PadLabelTo(s, w), "&", "&&")
 }
 
 // aiReviewRunPatcher is what the review screen's Apply and Dry run buttons

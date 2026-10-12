@@ -972,6 +972,10 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 		cfg.WorkspaceTabMode = int(vtui.WorkspaceTabsOnCtrl)
 	case "never":
 		cfg.WorkspaceTabMode = int(vtui.WorkspaceTabsNever)
+	case "whilectrl":
+		// Shown for as long as a plain Ctrl is held (f4#1870); "ctrl" is
+		// the Ctrl+Tab mode vtui#496 made of the old one.
+		cfg.WorkspaceTabMode = int(vtui.WorkspaceTabsWhileCtrl)
 	default:
 		cfg.WorkspaceTabMode = int(vtui.WorkspaceTabsMultiple)
 	}
@@ -1331,6 +1335,8 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 		workspaceTabMode = "ctrl"
 	} else if cfg.WorkspaceTabMode == int(vtui.WorkspaceTabsNever) {
 		workspaceTabMode = "never"
+	} else if cfg.WorkspaceTabMode == int(vtui.WorkspaceTabsWhileCtrl) {
+		workspaceTabMode = "whilectrl"
 	}
 	ctrlTabMode := "direct"
 	if cfg.CtrlTabShowsMenu {
@@ -1836,69 +1842,54 @@ func ApplyCursorSettings() {
 // already exist (f4#912).
 const defaultHighlightIni = `# User highlight rules and sort groups.
 #
-# f4 applies file highlighting rules from both the active Color Style (Theme)
-# and this file. By default, rules in this file have higher priority.
-# The two sources are not merged field by field: f4 puts one complete rule
-# list before the other. Change Appearance.HighlightPriority in settings.ini
-# to 0 (user rules first, the default) or 1 (theme rules first).
-# A matching rule normally stops processing even when it has no colour for
-# the current state. Add ContinueProcessing = 1 when a later rule should be
-# allowed to supply or merge the remaining colour components.
+# f4 applies the rules of this file together with those of the active Color
+# Style (Theme). Sections are tried in the order of their numbers and the first
+# match wins, unless it sets ContinueProcessing = 1. Rules of this file go first;
+# set Appearance.HighlightPriority in settings.ini to 1 to put the theme first.
 #
-# You can add your custom highlight groups here (e.g. Mask = *.mp3).
-# Default groups (Hidden, Executables, Directories) are already defined
-# by the active Color Style, so you don't need to duplicate them unless
-# you specifically want to override the theme's colors.
+# A [Highlight_N] section matches an item by its Mask, attributes, size or date.
+# Name is a label, not a matcher. A section without a Mask matches every name,
+# so a rule for folders needs IncludeAttributes = Directory and a rule for files
+# needs ExcludeAttributes = Directory. Attributes: Directory, Hidden, Executable,
+# ReadOnly, System, Archive, Symlink, Junction. Other keys: SizeAbove, SizeBelow,
+# DateType, DateAfter, DateBefore, Mark.
 #
-# A [Highlight_N] section matches an item by its Mask, attributes, size or
-# date. Name is a label for you, not a matcher. The four color keys are
-# selected independently:
-#   NormalColor          - an ordinary, unselected item
-#   SelectedColor        - a selected item
-#   CursorColor          - an ordinary item under the cursor
-#   SelectedCursorColor  - a selected item under the cursor
-# The same four can be spelled the way Far Manager names them in its Files
-# highlighting dialog, which is what a group copied from Far will use:
-#   NormalFileName, SelectedFileName, FileNameUnderCursor,
-#   FileNameSelectedUnderCursor
-# The cursor-specific keys are also accepted as NormalColorUnderCursor and
-# SelectedColorUnderCursor. A color that is omitted leaves the panel's own
-# color for that state, as in Far: SelectedColor does not apply to a selected
-# item under the cursor. Every one of the four takes a foreground, a
-# background, or both:
-#   foreground:#FF00FF | background:#008080
-# Other useful keys are IncludeAttributes/ExcludeAttributes (Directory,
-# Hidden, Executable, ReadOnly, System, Archive, Symlink), SizeAbove,
-# SizeBelow, DateType, DateAfter, DateBefore, Mark, and ContinueProcessing.
+# The four colors are set independently, each as a foreground, a background or
+# both. A color that is omitted leaves the panel's own color for that state:
+#   NormalFileName              - an ordinary item
+#   SelectedFileName            - a selected item
+#   FileNameUnderCursor         - an ordinary item under the cursor
+#   FileNameSelectedUnderCursor - a selected item under the cursor
 #
-# Sections are tried in the order of their numbers and the first match wins,
-# unless it sets ContinueProcessing = 1. A section without a Mask matches
-# every name, so a rule meant for folders needs IncludeAttributes = Directory
-# and a rule meant for files needs ExcludeAttributes = Directory -- a rule
-# with neither repaints the whole panel and hides every rule below it.
+# UseDefaults = 1 turns a section into a change of the built-in colors of its
+# attribute: its place in the file does not matter, it keeps the rest of the
+# theme's rules, and only the colors it names are replaced. When an item has
+# several attributes, the first of these decides: Junction, Symlink, Hidden or
+# System, Directory. So a Directory section does not recolor symlinks or hidden
+# folders, and a Symlink section does not recolor junctions.
 #
-# A comment takes a whole line. There are no trailing comments: '#' also
-# opens a color literal, so anything after a value stays part of that value.
+# A comment takes a whole line. There are no trailing comments: '#' also opens
+# a color literal, so anything after a value stays part of that value.
 #
-# Uncomment and adapt these complete examples to add custom rules. The
-# sections are commented out deliberately, so they do not change the panel.
+# Uncomment and adapt these examples. They are commented out deliberately, so
+# they do not change the panel.
+#
 # [Highlight_100]
 # Name = Archives
 # Mask = *.zip, *.rar, *.7z
 # ExcludeAttributes = Directory
-# NormalColor = foreground:#FF00FF | background:#000000
-# SelectedColor = foreground:#FFFF00 | background:#000000
-# CursorColor = foreground:#FFFFFF | background:#008080
-# SelectedCursorColor = foreground:#FFFF00 | background:#008080
+# NormalFileName = foreground:#FF00FF | background:#000080
+# SelectedFileName = foreground:#FFFF00 | background:#000080
+# FileNameUnderCursor = foreground:#FF00FF | background:#008080
+# FileNameSelectedUnderCursor = foreground:#FFFF00 | background:#008080
 #
-# The same four colors for folders, written with the Far key names. Note the
-# attribute: without it the section would color the files as well.
 # [Highlight_101]
+# UseDefaults = 1
 # Name = Directories
 # IncludeAttributes = Directory
-# NormalFileName = foreground:#FFFFFF | background:#000000
-# SelectedFileName = foreground:#FFFF00 | background:#000000
-# FileNameUnderCursor = foreground:#FFFFFF | background:#008080
+# NormalFileName = foreground:#FF00FF | background:#000080
+# SelectedFileName = foreground:#FFFF00 | background:#000080
+# FileNameUnderCursor = foreground:#FF00FF | background:#008080
 # FileNameSelectedUnderCursor = foreground:#FFFF00 | background:#008080
 #
 # Sort groups put files of one kind together on a panel that has "Use sort

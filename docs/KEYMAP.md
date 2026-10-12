@@ -5,7 +5,8 @@ works one layer below: it substitutes one key for another as the keystroke
 arrives, before anything in f4 has looked at it. Two problems need that layer.
 
 Before reaching for either file: **`Ctrl+Shift+P` opens the command palette**,
-which finds any command by name and shows the key it currently sits on. On a
+which finds any command by name and shows the key it currently sits on;
+`Ctrl+K` on a result assigns a key to that command. On a
 legacy terminal that cannot distinguish `Ctrl+Shift+letter` from `Ctrl+letter`,
 use the built-in **`Ctrl+Alt+P`** fallback — and in an X11 session the real
 `Ctrl+Shift+P` is taken from the X server instead, so it works there even on a
@@ -56,6 +57,11 @@ is applied to the filename only; the trailing space stays outside the quotes.
 No leading space is inserted, so an already typed path prefix stays attached
 to the filename. While Fast Find is active, `Ctrl+Enter` still finds the next
 match instead of inserting a filename.
+
+In the autofilter window (a lone Alt, or Panel.AutoFilter), `Ctrl+E` flips the
+"Exact match" option shown on the window's second line, as a click on that line
+does; the option is the same one as Settings > Panels > "Strict quick search"
+and is saved at once.
 
 ## The file
 
@@ -245,6 +251,17 @@ image/text choice; text-only clipboard data goes to the command line. See
 preferences. Editor and dialog clipboard shortcuts keep their existing actions.
 
 ### Panel file clipboard (f4#1767)
+
+`Panel.SelectFromClipboard` (Ctrl+S) replaces the active panel's marks with items
+whose names are on the clipboard. It accepts names separated by spaces, tabs or
+line breaks, with single or double quotes optional. Names are matched literally,
+ignoring case; folders can be marked too, but the parent row cannot. For unquoted
+names containing spaces, the longest existing panel name wins; use quotes or one
+name per line to disambiguate. Full paths are matched by their final component.
+An empty clipboard leaves the marks alone. The action appears in Files and the
+Ctrl+Shift+P command palette. Ctrl+M restores the selection from before Ctrl+S;
+Ctrl+M itself swaps current marks with the previous selection snapshot, without
+reading the clipboard.
 
 `Panel.CopyFilesToClipboard` (Ctrl+C) and `Panel.CutFilesToClipboard` remember the
 selected files of the active panel, or the file under the cursor when nothing is

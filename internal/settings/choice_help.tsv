@@ -12,8 +12,9 @@ TTYBackend|ansi|Write ANSI/VT escape sequences to the terminal. Suitable for mod
 TTYBackend|winapi|Use the Windows console API rather than ANSI output. Intended for Windows console compatibility. Color representation and behavior differ from ANSI output; prefer ANSI when using a modern terminal's extended capabilities.
 WorkspaceTabMode|0|Keep the workspace tab bar visible even with one workspace. Easier to discover, but occupies space unless tabs overlay the content.
 WorkspaceTabMode|1|Show the tab bar only when multiple workspaces exist. Saves space while working in a single workspace.
-WorkspaceTabMode|2|Show the tab bar while Ctrl is held. Keeps the display compact but hides workspace labels the rest of the time.
+WorkspaceTabMode|2|Show the tab bar after Ctrl+Tab, as long as Ctrl stays held. Ctrl alone does not show it.
 WorkspaceTabMode|3|Hide the workspace tab bar. Workspaces remain accessible through their switching commands and shortcuts.
+WorkspaceTabMode|4|Show the tab bar while Ctrl is held. Keeps the display compact but hides workspace labels the rest of the time.
 WorkspaceTabNumbering|0|Keep workspace numbers stable and restore them with saved workspaces. Reordering tabs does not renumber them.
 WorkspaceTabNumbering|1|Keep workspace numbers stable during the current run without preserving that numbering across restarts.
 WorkspaceTabNumbering|2|Number workspaces by their current order. Moving or removing a tab can change the numbers used for switching.

@@ -37,9 +37,15 @@ func sendMsg(conn *net.UnixConn, msg any, fd int) error {
 		oob = syscall.UnixRights(fd)
 	}
 
-	_, _, err = conn.WriteMsgUnix(data, oob, nil)
+	n, _, err := conn.WriteMsgUnix(data, oob, nil)
 	if err != nil {
 		vtui.DebugLog("SUDO_IPC: WriteMsgUnix FAILED: %v", err)
+		return err
+	}
+	// On a stream socket sendmsg may take only part of a big payload; the
+	// descriptor rides with the first part, the rest goes as plain bytes.
+	if n < len(data) {
+		_, err = conn.Write(data[n:])
 	}
 	return err
 }

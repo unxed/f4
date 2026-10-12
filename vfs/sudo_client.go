@@ -22,6 +22,9 @@ type SudoClient struct {
 	appPath  string
 	askPass  string // Command to run for asking password
 	attempts int
+	// consented: the user agreed to elevate through UAC in this session
+	// (f4#1768); later connects go straight to UAC.
+	consented bool
 }
 
 var globalSudoClient *SudoClient
@@ -69,6 +72,9 @@ func (c *SudoClient) Connect() error {
 
 	if c.conn != nil {
 		return nil // Already connected
+	}
+	if connectsByUAC() {
+		return c.connectElevatedLocked()
 	}
 
 	vtui.DebugLog("SUDO_CLIENT: Initializing connection... UID=%d GID=%d", os.Getuid(), os.Getgid())
@@ -284,7 +290,7 @@ func (c *SudoClient) SendRequest(req SudoRequest) (SudoResponse, *os.File, error
 		if f != nil {
 			_ = f.Close() // The rejected response's descriptor was never used.
 		}
-		return resp, nil, newSudoRemoteError(resp.Error)
+		return resp, nil, newSudoRemoteErrorCode(resp.Error, resp.Errno)
 	}
 
 	return resp, f, nil
@@ -308,6 +314,24 @@ type sudoRemoteError struct {
 func (e *sudoRemoteError) Error() string { return e.msg }
 func (e *sudoRemoteError) Unwrap() error { return e.errno }
 
+// sudoErrnoByName is SudoResponse.Errno read back.
+var sudoErrnoByName = map[string]syscall.Errno{
+	"ENOENT": syscall.ENOENT, "EEXIST": syscall.EEXIST, "EACCES": syscall.EACCES,
+	"ENOTDIR": syscall.ENOTDIR, "ENOTEMPTY": syscall.ENOTEMPTY,
+}
+
+// newSudoRemoteErrorCode is newSudoRemoteError for an answer that names its
+// kind: the name decides, whatever language or platform the text is in.
+func newSudoRemoteErrorCode(msg, code string) error {
+	if code == "EEXIST_DEST" {
+		return ErrDestinationExists
+	}
+	if errno, ok := sudoErrnoByName[code]; ok {
+		return &sudoRemoteError{msg: msg, errno: errno}
+	}
+	return newSudoRemoteError(msg)
+}
+
 func newSudoRemoteError(msg string) error {
 	if strings.HasSuffix(msg, ErrDestinationExists.Error()) {
 		return ErrDestinationExists
@@ -322,6 +346,11 @@ func newSudoRemoteError(msg string) error {
 
 // Open uses SudoClient to securely fetch a File Descriptor to a protected file.
 func (c *SudoClient) Open(path string, flags int, mode uint32) (*os.File, error) {
+	if connectsByUAC() {
+		// No descriptor crosses from the elevated dispatcher (f4#1768): refuse
+		// before UAC is asked for nothing. OSVFS reads and writes by requests.
+		return nil, &os.PathError{Op: "open", Path: path, Err: errors.ErrUnsupported}
+	}
 	_, f, err := c.SendRequest(SudoRequest{Cmd: CmdOpen, Path: path, Flags: flags, Mode: mode})
 	return f, err
 }

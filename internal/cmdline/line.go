@@ -1,7 +1,6 @@
 package cmdline
 
 import (
-	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/vtinput"
@@ -44,13 +43,11 @@ func (cl *CommandLine) SetPosition(x1, y1, x2, y2 int) {
 	cl.ScreenObject.SetPosition(x1, y1, x2, y2)
 	promptLen := 0
 	if len(cl.RichPrompt) > 0 {
-		for _, c := range cl.RichPrompt {
-			if c.Char != vtui.WideCharFiller {
-				promptLen++
-			}
-		}
+		// RichPrompt already contains one entry per rendered screen cell,
+		// including the continuation cells of wide characters.
+		promptLen = len(cl.RichPrompt)
 	} else {
-		promptLen = runewidth.StringWidth(cl.Prompt)
+		promptLen = len(vtui.StringToCharInfo(cl.Prompt, 0))
 	}
 	cl.Edit.SetPosition(x1+promptLen, y1, x2, y2)
 }
@@ -118,9 +115,9 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 		isDel := e.VirtualKeyCode == vtinput.VK_BACK || e.VirtualKeyCode == vtinput.VK_DELETE
 		if isChar || isDel {
 			top := vtui.FrameManager.GetTopFrame()
-			_, isAc := top.(*vtui.AutoCompleteMenu)
+			_, isAc := AsCompletionMenu(top)
 			if !isAc {
-				ac := vtui.NewAutoCompleteMenu(cl.Edit)
+				ac := NewCompletionMenu(cl.Edit)
 				if ac.HasMatches() {
 					vtui.FrameManager.Push(ac)
 				}

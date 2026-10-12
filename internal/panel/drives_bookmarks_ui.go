@@ -83,7 +83,9 @@ func driveBookmarkDialogWidth(screenWidth int) int {
 }
 
 func NewDriveBookmarkEditDialog(initial DriveBookmark, defaultPath string, onFinish func(bool, DriveBookmark)) *driveBookmarkEditDialog {
-	const height = 14
+	// Six rows of fields, the rule and the buttons, with no blank rows
+	// between them (mitek1977-coder, f4#1148).
+	const height = 12
 	screenW := 0
 	if vtui.FrameManager != nil {
 		screenW = vtui.FrameManager.GetScreenSize()
@@ -117,6 +119,7 @@ func NewDriveBookmarkEditDialog(initial DriveBookmark, defaultPath string, onFin
 	cancelButton := vtui.NewButton(0, 0, i18n.Msg("DriveLink.Cancel"))
 	createButton.OnClick = func() { dialog.submit() }
 	cancelButton.OnClick = func() { dialog.finish(false, DriveBookmark{}) }
+	separator := vtui.NewSeparator(0, 0, width, true, true)
 
 	dialog.AddItem(nameLabel)
 	dialog.AddItem(dialog.nameEdit)
@@ -125,25 +128,27 @@ func NewDriveBookmarkEditDialog(initial DriveBookmark, defaultPath string, onFin
 	dialog.AddItem(hotkeyLabel)
 	dialog.AddItem(dialog.HotkeyEdit)
 	dialog.AddItem(hotkeyHint)
+	dialog.AddItem(separator)
 	dialog.AddItem(createButton)
 	dialog.AddItem(cancelButton)
 
 	vbox := vtui.NewVBoxLayout(dialog.X1+2, dialog.Y1+2, width-4, height-4)
 	vbox.Add(nameLabel, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(dialog.nameEdit, vtui.Margins{}, vtui.AlignFill)
-	vbox.Add(pathLabel, vtui.Margins{Top: 1}, vtui.AlignLeft)
+	vbox.Add(pathLabel, vtui.Margins{}, vtui.AlignLeft)
 	vbox.Add(dialog.pathEdit, vtui.Margins{}, vtui.AlignFill)
 	hotkeyRow := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	hotkeyRow.Add(hotkeyLabel, vtui.Margins{Right: 1}, vtui.AlignLeft)
 	hotkeyRow.Add(dialog.HotkeyEdit, vtui.Margins{}, vtui.AlignLeft)
-	vbox.Add(hotkeyRow, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(hotkeyRow, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(hotkeyHint, vtui.Margins{}, vtui.AlignLeft)
 	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
 	buttons.HorizontalAlign = vtui.AlignCenter
 	buttons.Spacing = 2
 	buttons.Add(createButton, vtui.Margins{}, vtui.AlignTop)
 	buttons.Add(cancelButton, vtui.Margins{}, vtui.AlignTop)
-	vbox.Add(buttons, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(separator, vtui.Margins{Left: -2, Right: -2}, vtui.AlignFill)
+	vbox.Add(buttons, vtui.Margins{}, vtui.AlignFill)
 	vbox.Apply()
 
 	dialog.SetFocusedItem(dialog.nameEdit)

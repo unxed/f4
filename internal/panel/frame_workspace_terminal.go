@@ -15,6 +15,9 @@ import (
 // its console through exactly the same, already-tested path a keypress takes,
 // including the per-shell-mode work the switch involves (issue #128).
 func (pf *PanelsFrame) TogglePanelsVisibility() {
+	if pf.PanelsLocked() {
+		return
+	}
 	pf.ShowPanels = !pf.ShowPanels
 	if pf.ShowPanels && !pf.ShowLeftPanel && !pf.ShowRightPanel {
 		pf.ShowLeftPanel = true
@@ -74,9 +77,21 @@ func (pf *PanelsFrame) TogglePanelsVisibility() {
 	default:
 		vtui.FrameManager.HardRefresh()
 	}
+	if pf.SearchFirstMode() {
+		// The console edit owns the caret while panels are hidden. Preserve
+		// the saved navigation target so showing panels restores its focus.
+		pf.CmdLine.SetFocus(pf.IsFocused() && (pf.CommandLineFocused || !pf.ShowPanels))
+	}
 	if pf.ShowPanels {
 		pf.RefreshAll()
 	}
+}
+
+// PanelsLocked reports a workspace that is nothing but a terminal (opened by
+// Ctrl+Shift+O): its panels never come back, so Ctrl+O, Esc, Del and the
+// file-manager keys reach the shell instead of switching to them (issue #128).
+func (pf *PanelsFrame) PanelsLocked() bool {
+	return pf.TerminalOnly && !pf.ShowPanels
 }
 
 // forkTerminalWorkspace opens the console in a workspace of its own instead of
@@ -103,6 +118,8 @@ func (pf *PanelsFrame) forkTerminalWorkspace() bool {
 	if clone.ShowPanels {
 		clone.TogglePanelsVisibility()
 	}
+	// Only now: the switch above is the one place the panels may still go away.
+	clone.TerminalOnly = true
 	return true
 }
 

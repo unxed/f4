@@ -209,18 +209,20 @@ func ShowSymlinkTargetDialog(refresh func(), v vfs.VFS, path, target string) {
 
 	btnSave.OnClick = func() {
 		newTarget := editTarget.GetText()
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			if err := ReplaceSymlinkTarget(ctx.Context, v, path, newTarget); err != nil {
-				ctx.RunOnUI(func() {
-					vtui.ShowMessage(i18n.Msg("SymlinkEdit.ErrorTitle"), err.Error(), []string{"&Ok"})
-				})
-				return
-			}
-			ctx.RunOnUI(func() {
-				dlg.Close()
-				if refresh != nil {
-					refresh()
+		confirmDanglingLink(v, path, newTarget, newTarget == target, func() {
+			vtui.RunAsync(func(ctx *vtui.TaskContext) {
+				if err := ReplaceSymlinkTarget(ctx.Context, v, path, newTarget); err != nil {
+					ctx.RunOnUI(func() {
+						vtui.ShowMessage(i18n.Msg("SymlinkEdit.ErrorTitle"), err.Error(), []string{"&Ok"})
+					})
+					return
 				}
+				ctx.RunOnUI(func() {
+					dlg.Close()
+					if refresh != nil {
+						refresh()
+					}
+				})
 			})
 		})
 	}
@@ -243,12 +245,57 @@ func ShowSymlinkTargetDialog(refresh func(), v vfs.VFS, path, target string) {
 	vtui.FrameManager.Push(dlg)
 }
 
+// linkTargetExists reports whether target, as the link at path sees it
+// (relative to the link's folder), exists.
+func linkTargetExists(ctx context.Context, v vfs.VFS, path, target string) bool {
+	full := target
+	if !v.IsAbs(target) {
+		full = v.Join(v.Dir(path), target)
+	}
+	_, err := v.Stat(ctx, full)
+	return err == nil
+}
+
+// confirmDanglingLink runs proceed, asking first when a symbolic link is
+// about to point at nothing: such a link is legal, but saving one silently
+// looked like the link had been turned into something strange (DkmS1953,
+// f4#1828). skip says there is nothing to ask — the target is unchanged, or
+// the link is a junction, whose creation refuses a missing target itself.
+func confirmDanglingLink(v vfs.VFS, path, target string, skip bool, proceed func()) {
+	if skip || target == "" || linkTargetExists(context.Background(), v, path, target) {
+		proceed()
+		return
+	}
+	dlg := vtui.ShowMessage(i18n.Msg("Warning.Title"),
+		fmt.Sprintf(i18n.Msg("SymlinkEdit.TargetMissing"), vtui.TruncateMiddle(target, 60)),
+		[]string{i18n.Msg("SymlinkEdit.Save"), i18n.Msg("SymlinkEdit.Cancel")})
+	dlg.OnResult = func(code int) {
+		if code == 0 {
+			proceed()
+		}
+	}
+}
+
 // ReplaceSymlinkTarget changes the link itself, never the object it points at.
 // The new link is created only after the old one has been removed because the
 // optional VFS API does not promise replace semantics. If creation fails, put
 // the original link back before returning the error so a failed edit cannot
 // silently delete the user's link.
 func ReplaceSymlinkTarget(ctx context.Context, v vfs.VFS, path, newTarget string) error {
+	return replaceLinkTarget(ctx, v, path, newTarget, false)
+}
+
+// ReplaceJunctionTarget is ReplaceSymlinkTarget for a directory junction: the
+// link is recreated as a junction.
+func ReplaceJunctionTarget(ctx context.Context, v vfs.VFS, path, newTarget string) error {
+	return replaceLinkTarget(ctx, v, path, newTarget, true)
+}
+
+// replaceLinkTarget is ReplaceSymlinkTarget for either kind of link. A
+// directory junction is recreated as a junction (f4#1828): turning it into a
+// symbolic link would change its kind and, on Windows, needs a privilege that
+// creating a junction does not.
+func replaceLinkTarget(ctx context.Context, v vfs.VFS, path, newTarget string, junction bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -258,6 +305,14 @@ func ReplaceSymlinkTarget(ctx context.Context, v vfs.VFS, path, newTarget string
 	symVFS, ok := v.(vfs.SymlinkVFS)
 	if !ok {
 		return errors.New("VFS does not support symbolic links")
+	}
+	create := symVFS.Symlink
+	if junction {
+		juncVFS, ok := v.(vfs.JunctionVFS)
+		if !ok {
+			return errors.New("VFS does not support directory junctions")
+		}
+		create = juncVFS.Junction
 	}
 	oldTarget, err := symVFS.Readlink(ctx, path)
 	if err != nil {
@@ -269,11 +324,11 @@ func ReplaceSymlinkTarget(ctx context.Context, v vfs.VFS, path, newTarget string
 	if err := v.Remove(ctx, path); err != nil {
 		return fmt.Errorf("remove symlink %q: %w", path, err)
 	}
-	createErr := symVFS.Symlink(ctx, newTarget, path)
+	createErr := create(ctx, newTarget, path)
 	if createErr == nil {
 		return nil
 	}
-	if restoreErr := symVFS.Symlink(ctx, oldTarget, path); restoreErr != nil {
+	if restoreErr := create(ctx, oldTarget, path); restoreErr != nil {
 		return fmt.Errorf("create symlink %q: %w; restore original target %q: %v", path, createErr, oldTarget, restoreErr)
 	}
 	return fmt.Errorf("create symlink %q: %w (original target restored)", path, createErr)
@@ -609,6 +664,22 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		height = 26
 	}
 
+	// A listing carries no birth time on Linux; ask for the one of each shown
+	// object now, when the filesystem keeps it (f4#1817).
+	if _, local := v.(*vfs.OSVFS); local {
+		targets = append([]AttributesTarget(nil), targets...)
+		for i := range targets {
+			if targets[i].Item.HasMetadata(vfs.MetadataBTime) {
+				continue
+			}
+			if born, ok := vfs.ReadBirthTime(targets[i].Path); ok {
+				targets[i].Item.BTime = born
+				targets[i].Item.KnownMetadata |= vfs.MetadataBTime
+			}
+		}
+		item = targets[0].Item
+	}
+
 	// Read-only Created/Accessed/Changed rows (f4#1404 follow-up): computed
 	// up front so the dialog's height can grow by exactly the rows that will
 	// actually be shown. A row is omitted entirely, not shown with a zero
@@ -695,26 +766,11 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		mainVBox.Add(cbRecursive, vtui.Margins{Top: 0}, vtui.AlignLeft)
 	}
 
-	// Time Row. far2l leaves the dates of a multiple selection blank; a blank
-	// field left blank changes nothing.
-	initialMTime := ""
-	if !multiple {
-		initialMTime = item.MTime.Format(attributesTimeFormat)
-	}
-	editMTime := vtui.NewEdit(0, 0, 20, initialMTime)
-	lblTime := vtui.NewLabel(0, 0, PadLabel(i18n.Msg("Attributes.MTime")), editMTime)
-	rowTime := vtui.NewHBoxLayout(0, 0, 66, 1)
-	rowTime.Add(lblTime, vtui.Margins{Left: 2, Right: 1}, vtui.AlignLeft)
-	rowTime.Add(editMTime, vtui.Margins{}, vtui.AlignLeft)
-	dlg.AddItem(lblTime)
-	dlg.AddItem(editMTime)
-	mainVBox.Add(rowTime, vtui.Margins{Top: 0}, vtui.AlignFill)
-
-	// Created/Accessed/Changed rows, in that order (f4#1404). Changed is
-	// read-only: no OS lets a program set the status-change time. Created is
-	// editable only where the platform can set a birth time (macOS) and for a
-	// real local file system; elsewhere it is shown and cannot be changed.
-	// Accessed is editable, below.
+	// Created, Modified, Metadata (changed) and Accessed rows, in that order
+	// (f4#1404, f4#1817). Changed is read-only: no OS lets a program set the
+	// status-change time. Created is editable only where the platform can set a
+	// birth time (macOS) and for a real local file system; elsewhere it is shown
+	// and cannot be changed. Accessed is editable, below.
 	var rowCreated, rowAccessed, rowChanged *vtui.HBoxLayout
 	var editCreated *vtui.Edit
 	initialCreated := ""
@@ -735,6 +791,25 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 			rowCreated = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Created"), createdText)
 		}
 	}
+	// Time Row. far2l leaves the dates of a multiple selection blank; a blank
+	// field left blank changes nothing.
+	initialMTime := ""
+	if !multiple {
+		initialMTime = item.MTime.Format(attributesTimeFormat)
+	}
+	editMTime := vtui.NewEdit(0, 0, 20, initialMTime)
+	lblTime := vtui.NewLabel(0, 0, PadLabel(i18n.Msg("Attributes.MTime")), editMTime)
+	rowTime := vtui.NewHBoxLayout(0, 0, 66, 1)
+	rowTime.Add(lblTime, vtui.Margins{Left: 2, Right: 1}, vtui.AlignLeft)
+	rowTime.Add(editMTime, vtui.Margins{}, vtui.AlignLeft)
+	dlg.AddItem(lblTime)
+	dlg.AddItem(editMTime)
+	mainVBox.Add(rowTime, vtui.Margins{Top: 0}, vtui.AlignFill)
+
+	if showChanged {
+		rowChanged = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Changed"), changedText)
+	}
+
 	// Accessed is editable (f4#1404): utimensat takes it together with the
 	// modification time, which OSVFS.SetAttributes already passes on. Like
 	// M-Time it stays blank for a multiple selection, and a field left
@@ -754,10 +829,6 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		dlg.AddItem(editAccessed)
 		mainVBox.Add(rowAccessed, vtui.Margins{Top: 0}, vtui.AlignFill)
 	}
-	if showChanged {
-		rowChanged = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Changed"), changedText)
-	}
-
 	// Buttons
 	btnSet := vtui.NewButton(0, 0, i18n.Msg("Attributes.BtnSet"))
 	btnSet.IsDefault = true
@@ -961,32 +1032,34 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		}
 		edit.mode, edit.keepMode = unixModeEdit(editOctal.GetText(), allChecks)
 		recursive := cbRecursive != nil && cbRecursive.State == 1
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			if targetEdited {
-				if err := ReplaceSymlinkTarget(ctx.Context, v, path, newTarget); err != nil {
-					ctx.RunOnUI(func() {
+		confirmDanglingLink(v, path, newTarget, !targetEdited, func() {
+			vtui.RunAsync(func(ctx *vtui.TaskContext) {
+				if targetEdited {
+					if err := ReplaceSymlinkTarget(ctx.Context, v, path, newTarget); err != nil {
+						ctx.RunOnUI(func() {
+							vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+						})
+						return
+					}
+				}
+				applied, err := setUnixAttributesForTargets(ctx.Context, v, targets, edit, recursive)
+				ctx.RunOnUI(func() {
+					if err != nil {
 						vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
-					})
-					return
-				}
-			}
-			applied, err := setUnixAttributesForTargets(ctx.Context, v, targets, edit, recursive)
-			ctx.RunOnUI(func() {
-				if err != nil {
-					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
-					return
-				}
-				dlg.Close()
-				if refresh != nil {
-					refresh()
-				}
-				// A recursive Set can silently touch a tree the user cannot
-				// see the size of from the dialog alone; a one-line count
-				// is this ticket's "smaller first cut" instead of a full
-				// progress dialog (f4#1502).
-				if recursive {
-					vtui.ShowMessage(i18n.Msg("Info.Title"), fmt.Sprintf(i18n.Msg("Attributes.RecursiveApplied"), applied), []string{"&Ok"})
-				}
+						return
+					}
+					dlg.Close()
+					if refresh != nil {
+						refresh()
+					}
+					// A recursive Set can silently touch a tree the user cannot
+					// see the size of from the dialog alone; a one-line count
+					// is this ticket's "smaller first cut" instead of a full
+					// progress dialog (f4#1502).
+					if recursive {
+						vtui.ShowMessage(i18n.Msg("Info.Title"), fmt.Sprintf(i18n.Msg("Attributes.RecursiveApplied"), applied), []string{"&Ok"})
+					}
+				})
 			})
 		})
 	}
@@ -1064,6 +1137,28 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 		}
 	}
 
+	// f4#1828: the target of a single link is editable here as it is in the
+	// Unix-shaped dialog. A link whose target cannot be read gets no field,
+	// rather than one that would replace it with an empty string.
+	linkTarget := ""
+	linkIsJunction := false
+	if !multiple && (item.IsSymlink || vfs.LinkKindOf(&item) == vfs.LinkJunction) {
+		if t, err := vfs.Readlink(context.Background(), v, path); err == nil && t != "" {
+			linkTarget = t
+			linkIsJunction = vfs.LinkKindOf(&item) == vfs.LinkJunction
+			height += 4 // the kind of the link and its target, each after a blank row
+		}
+	}
+
+	// f4#1861: a file with several hard links lists all its names in a
+	// drop-down list, as far3 does; the count alone would not tell where the
+	// others are. One row however many names there are, so the dialog keeps
+	// its size (DkmS1953).
+	linkNames := attributesHardLinkNames(v, path, item, multiple)
+	if len(linkNames) > 0 {
+		height += 2 // a blank row and the list
+	}
+
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("Attributes.Title"))
 	dlg.ShowClose = true
 	x, y := dlg.X1, dlg.Y1
@@ -1077,6 +1172,52 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	lblFile := vtui.NewText(0, 0, fileText, vtui.Palette[vtui.ColDialogText])
 	dlg.AddItem(lblFile)
 	mainVBox.Add(lblFile, vtui.Margins{}, vtui.AlignLeft)
+
+	var editLinkTarget *vtui.Edit
+	var rowLinkTarget *vtui.HBoxLayout
+	if linkTarget != "" {
+		// Which kind of link it is matters, and Ctrl+A did not say
+		// (DkmS1953, f4#1828).
+		kind := i18n.Msg("Attributes.LinkKindSymlink")
+		if linkIsJunction {
+			kind = i18n.Msg("Attributes.LinkKindJunction")
+		}
+		lblKind := vtui.NewText(0, 0, kind, vtui.Palette[vtui.ColDialogText])
+		dlg.AddItem(lblKind)
+		mainVBox.Add(lblKind, vtui.Margins{Top: 1}, vtui.AlignLeft)
+		editLinkTarget = vtui.NewEdit(0, 0, 40, linkTarget)
+		lblLinkTarget := vtui.NewLabel(0, 0, i18n.Msg("Attributes.Target"), editLinkTarget)
+		rowLinkTarget = vtui.NewHBoxLayout(0, 0, 54, 1)
+		rowLinkTarget.Add(lblLinkTarget, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		rowLinkTarget.Add(editLinkTarget, vtui.Margins{}, vtui.AlignFill)
+		dlg.AddItem(lblLinkTarget)
+		dlg.AddItem(editLinkTarget)
+		mainVBox.Add(rowLinkTarget, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
+
+	if len(linkNames) > 0 {
+		// Not DropdownOnly: the field takes a selection, so a name can be
+		// copied with Ctrl+Ins. What is typed there is never saved.
+		comboLinks := vtui.NewComboBox(0, 0, 30, linkNames)
+		comboLinks.Menu.SetSelectPos(0)
+		comboLinks.Edit.SetText(linkNames[0])
+		// A name chosen from the list is selected in the field, ready for
+		// Ctrl+Ins (DkmS1953, f4#1861). It is not put on the clipboard by
+		// itself: that would replace what is there without being asked.
+		comboLinks.Menu.OnAction = func(idx int) {
+			if idx >= 0 && idx < len(linkNames) {
+				comboLinks.Edit.SetText(linkNames[idx])
+				comboLinks.Edit.SelectAll()
+			}
+		}
+		lblLinks := vtui.NewLabel(0, 0, fmt.Sprintf(i18n.Msg("Attributes.HardLinks"), len(linkNames)), comboLinks)
+		rowLinks := vtui.NewHBoxLayout(0, 0, 54, 1)
+		rowLinks.Add(lblLinks, vtui.Margins{Right: 1}, vtui.AlignLeft)
+		rowLinks.Add(comboLinks, vtui.Margins{}, vtui.AlignFill)
+		dlg.AddItem(lblLinks)
+		dlg.AddItem(comboLinks)
+		mainVBox.Add(rowLinks, vtui.Margins{Top: 1}, vtui.AlignFill)
+	}
 
 	gbAttr := vtui.NewGroupBox(0, 0, 54, 6, " "+i18n.Msg("Attributes.Flags")+" ")
 	dlg.AddItem(gbAttr)
@@ -1189,6 +1330,9 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	// Apply first pass
 	mainVBox.Apply()
 	rowTime.Apply()
+	if rowLinkTarget != nil {
+		rowLinkTarget.Apply()
+	}
 	if rowCreated != nil {
 		rowCreated.Apply()
 	}
@@ -1299,20 +1443,54 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 			}
 		}
 
-		vtui.RunAsync(func(ctx *vtui.TaskContext) {
-			err := setWindowsAttributesForTargets(ctx.Context, v, targets, edit)
-			ctx.RunOnUI(func() {
-				if err != nil {
-					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
-					return
+		newLinkTarget := ""
+		if editLinkTarget != nil {
+			newLinkTarget = strings.TrimSpace(editLinkTarget.GetText())
+		}
+		changeLink := newLinkTarget != "" && newLinkTarget != linkTarget
+		confirmDanglingLink(v, path, newLinkTarget, !changeLink || linkIsJunction, func() {
+			vtui.RunAsync(func(ctx *vtui.TaskContext) {
+				var err error
+				if changeLink {
+					err = replaceLinkTarget(ctx.Context, v, path, newLinkTarget, linkIsJunction)
+				} else if editLinkTarget != nil && newLinkTarget == "" {
+					err = errors.New("link target cannot be empty")
 				}
-				dlg.Close()
-				if refresh != nil {
-					refresh()
+				if err == nil {
+					err = setWindowsAttributesForTargets(ctx.Context, v, targets, edit)
 				}
+				ctx.RunOnUI(func() {
+					if err != nil {
+						vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+						return
+					}
+					dlg.Close()
+					if refresh != nil {
+						refresh()
+					}
+				})
 			})
 		})
 	}
 	btnCancel.OnClick = func() { dlg.Close() }
 	vtui.FrameManager.Push(dlg)
+}
+
+// attributesHardLinkNames is every name of the file when it has more than
+// one and the file system can tell them (vfs.OSVFS on Windows).
+func attributesHardLinkNames(v vfs.VFS, path string, item vfs.VFSItem, multiple bool) []string {
+	if multiple || item.IsDir {
+		return nil
+	}
+	lister, ok := v.(interface {
+		HardLinkNames(ctx context.Context, path string) ([]string, error)
+	})
+	if !ok {
+		return nil
+	}
+	names, err := lister.HardLinkNames(context.Background(), path)
+	if err != nil || len(names) < 2 {
+		return nil
+	}
+	return names
 }

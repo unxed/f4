@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"strings"
@@ -501,6 +502,8 @@ type dirCacheKey struct {
 }
 
 type FileSystemPanel struct {
+	selMemo selectionMemo
+
 	// folderEventPath is the folder the FolderChanged macro event was last
 	// raised for, so a refresh of the same folder does not raise it again.
 	folderEventPath        string
@@ -572,9 +575,15 @@ type FileSystemPanel struct {
 	// leftover AI download's RefreshAll re-armed the queue while a test
 	// helper's join goroutine was still returning from the round that had
 	// just finished.
-	loadIdleCh                 chan struct{}
-	loadWorkerActive           bool
-	pendingDirectoryLoad       func()
+	loadIdleCh           chan struct{}
+	loadWorkerActive     bool
+	pendingDirectoryLoad func()
+	// pendingDetachable and runningDetachable say a load may be left behind
+	// once cancelled (a local read that can hang on a sudo password,
+	// f4#1411); loadWorkerGen moves on when one is, so its worker stops.
+	pendingDetachable          bool
+	runningDetachable          bool
+	loadWorkerGen              uint64
 	ProviderOpenTask           *vtui.TaskContext
 	directoryErrorDialog       *vtui.Window
 	ProviderOpenTarget         string
@@ -588,10 +597,13 @@ type FileSystemPanel struct {
 	suppressFolderHistoryPath  string // one-shot: history/menu navigation must not reorder MRU
 	suppressFolderHistoryToken uint64 // binds suppression to one specific asynchronous directory load
 	FastFindMode               bool
-	FastFindStr                string
-	fastFindMatcherKey         string
-	fastFindMatcherStrict      bool
-	fastFindMatchers           []*vtui.FuzzyMatcher
+	// exactBoxX1..X2, exactBoxY: where the exact-match line of the filter
+	// window was last drawn, for the mouse.
+	exactBoxX1, exactBoxX2, exactBoxY int
+	FastFindStr                       string
+	fastFindMatcherKey                string
+	fastFindMatcherStrict             bool
+	fastFindMatchers                  []*vtui.FuzzyMatcher
 	// autoFilterMode is set while the filter window is open (the search
 	// box narrows the panel instead of moving the cursor), autoFilterOn
 	// while its query is actually hiding rows. unfilteredEntries then holds
@@ -1163,6 +1175,25 @@ func (fp *FileSystemPanel) SetViewMode(mode ViewMode) {
 	fp.Wide = false
 	fp.configureCellSelection()
 	fp.Resize(fp.X2-fp.X1+1, fp.Y2-fp.Y1+1)
+	fp.reloadForLinkCounts()
+}
+
+// reloadForLinkCounts reads the directory again when the mode now shows the
+// "LN" column and the listing on screen was loaded without the counts, which
+// only a load asks for (f4#1861).
+func (fp *FileSystemPanel) reloadForLinkCounts() {
+	if _, ok := fp.Vfs.(linkCountFiller); !ok {
+		return
+	}
+	if !panelColumnsShow(PanelViewModeSettings(fp.EffectiveViewMode()).Columns, LinkCountColumn) {
+		return
+	}
+	for _, e := range fp.AllEntries() {
+		if !e.IsDir && e.Name != ".." && !e.HasMetadata(vfs.MetadataNlink) {
+			fp.ReadDirectory()
+			return
+		}
+	}
 }
 
 // mouseEntryIndex returns the entry under the mouse. Multi-column panel modes
@@ -2067,8 +2098,9 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 		fp.Table.SelectCol = 0
 		if fp.FastFindMode {
 			H := fp.Table.ViewHeight
-			if H > 2 && visual >= fp.Table.TopPos+H-2 {
-				fp.Table.TopPos = visual - H + 3
+			covered := fp.fastFindBoxHeight() - 1 // rows of the box over the list; its last row is the frame
+			if H > covered && visual >= fp.Table.TopPos+H-covered {
+				fp.Table.TopPos = visual - H + covered + 1
 				if fp.Table.TopPos < 0 {
 					fp.Table.TopPos = 0
 				}
@@ -2094,11 +2126,11 @@ func (fp *FileSystemPanel) SetCursorIndex(idx int) {
 			fp.Table.TopPos = visual - fp.gridColumnCount()*H + 1
 		}
 
-		if fp.FastFindMode && H > 2 {
+		if covered := fp.fastFindBoxHeight() - 1; fp.FastFindMode && H > covered {
 			rel := visual - fp.Table.TopPos
 			row := rel % H
-			if row >= H-2 {
-				shift := row - (H - 3)
+			if row >= H-covered {
+				shift := row - (H - covered - 1)
 				fp.Table.TopPos += shift
 			}
 		}
@@ -2247,14 +2279,33 @@ func (fp *FileSystemPanel) ReadDirectory() {
 // cancelled by readDirectoryEx; it may still need to drain one FISH+ response,
 // after which only the most recent path is allowed to start.
 func (fp *FileSystemPanel) EnqueueDirectoryLoad(load func()) {
+	fp.enqueueDirectoryLoad(load, false)
+}
+
+// enqueueDirectoryLoad is EnqueueDirectoryLoad; detachable says this load
+// need not be waited for once a newer one cancels it. A local read may sit
+// on a sudo password prompt (entering /root), and the next directory the user
+// walks to stayed empty until the prompt was answered (f4#1411). A remote
+// read is still waited for: its connection carries one request at a time.
+func (fp *FileSystemPanel) enqueueDirectoryLoad(load func(), detachable bool) {
 	fp.loadQueueMu.Lock()
 	if fp.loadWorkerActive {
-		fp.pendingDirectoryLoad = load
-		fp.loadQueueMu.Unlock()
-		return
+		if !fp.runningDetachable {
+			fp.pendingDirectoryLoad, fp.pendingDetachable = load, detachable
+			fp.loadQueueMu.Unlock()
+			return
+		}
+		// The running read was cancelled by this navigation: leave it to
+		// finish on its own, its results are dropped (loadCtx no longer
+		// matches), and start this one now.
+		fp.loadWorkerGen++
+		fp.pendingDirectoryLoad = nil
+	} else {
+		fp.loadWorkerActive = true
+		fp.loadIdleCh = make(chan struct{})
 	}
-	fp.loadWorkerActive = true
-	fp.loadIdleCh = make(chan struct{})
+	fp.runningDetachable = detachable
+	gen := fp.loadWorkerGen
 	// Every worker is also counted process-wide. A worker reads globals while
 	// it runs -- config.App and vtui.FrameManager, and the frame manager's task
 	// queue when it posts back -- so anything that replaces one of those has to
@@ -2272,7 +2323,13 @@ func (fp *FileSystemPanel) EnqueueDirectoryLoad(load func()) {
 			next()
 
 			fp.loadQueueMu.Lock()
+			if fp.loadWorkerGen != gen {
+				// Left behind: a newer worker owns the queue.
+				fp.loadQueueMu.Unlock()
+				return
+			}
 			next = fp.pendingDirectoryLoad
+			fp.runningDetachable = fp.pendingDetachable
 			fp.pendingDirectoryLoad = nil
 			if next == nil {
 				fp.loadWorkerActive = false
@@ -2729,8 +2786,26 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		}
 	}
 
+	// Building the skeleton drops whatever rows the panel is showing, so it
+	// happens only for a directory the panel has nothing to show about: one it
+	// has never read. Two cases keep the rows instead:
+	//
+	//   - a reload of the directory already on screen, where those rows are
+	//     the freshest view there is. Replacing them with an empty ".."
+	//     skeleton flashes it with the cursor parked on it until the async
+	//     ReadDir finishes -- the jump seen after a delete or an in-place
+	//     copy, which reloads twice (dirwatch plus the completion callback).
+	//   - a navigation with SyncPanelLoad on, which promises to replace the
+	//     listing only once the whole directory is ready. Dropping to ".."
+	//     until then parks the cursor on it and bounces it onto the row the
+	//     user navigated from the moment the listing arrives -- the jump seen
+	//     on Ctrl+PgUp.
+	// The completion task below swaps in the fresh list atomically either way,
+	// the same contract the cached branch above follows.
+	buildSkeleton := len(fp.AllEntries()) == 0 ||
+		(directoryChanged && !config.App.SyncPanelLoad)
 	isFirstChunk := true
-	if !keepEntries && !hasCache {
+	if !keepEntries && !hasCache && buildSkeleton {
 		var entries []*FileEntry
 		if showUpEntry {
 			entries = []*FileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
@@ -2752,8 +2827,16 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 	loadSyncPanel := config.App.SyncPanelLoad
 	loadShowHidden := config.App.ShowHiddenFiles
 	loadFrames := vtui.FrameManager
+	// The "LN" column needs a query per file on Windows, which the plain
+	// listing does not make; pay it only while the column is on screen
+	// (f4#1861).
+	linkCounter, _ := loadVFS.(linkCountFiller)
+	if !panelColumnsShow(PanelViewModeSettings(fp.EffectiveViewMode()).Columns, LinkCountColumn) {
+		linkCounter = nil
+	}
 
-	fp.EnqueueDirectoryLoad(func() {
+	_, localLoad := loadVFS.(*vfs.OSVFS)
+	fp.enqueueDirectoryLoad(func() {
 		if ctx.Err() != nil {
 			return
 		}
@@ -2762,6 +2845,9 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 		err := loadVFS.ReadDir(ctx, path, func(chunk []vfs.VFSItem) {
 			if ctx.Err() != nil {
 				return
+			}
+			if linkCounter != nil {
+				linkCounter.FillLinkCounts(ctx, path, chunk)
 			}
 			accumulated = append(accumulated, chunk...)
 			if ctx.Err() != nil {
@@ -3107,7 +3193,7 @@ func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
 			fp.Refresh()
 			loadFrames.Redraw()
 		})
-	})
+	}, localLoad)
 }
 
 // applyUpItemStat gives the ".." row the times, mode and owner of the parent
@@ -3447,8 +3533,8 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		// driven through the console API (f4 #219, classic conhost draws
 		// DECSCUSR's underline as a one-pixel hairline).
 		scr.SetCursorShape(vtui.InsertCursorShape())
-		boxW := 24
-		boxH := 3
+		boxW := fastFindBoxWidth(fp.autoFilterMode)
+		boxH := fp.fastFindBoxHeight()
 
 		fx1 := fp.X1 + 9
 		if fx1+boxW-1 >= scr.Width() {
@@ -3459,7 +3545,7 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		}
 		fx2 := fx1 + boxW - 1
 
-		fy1 := fp.Y2 - 2
+		fy1 := fp.Y2 - boxH + 1
 		if fy1 < 0 {
 			fy1 = 0
 		}
@@ -3476,7 +3562,7 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		p.DrawTitle(fx1, fy1, fx2, title, vtui.Palette[vtui.ColDialogBoxTitle])
 
 		searchStr := fp.FastFindStr
-		for runewidth.StringWidth(searchStr) > boxW-4 {
+		for runewidth.StringWidth(searchStr) > boxW-3 {
 			runes := []rune(searchStr)
 			searchStr = string(runes[1:])
 		}
@@ -3486,12 +3572,66 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		if fp.fastFindHasMatches() || (fp.autoFilterMode && autoFilterQuery(fp.FastFindStr) == "") {
 			searchColor = vtui.Palette[vtui.ColMenuHighlight]
 		}
-		searchAttr := fastFindMatchAttr(vtui.Palette[vtui.ColDialogText], searchColor)
-		p.DrawString(fx1+2, fy1+1, searchStr, searchAttr)
+		// The query is typed on the field colour every dialog's edit control
+		// has; the foreground stays the match / no-match colour of the text
+		// (f4#1131).
+		editAttr := vtui.Palette[vtui.ColDialogEdit]
+		p.Fill(fx1+1, fy1+1, fx2-1, fy1+1, ' ', editAttr)
+		searchAttr := fastFindMatchAttr(editAttr, searchColor)
+		p.DrawString(fx1+1, fy1+1, searchStr, searchAttr)
 
-		scr.SetCursorPos(fx1+2+runewidth.StringWidth(searchStr), fy1+1)
+		if fp.autoFilterMode {
+			// The exact-match option sits in the filter window itself, where the
+			// query is typed (f4#1131). The glyph is the one a dialog checkbox uses.
+			sym := vtui.SymCheckboxOff
+			if config.App.PanelStrictAutoFilter {
+				sym = vtui.SymCheckboxOn
+			}
+			textAttr := vtui.Palette[vtui.ColDialogText]
+			p.DrawSymGlyph(fx1+2, fy1+2, sym, textAttr)
+			p.DrawString(fx1+5, fy1+2, " "+i18n.Msg("Panel.AutoFilterExact"), textAttr)
+			fp.exactBoxX1, fp.exactBoxX2, fp.exactBoxY = fx1+2, fx2-2, fy1+2
+		}
+
+		scr.SetCursorPos(fx1+1+runewidth.StringWidth(searchStr), fy1+1)
 		scr.SetCursorVisible(true)
 	}
+}
+
+// fastFindBoxHeight is the height of the search window: the filter has a
+// second line for its exact-match option.
+func (fp *FileSystemPanel) fastFindBoxHeight() int {
+	if fp.autoFilterMode {
+		return 4
+	}
+	return 3
+}
+
+// fastFindBoxWidth makes the window wide enough for the exact-match option in
+// the current language: its glyph, a space and the label, between two cells
+// of frame and one of air on each side.
+func fastFindBoxWidth(filter bool) int {
+	const base = 24
+	if !filter {
+		return base
+	}
+	return max(base, runewidth.StringWidth(i18n.Msg("Panel.AutoFilterExact"))+4+4+1)
+}
+
+// ToggleExactAutoFilter flips the exact-match option and re-derives the
+// narrowed list at once, so the checkbox shows its effect as it is clicked.
+func (fp *FileSystemPanel) ToggleExactAutoFilter() {
+	config.App.PanelStrictAutoFilter = !config.App.PanelStrictAutoFilter
+	config.SaveConfig()
+	if fp.autoFilterMode {
+		fp.updateAutoFilter()
+	}
+}
+
+// exactCheckboxAt reports whether the pointer is over the exact-match line of
+// the open filter window.
+func (fp *FileSystemPanel) exactCheckboxAt(x, y int) bool {
+	return fp.FastFindMode && fp.autoFilterMode && y == fp.exactBoxY && x >= fp.exactBoxX1 && x <= fp.exactBoxX2
 }
 
 func (fp *FileSystemPanel) fastFindMatch(name string) (startRunes, matchedRunes int, ok bool) {
@@ -3737,6 +3877,11 @@ func (fp *FileSystemPanel) processKey(e *vtinput.InputEvent, allowProviderPanelE
 			// Fast Find keeps its insertion point at the end, so forward Delete
 			// has nothing to remove. Consume it here rather than allowing the
 			// panel-level Del binding to hide the panels.
+			return true
+		}
+		if filtering && e.VirtualKeyCode == vtinput.VK_E && ctrl && !shift && !alt {
+			fp.ToggleExactAutoFilter()
+			vtui.FrameManager.Redraw()
 			return true
 		}
 		if e.VirtualKeyCode == vtinput.VK_F2 && !shift && !ctrl && !alt {
@@ -4118,6 +4263,13 @@ func (fp *FileSystemPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 	}
 
+	if e.WheelDirection == 0 && e.ButtonState&vtinput.FromLeft1stButtonPressed != 0 && e.KeyDown &&
+		!isMove && fp.exactCheckboxAt(int(e.MouseX), int(e.MouseY)) {
+		fp.ToggleExactAutoFilter()
+		vtui.FrameManager.Redraw()
+		return true
+	}
+
 	if fp.processScrollBarMouse(e) {
 		return true
 	}
@@ -4372,8 +4524,59 @@ func (fp *FileSystemPanel) SelectName(name string) {
 	}
 }
 
+// selectionMemo lets a caller that asks the same panel for its selection many
+// times in a row, with nothing changing in between, walk the listing once
+// (f4#1832). While it is on, GetSelectedNames hands back the first answer.
+type selectionMemo struct {
+	mu    sync.Mutex
+	on    bool
+	valid bool
+	names []string
+}
+
+// MemoizeSelection makes GetSelectedNames answer from its first result until
+// the returned function is called. The result is shared, so callers must only
+// read it. Use it around a pass that does not change the panel, such as
+// refreshing the dimmed menu rows.
+func (fp *FileSystemPanel) MemoizeSelection() (end func()) {
+	fp.selMemo.mu.Lock()
+	fp.selMemo.on, fp.selMemo.valid, fp.selMemo.names = true, false, nil
+	fp.selMemo.mu.Unlock()
+	return func() {
+		fp.selMemo.mu.Lock()
+		fp.selMemo.on, fp.selMemo.valid, fp.selMemo.names = false, false, nil
+		fp.selMemo.mu.Unlock()
+	}
+}
+
 // GetSelectedNames returns a list of selected files. If none are selected, returns the focused one.
 func (fp *FileSystemPanel) GetSelectedNames() []string {
+	fp.selMemo.mu.Lock()
+	if fp.selMemo.on && fp.selMemo.valid {
+		names := fp.selMemo.names
+		fp.selMemo.mu.Unlock()
+		return names
+	}
+	fp.selMemo.mu.Unlock()
+	names := fp.selectedNames()
+	fp.selMemo.mu.Lock()
+	if fp.selMemo.on {
+		fp.selMemo.names, fp.selMemo.valid = names, true
+	}
+	fp.selMemo.mu.Unlock()
+	return names
+}
+
+// selectionWalks counts the walks of a listing that GetSelectedNames made, for
+// the responsiveness test of the menu (f4#1832).
+var selectionWalks atomic.Int64
+
+// SelectionWalks is the number of times GetSelectedNames has walked a whole
+// listing since the process started.
+func SelectionWalks() int64 { return selectionWalks.Load() }
+
+func (fp *FileSystemPanel) selectedNames() []string {
+	selectionWalks.Add(1)
 	var names []string
 	// 1. Collect explicitly selected items (ins/shift+arrows)
 	for _, e := range fp.Entries {
@@ -4405,6 +4608,18 @@ func (fp *FileSystemPanel) GetMarkedNames() []string {
 		}
 	}
 	return names
+}
+
+// GetMarkedFolderPaths returns explicitly marked directories in panel order.
+// The cursor alone and directory symlinks do not define a search scope.
+func (fp *FileSystemPanel) GetMarkedFolderPaths() []string {
+	paths := make([]string, 0)
+	for _, entry := range fp.Entries {
+		if entry.Selected && entry.IsDir && !entry.IsSymlink && entry.Name != ".." {
+			paths = append(paths, fp.Vfs.Join(fp.Vfs.GetPath(), entry.Name))
+		}
+	}
+	return paths
 }
 
 // ReplaceMarkedNames atomically replaces the explicit panel selection.

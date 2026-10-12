@@ -252,3 +252,51 @@ func TestAttributesDialog_TimeRowsLayout(t *testing.T) {
 		})
 	}
 }
+
+// f4#1817: the rows go Created, Modified, Metadata (changed), Accessed.
+func TestAttributesDialog_UnixTimeRowsOrder(t *testing.T) {
+	fm := vtui.FrameManager
+	fm.Init(vtui.NewSilentScreenBuf())
+
+	mockVFS := &mockMetadataVFS{VFS: vfs.NewOSVFS(t.TempDir())}
+	mtime := time.Date(2021, 3, 4, 5, 6, 7, 0, time.Local)
+	item := vfs.VFSItem{
+		Name: "a.txt", UnixMode: 0644, MTime: mtime,
+		BTime:         time.Date(2020, 1, 2, 3, 4, 5, 0, time.Local),
+		ATime:         time.Date(2023, 6, 7, 8, 9, 10, 0, time.Local),
+		CTime:         time.Date(2024, 11, 12, 13, 14, 15, 0, time.Local),
+		KnownMetadata: vfs.MetadataExplicit | vfs.MetadataBTime | vfs.MetadataATime | vfs.MetadataCTime,
+	}
+
+	ShowAttributesUnix(nil, mockVFS, "a.txt", item)
+	dlg := fm.GetTopFrame().(vtui.Container)
+	rows := map[string]int{}
+	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
+		switch c := el.(type) {
+		case *vtui.Text:
+			for _, key := range []string{"Attributes.Created", "Attributes.Changed", "Attributes.Accessed"} {
+				if strings.HasPrefix(c.GetText(), i18n.Msg(key)) {
+					rows[key] = c.Y1
+				}
+			}
+		case *vtui.Edit:
+			if c.GetText() == mtime.Format(attributesTimeFormat) {
+				rows["Attributes.MTime"] = c.Y1
+			}
+		}
+		return true
+	})
+	order := []string{"Attributes.Created", "Attributes.MTime", "Attributes.Changed", "Attributes.Accessed"}
+	previous := ""
+	for _, key := range order {
+		if _, ok := rows[key]; !ok {
+			t.Fatalf("no row for %s: %v", key, rows)
+		}
+		if previous != "" && rows[previous] >= rows[key] {
+			t.Errorf("%s (line %d) is not below %s (line %d)", key, rows[key], previous, rows[previous])
+		}
+		previous = key
+	}
+	fm.GetTopFrame().SetExitCode(-1)
+	fm.Pop()
+}

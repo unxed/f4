@@ -101,7 +101,7 @@ func workspaceNumberShortcuts(number int) []string {
 		return nil
 	}
 	shortcuts := []string{keymap.FormatKeyForUI(fmt.Sprintf("Alt%d", number))}
-	if vtui.FrameManager.WorkspaceTabMode == vtui.WorkspaceTabsOnCtrl {
+	if mode := vtui.FrameManager.WorkspaceTabMode; mode == vtui.WorkspaceTabsOnCtrl || mode == vtui.WorkspaceTabsWhileCtrl {
 		shortcuts = append(shortcuts, keymap.FormatKeyForUI(fmt.Sprintf("CtrlAlt%d", number)))
 	}
 	return keymap.MergeShortcuts(shortcuts)

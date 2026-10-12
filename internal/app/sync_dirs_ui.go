@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/fileops"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/numeric"
@@ -66,8 +67,8 @@ func ShowSyncDirsDialog(pf *panel.PanelsFrame) {
 	inner := syncOptionsDialogWidth - 6
 
 	pathW := inner - vtui.StringWidth(i18n.Msg("Sync.Right")) - 1
-	lblLeft := vtui.NewText(0, 0, padLabelTo(syncPathLine(i18n.Msg("Sync.Left"), active.Vfs.GetPath(), pathW), inner), 0)
-	lblRight := vtui.NewText(0, 0, padLabelTo(syncPathLine(i18n.Msg("Sync.Right"), passive.Vfs.GetPath(), pathW), inner), 0)
+	lblLeft := vtui.NewText(0, 0, dialog.PadLabelTo(syncPathLine(i18n.Msg("Sync.Left"), active.Vfs.GetPath(), pathW), inner), 0)
+	lblRight := vtui.NewText(0, 0, dialog.PadLabelTo(syncPathLine(i18n.Msg("Sync.Right"), passive.Vfs.GetPath(), pathW), inner), 0)
 
 	lblMask := vtui.NewLabel(0, 0, i18n.Msg("Sync.Mask"), nil)
 	edMask := vtui.NewEdit(0, 0, syncMaskWidth, opts.Mask)
@@ -419,7 +420,7 @@ func ShowSyncResults(pf *panel.PanelsFrame, sides fileops.SyncSides, opts config
 	}
 
 	w.statsW = inner
-	w.lblStats = vtui.NewText(0, 0, padLabelTo(syncTotalsText(fileops.SyncPlanTotals(pairs)), inner), 0)
+	w.lblStats = vtui.NewText(0, 0, dialog.PadLabelTo(syncTotalsText(fileops.SyncPlanTotals(pairs)), inner), 0)
 
 	btnSync := vtui.NewButton(0, 0, i18n.Msg("Sync.BtnSynchronize"))
 	btnSync.IsDefault = true
@@ -514,7 +515,7 @@ func (w *SyncResultsWindow) rebuild() {
 
 // refreshStats rewrites the totals line in place.
 func (w *SyncResultsWindow) refreshStats() {
-	w.lblStats.SetText(padLabelTo(syncTotalsText(fileops.SyncPlanTotals(w.pairs)), w.statsW))
+	w.lblStats.SetText(dialog.PadLabelTo(syncTotalsText(fileops.SyncPlanTotals(w.pairs)), w.statsW))
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.Redraw()
 	}
@@ -656,7 +657,7 @@ func (w *SyncResultsWindow) confirmAndRun() {
 	}
 	texts := make([]*vtui.Text, len(lines))
 	for i, line := range lines {
-		texts[i] = vtui.NewText(0, 0, padLabelTo(line, inner), 0)
+		texts[i] = vtui.NewText(0, 0, dialog.PadLabelTo(line, inner), 0)
 	}
 
 	cbRight := vtui.NewCheckbox(0, 0, i18n.Msg("Sync.DoToRight"), false)

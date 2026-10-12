@@ -91,7 +91,7 @@ func TestProviderReportsChatAndModelPayloadErrors(t *testing.T) {
 				_, _ = w.Write([]byte(tc.response))
 			}))
 			defer server.Close()
-			_, _, err := (Config{BaseURL: server.URL, APIKey: "key"}).Chat(context.Background(), nil)
+			_, _, err := (Config{BaseURL: server.URL, APIKey: "key", Model: "m"}).Chat(context.Background(), nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Chat error = %v, want %q", err, tc.want)
 			}

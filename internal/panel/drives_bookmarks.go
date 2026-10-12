@@ -154,11 +154,12 @@ func DriveBookmarkKeyMatches(bookmark DriveBookmark, eKey string) bool {
 func DriveBookmarkMenuText(bookmark DriveBookmark) string {
 	name := dialog.EscapeAmpersand(strings.TrimSpace(bookmark.Name))
 	key := strings.TrimSpace(bookmark.Hotkey)
+	// One space between the hotkey column and the name, as in the Tools (f4#1148).
 	if key == "" {
-		return "   " + name
+		return "  " + name
 	}
 	if len([]rune(key)) == 1 && !strings.ContainsAny(key, "+") {
-		return "&" + key + "  " + name
+		return "&" + key + " " + name
 	}
-	return keymap.FormatKeyForUI(key) + "  " + name
+	return keymap.FormatKeyForUI(key) + " " + name
 }

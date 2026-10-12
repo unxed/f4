@@ -2,10 +2,9 @@ package editor
 
 import (
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/unxed/f4/internal/terminal"
+	"github.com/unxed/f4/internal/viewer"
 	"github.com/unxed/vtui"
 )
 
@@ -25,44 +24,80 @@ func (ev *EditorView) DeleteToLineEnd() {
 	ev.deleteRange(start, lineEnd)
 }
 
-// DeleteWordBackward implements FAR's Ctrl+Backspace word deletion. It
-// consumes the whitespace next to the word as well, matching the editor's
-// Ctrl+Left/Ctrl+Right tokenisation closely enough for punctuation and
-// Unicode text.
+// isEditSpace and isWordDiv are far2l's IsSpace and IsWordDiv with the default
+// word dividers (viewer.DefaultWordDiv). Spaces are not dividers there.
+func isEditSpace(r rune) bool { return r == ' ' || r == '\t' }
+
+func isWordDiv(r rune) bool { return strings.ContainsRune(viewer.DefaultWordDiv, r) }
+
+// wordStartBackward is where far2l's Ctrl+Backspace stops deleting
+// (Edit::ProcessKey, KEY_CTRLBS) when the cursor is at rune index pos of line:
+// one rune at a time, stopping where spaces meet non-spaces, or before a word
+// divider. So the quote in front of a string literal stays (DkmS1953, f4#1729).
+func wordStartBackward(line []rune, pos int) int {
+	for pos > 0 {
+		stop := pos > 1 && isEditSpace(line[pos-1]) != isEditSpace(line[pos-2])
+		pos--
+		if pos == 0 || stop || isWordDiv(line[pos-1]) {
+			break
+		}
+	}
+	return pos
+}
+
+// wordEndForward is the rightward counterpart, far2l's KEY_CTRLDEL: the rune
+// at pos goes, then the following ones up to a divider or up to the last space
+// before a non-space.
+func wordEndForward(line []rune, pos int) int {
+	for pos < len(line) {
+		stop := pos < len(line)-1 && isEditSpace(line[pos]) && !isEditSpace(line[pos+1])
+		pos++
+		if pos >= len(line) || stop || isWordDiv(line[pos]) {
+			break
+		}
+	}
+	return pos
+}
+
+// DeleteWordBackward implements FAR's Ctrl+Backspace on the current line
+// (wordStartBackward). At the start of a line there is nothing to delete
+// here; the caller treats the key as Backspace, which joins the lines, as
+// far2l does.
 func (ev *EditorView) DeleteWordBackward() {
 	if ev.SelActive || ev.RectSelActive {
 		ev.DeleteSelection()
 		return
 	}
-	lineStart := ev.Li.GetLineOffset(ev.CursorLine)
+	ev.CursorVirtualSpaces = 0
 	pos := ev.CursorPos
 	if pos <= 0 {
 		return
 	}
-	line, _ := ev.Pt.GetRange(lineStart, ev.GetLineLength(ev.CursorLine))
-	start := pos
-	for start > 0 {
-		prev, width := utf8.DecodeLastRune(line[:start])
-		if !unicode.IsSpace(prev) {
-			break
-		}
-		start -= width
+	lineStart := ev.Li.GetLineOffset(ev.CursorLine)
+	text, _ := ev.Pt.GetRange(lineStart, pos)
+	runes := []rune(string(text))
+	keep := wordStartBackward(runes, len(runes))
+	ev.deleteRange(lineStart+len(string(runes[:keep])), lineStart+pos)
+}
+
+// DeleteWordForward implements FAR's Ctrl+Del/Ctrl+T on the current line
+// (wordEndForward). At the end of a line it does nothing; the caller treats
+// the key as Del, which joins the lines, as far2l does.
+func (ev *EditorView) DeleteWordForward() {
+	if ev.SelActive || ev.RectSelActive {
+		ev.DeleteSelection()
+		return
 	}
-	for start > 0 {
-		prev, width := utf8.DecodeLastRune(line[:start])
-		if unicode.IsSpace(prev) {
-			break
-		}
-		start -= width
+	lineStart := ev.Li.GetLineOffset(ev.CursorLine)
+	lineLen := ev.GetLineLength(ev.CursorLine)
+	if ev.CursorVirtualSpaces > 0 || ev.CursorPos >= lineLen {
+		return
 	}
-	for start > 0 {
-		prev, width := utf8.DecodeLastRune(line[:start])
-		if !unicode.IsSpace(prev) {
-			break
-		}
-		start -= width
-	}
-	ev.deleteRange(lineStart+start, lineStart+pos)
+	text, _ := ev.Pt.GetRange(lineStart+ev.CursorPos, lineLen-ev.CursorPos)
+	runes := []rune(string(text))
+	end := wordEndForward(runes, 0)
+	start := lineStart + ev.CursorPos
+	ev.deleteRange(start, start+len(string(runes[:end])))
 }
 
 func (ev *EditorView) deleteRange(start, end int) {

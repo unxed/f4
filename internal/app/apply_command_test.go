@@ -21,6 +21,13 @@ import (
 
 type applyTestHistoryProvider struct{ values map[string][]string }
 
+// Apply Command owns a specialized frame; its behavioral tests depend on the
+// dialog contract rather than the embedded Window's concrete type.
+type applyTestDialog interface {
+	vtui.Frame
+	vtui.Container
+}
+
 type unavailableApplyCommandRunner struct{ *vfs.OSVFS }
 
 type invalidDialectApplyCommandRunner struct{ *vfs.OSVFS }
@@ -158,8 +165,8 @@ func TestApplyCommandActionUsesActivePanelWorkspace(t *testing.T) {
 	if got := panel.FindPanelsFrame(); got != pfB {
 		t.Fatalf("Apply switched to background workspace A; active frame = %p", got)
 	}
-	top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-	if !ok || top.GetTitle() != i18n.Msg("ApplyCommand.Title") {
+	top, ok := vtui.FrameManager.GetTopFrame().(applyTestDialog)
+	if !ok || top.GetType() != vtui.TypeDialog || top.GetTitle() != i18n.Msg("ApplyCommand.Title") {
 		t.Fatalf("active workspace top frame = %T %q", vtui.FrameManager.GetTopFrame(), vtui.FrameManager.GetTopFrame().GetTitle())
 	}
 	top.Close()
@@ -401,8 +408,8 @@ func TestApplyCommandCtrlGOpensHistoryDialogAndPreservesCommandLine(t *testing.T
 	if !handled {
 		t.Fatal("Ctrl+G was not handled")
 	}
-	top, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-	if !ok || top.GetTitle() != i18n.Msg("ApplyCommand.Title") {
+	top, ok := vtui.FrameManager.GetTopFrame().(applyTestDialog)
+	if !ok || top.GetType() != vtui.TypeDialog || top.GetTitle() != i18n.Msg("ApplyCommand.Title") {
 		t.Fatalf("top frame = %T %q", vtui.FrameManager.GetTopFrame(), vtui.FrameManager.GetTopFrame().GetTitle())
 	}
 	foundHistory := false
@@ -435,8 +442,8 @@ func TestApplyCommandPromptCancellationKeepsHistoryAndSelection(t *testing.T) {
 	defer func() { panel.LastApplyCommandTemplate = oldTemplate }()
 
 	panel.ActionApplyCommand(pf)
-	applyDialog, ok := vtui.FrameManager.GetTopFrame().(*vtui.Window)
-	if !ok {
+	applyDialog, ok := vtui.FrameManager.GetTopFrame().(applyTestDialog)
+	if !ok || applyDialog.GetType() != vtui.TypeDialog || applyDialog.GetTitle() != i18n.Msg("ApplyCommand.Title") {
 		t.Fatalf("top frame = %T, want Apply dialog", vtui.FrameManager.GetTopFrame())
 	}
 	var commandEdit *vtui.Edit

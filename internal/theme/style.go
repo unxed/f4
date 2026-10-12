@@ -230,6 +230,11 @@ func ApplyColorStyle(name string) error {
 			themeStyle = base
 		}
 		ApplyColorIni(style.ini)
+		// Elements f4 gained since the file was written are added to it, with
+		// the colours the palette holds now (f4#234).
+		if added := AddMissingColorKeys(UserColorOverridesPath(), style.ini); added > 0 {
+			vtui.DebugLog("THEME: %d new colour elements added to %s", added, UserColorOverridesPath())
+		}
 		// A pre-existing custom theme did not opt into indicator surfaces,
 		// even if its fallback base now defines the newly introduced slot.
 		for _, optional := range []ColorSlot{

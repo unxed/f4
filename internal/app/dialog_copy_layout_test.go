@@ -91,7 +91,7 @@ func isRuleRow(row string) bool {
 // Screen Dump (80x25, the middle 40 columns; the field shows the end of the CI checkout path):
 //
 //	╔════════════════ Copy ════════════[×]═╗
-//	║ Copy 1 item(s) to:                   ║
+//	║ Copy "test.txt" to:                   ║
 //	║ me/runner/work/f4/f4/internal/app/ ↓ ║
 //	║──────────────────────────────────────║
 //	║ Access rights:           Default   ↓ ║
@@ -117,7 +117,7 @@ func TestCopyDialogLayoutHasRulesAndNoBlankRows(t *testing.T) {
 			t.Errorf("row %d of the dialog is blank:\n%s", i, dump)
 		}
 	}
-	for i, want := range map[int]string{1: "Copy 1 item(s) to:", 4: "Access rights:", 5: "Already existing files:", 6: "symlink contents", 7: "Queue", 9: "Advanced options"} {
+	for i, want := range map[int]string{1: `Copy "test.txt" to:`, 4: "Access rights:", 5: "Already existing files:", 6: "symlink contents", 7: "Queue", 9: "Advanced options"} {
 		if !strings.Contains(rows[i], want) {
 			t.Errorf("row %d should hold %q:\n%s", i, want, dump)
 		}
@@ -176,7 +176,7 @@ func TestCopyDialogMarksPrimaryButtonAsDefault(t *testing.T) {
 // Screen Dump (80x25, the middle 40 columns; the field shows the end of the CI checkout path):
 //
 //	╔════════════════ Move ════════════[×]═╗
-//	║ Rename or move 1 item(s) to:         ║
+//	║ Rename or move "test.txt" to:         ║
 //	║ me/runner/work/f4/f4/internal/app/ ↓ ║
 //	║──────────────────────────────────────║
 //	║ Access rights:           Default   ↓ ║

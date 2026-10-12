@@ -35,6 +35,7 @@ func zipEntries(data []byte) ([]archiveEntry, error) {
 			name:  f.Name,
 			isDir: f.FileInfo().IsDir(),
 			mode:  f.Mode(),
+			mtime: f.FileInfo().ModTime(),
 			open:  f.Open,
 		}
 	}

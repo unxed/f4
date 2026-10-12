@@ -94,3 +94,37 @@ func repaintConsoleWindow() {
 	}
 	procInvalidateRectScroll.Call(hwnd, 0, 1) // whole client area, erase background
 }
+
+// MoveHostConsoleCursorToBottom puts the host console's cursor at the start of
+// the last row of its visible window, where a command run in that console
+// should start its output (CommandOutputRow, f4#897 item 2). Rows the cursor
+// skips keep what they hold; the command's output then scrolls them up like
+// any other output.
+//
+// Every failure is silent, for the same reason as ScrollHostConsoleToCursor:
+// output starting higher up is what f4 did before, not a reason to fail the
+// command.
+func MoveHostConsoleCursorToBottom() {
+	hOut, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
+	if err != nil || hOut == 0 || hOut == syscall.InvalidHandle {
+		return
+	}
+	var info overlayBufferInfo
+	if r1, _, _ := procGetConsoleScreenBufferInfoOverlay.Call(uintptr(hOut),
+		uintptr(unsafe.Pointer(&info))); r1 == 0 {
+		return
+	}
+	win := ConsoleWindowRect{
+		Left:   info.Window.Left,
+		Top:    info.Window.Top,
+		Right:  info.Window.Right,
+		Bottom: info.Window.Bottom,
+	}
+	row, ok := CommandOutputRow(win, info.CursorPosition.Y)
+	if !ok {
+		return
+	}
+	r1, _, callErr := procSetConsoleCursorPositionOverlay.Call(uintptr(hOut), winOverlayCoordArg(0, row))
+	vtui.DebugLog("CONSOLE: cursor row %d -> %d (window T%d..B%d) before command: ok=%v err=%v",
+		info.CursorPosition.Y, row, win.Top, win.Bottom, r1 != 0, callErr)
+}

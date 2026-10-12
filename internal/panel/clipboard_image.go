@@ -219,6 +219,16 @@ func ActionPasteClipboard(pf *PanelsFrame) bool {
 	if pf == nil || !pf.ShowPanels || vtui.FrameManager == nil {
 		return false
 	}
+	// A focused panel with a paste of its own takes it: the AI chat puts a
+	// pasted image or files into its context instead of this folder, and
+	// its text into its input line instead of the command line (f4#1842).
+	if pf.ActiveIdx >= 0 && pf.ActiveIdx < len(pf.AltPanels) {
+		if alt := pf.AltPanels[pf.ActiveIdx]; alt != nil && alt.IsFocused() {
+			if p, ok := alt.(interface{ PasteClipboard() bool }); ok {
+				return p.PasteClipboard()
+			}
+		}
+	}
 	active := pf.GetActivePanel()
 	if active == nil || active.Vfs == nil {
 		return false

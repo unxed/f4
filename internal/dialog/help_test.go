@@ -184,3 +184,42 @@ func TestAppendGeneratedHelpActionDefersWrappingToHelpView(t *testing.T) {
 		t.Fatalf("generated action lost its description: %q", topic.Lines[0])
 	}
 }
+
+// f4#410 (montoner0): the panel mode dialog's F1 explains the column types,
+// their modifiers and the widths, and the index links to it.
+func TestHelpPanelModesTopic(t *testing.T) {
+	for _, lang := range []string{"en", "ru"} {
+		t.Run(lang, func(t *testing.T) {
+			data, err := os.ReadFile("help/" + lang + ".hlf")
+			if err != nil {
+				t.Fatal(err)
+			}
+			engine := vtui.NewHelpEngine(NewMemoryHelpVFS(map[string]string{"f4.hlf": string(data)}))
+			if err := engine.LoadFile("f4.hlf"); err != nil {
+				t.Fatal(err)
+			}
+			topic := engine.GetTopic("PanelModes")
+			if topic == nil {
+				t.Fatal("no PanelModes topic")
+			}
+			text := strings.Join(topic.Lines, "\n")
+			for _, want := range []string{"LN", "DM", "SCF", "DMB", "N%", "N,S,N,S"} {
+				if !strings.Contains(text, want) {
+					t.Errorf("PanelModes does not mention %q", want)
+				}
+			}
+			for i, line := range topic.Lines {
+				if width := runewidth.StringWidth(strings.ReplaceAll(line, "#", "")); width > 73 {
+					t.Errorf("PanelModes line %d is %d cells wide: %q", i+1, width, line)
+				}
+			}
+			linked := false
+			for _, link := range engine.GetTopic("Contents").Links {
+				linked = linked || link.Target == "PanelModes"
+			}
+			if !linked {
+				t.Error("Contents does not link to PanelModes")
+			}
+		})
+	}
+}

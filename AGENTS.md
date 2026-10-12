@@ -11,7 +11,7 @@ static binary and runs either in a terminal or as a standalone graphical window.
 
 ## Tech Stack
 
-- **Programming language:** Go 1.26.6, `CGO_ENABLED=0`
+- **Programming language:** Go 1.26.9, `CGO_ENABLED=0`
 - **Framework:** none — custom TUI; UI and input come from the external `vtui` and
   `vtinput` libraries
 - **Database:** none for the application; `plugins/sqlite` browses user SQLite files
@@ -30,6 +30,7 @@ internal/        # everything the application is, in layers
   viewer/        #   layer 3: the viewer
   terminal/      #   layer 3: the terminal view, PTY sessions, ConPTY
   cmdline/       #   layer 3: the command line and apply-command
+  findfile/      #   layer 3: live file search and its results window
   dialog/        #   layer 3: dialogs, help, settings screens
   media/         #   layer 3: images, audio, video
   macro/         #   layer 3: the macro engine

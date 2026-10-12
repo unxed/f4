@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtui"
 )
 
@@ -14,10 +15,14 @@ func waitForWindowTitleClipboard(t *testing.T, want string) string {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if got := vtui.GetClipboard(); got == want {
+			// The worker sets the clipboard before it finishes reading the global
+			// FrameManager; join it before the next test replaces the manager.
+			terminal.WaitForAsyncClipboard()
 			return got
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	terminal.WaitForAsyncClipboard()
 	return vtui.GetClipboard()
 }
 

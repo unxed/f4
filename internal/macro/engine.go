@@ -20,12 +20,15 @@ var MacroMgr *MacroManager
 
 // MacroManager handles recording, playback and storage of simple keyboard macros.
 type MacroManager struct {
-	Macros    map[string]map[string][]*vtinput.InputEvent
-	Recording bool
-	Assigning bool
-	Buffer    []*vtinput.InputEvent
-	iniPath   string
-	StartArea string
+	Macros map[string]map[string][]*vtinput.InputEvent
+	// Descriptions are the texts given in the assign dialog, by area and
+	// key, saved beside the sequence (f4#1870).
+	Descriptions map[string]map[string]string
+	Recording    bool
+	Assigning    bool
+	Buffer       []*vtinput.InputEvent
+	iniPath      string
+	StartArea    string
 	// Lua is the Far-compatible macro engine, present only when the user has
 	// macros. Recorded macros keep working either way: this is a second
 	// backend, not a replacement.
@@ -86,6 +89,7 @@ func (m *MacroManager) showAssignDialog() {
 func (m *MacroManager) Load() {
 	vtui.DebugLog("MACRO: Loading macros from %s", m.iniPath)
 	newMacros := make(map[string]map[string][]*vtinput.InputEvent)
+	newDescriptions := make(map[string]map[string]string)
 	ini := ini.Load(m.iniPath)
 	for sectionName, sec := range ini.Sections() {
 		if strings.HasPrefix(sectionName, "KeyMacros/") {
@@ -110,6 +114,12 @@ func (m *MacroManager) Load() {
 					newMacros[area] = make(map[string][]*vtinput.InputEvent)
 				}
 				newMacros[area][hotkey] = events
+				if desc := sec["Description"]; desc != "" {
+					if newDescriptions[area] == nil {
+						newDescriptions[area] = make(map[string]string)
+					}
+					newDescriptions[area][hotkey] = desc
+				}
 			}
 		} else {
 			targetArea := sectionName
@@ -156,6 +166,31 @@ func (m *MacroManager) Load() {
 		}
 	}
 	m.Macros = newMacros
+	m.Descriptions = newDescriptions
+}
+
+// SetDescription records the description of a key's macro; an empty text
+// removes it.
+func (m *MacroManager) SetDescription(area, key, text string) {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\n", " "))
+	if text == "" {
+		if m.Descriptions[area] != nil {
+			delete(m.Descriptions[area], key)
+		}
+		return
+	}
+	if m.Descriptions == nil {
+		m.Descriptions = make(map[string]map[string]string)
+	}
+	if m.Descriptions[area] == nil {
+		m.Descriptions[area] = make(map[string]string)
+	}
+	m.Descriptions[area][key] = text
+}
+
+// Description is the description of a key's macro, or "".
+func (m *MacroManager) Description(area, key string) string {
+	return m.Descriptions[area][key]
 }
 
 func (m *MacroManager) Save() {
@@ -169,6 +204,9 @@ func (m *MacroManager) Save() {
 			}
 			fmt.Fprintf(&sb, "[KeyMacros/%s/%s]\n", area, hotkey)
 			sb.WriteString("DisableOutput=0x1\n")
+			if desc := m.Description(area, hotkey); desc != "" {
+				fmt.Fprintf(&sb, "Description=%s\n", desc)
+			}
 
 			var parts []string
 			for _, e := range seq {
@@ -190,61 +228,143 @@ func (m *MacroManager) Save() {
 	_ = os.Chmod(m.iniPath, 0600)
 }
 
-// MacroAssignFrame is a modal frame that captures a key combination to assign a macro.
+// MacroAssignFrame is the dialog that assigns a recorded macro to a key, laid
+// out as far2's (DkmS1953, f4#1870): a description, a field that takes the
+// key pressed in it, OK and Cancel. With nothing recorded it says first that
+// the key's macro will be removed.
 type MacroAssignFrame struct {
 	*vtui.Window
-	mgr *MacroManager
+	mgr      *MacroManager
+	desc     *vtui.Edit
+	keyField *macroKeyEdit
+	ok       *vtui.Button
 }
 
-func NewMacroAssignFrame(m *MacroManager) *MacroAssignFrame {
-	width, height := 42, 7
-	base := vtui.NewCenteredDialog(width, height, i18n.Msg("Macro.AssignTitle"))
-	f := &MacroAssignFrame{
-		Window: base,
-		mgr:    m,
-	}
-
-	prompt := vtui.NewText(0, 0, i18n.Msg("Macro.AssignPrompt"), vtui.Palette[vtui.ColDialogText])
-	f.AddItem(prompt)
-
-	cancelPrompt := vtui.NewText(0, 0, i18n.Msg("Macro.AssignCancel"), vtui.Palette[vtui.ColDialogText])
-	f.AddItem(cancelPrompt)
-
-	vbox := vtui.NewVBoxLayout(f.X1+2, f.Y1+2, width-4, height-4)
-	vbox.Add(prompt, vtui.Margins{}, vtui.AlignCenter)
-	vbox.Add(cancelPrompt, vtui.Margins{Top: 1}, vtui.AlignCenter)
-	vbox.Apply()
-
-	return f
+// macroKeyEdit shows the key pressed in it instead of typing: every key but
+// Esc, Tab included, can be a macro's key. After a key it hands the focus to
+// OK, so Enter confirms.
+type macroKeyEdit struct {
+	*vtui.Edit
+	key     string
+	onKey   func()
+	capture func(e *vtinput.InputEvent) string
 }
 
-func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	if e.Type == vtinput.FocusEventType {
-		return f.Window.ProcessKey(e)
-	}
-
-	if !e.KeyDown {
+func (k *macroKeyEdit) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode == vtinput.VK_ESCAPE {
 		return false
 	}
-
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE {
-		f.mgr.Buffer = nil
-		f.SetExitCode(-1)
-		vtui.FrameManager.Redraw()
-		return true
-	}
-
-	// Only ignore "pure" modifiers without any other key.
-	// Everything else (including Esc and Alt-combos) can be a macro.
 	switch e.VirtualKeyCode {
 	case vtinput.VK_SHIFT, vtinput.VK_LSHIFT, vtinput.VK_RSHIFT,
 		vtinput.VK_CONTROL, vtinput.VK_LCONTROL, vtinput.VK_RCONTROL,
 		vtinput.VK_MENU, vtinput.VK_LMENU, vtinput.VK_RMENU,
 		vtinput.VK_CAPITAL, vtinput.VK_NUMLOCK, vtinput.VK_SCROLL:
-		return false
+		return true
 	}
+	k.key = k.capture(e)
+	k.SetText(k.key)
+	if k.onKey != nil {
+		k.onKey()
+	}
+	return true
+}
 
-	key := keymap.EventToFarString(e)
+func NewMacroAssignFrame(m *MacroManager) *MacroAssignFrame {
+	const width = 68
+	height := 9
+	// An empty recording removes the macro of the key chosen here: say so
+	// before the key is chosen, not only afterwards (f4#1870).
+	var warning []string
+	if len(m.Buffer) == 0 {
+		warning = vtui.WrapText(i18n.Msg("Macro.AssignEmpty"), width-4)
+		height += len(warning) + 1
+	}
+	base := vtui.NewCenteredDialog(width, height, i18n.Msg("Macro.AssignTitle"))
+	f := &MacroAssignFrame{Window: base, mgr: m}
+	labelWidth := max(vtui.StringWidth(strings.ReplaceAll(i18n.Msg("Macro.AssignDescription"), "&", "")),
+		vtui.StringWidth(strings.ReplaceAll(i18n.Msg("Macro.AssignPrompt"), "&", ""))) + 2
+	fieldWidth := width - 5 - labelWidth
+	f.desc = vtui.NewEdit(0, 0, fieldWidth, "")
+	f.keyField = &macroKeyEdit{Edit: vtui.NewEdit(0, 0, fieldWidth, ""), capture: keymap.EventToFarString}
+	f.ok = vtui.NewButton(0, 0, i18n.Msg("vtui.Ok"))
+	f.ok.IsDefault = true
+	cancel := vtui.NewButton(0, 0, i18n.Msg("vtui.Cancel"))
+	f.keyField.onKey = func() { f.SetFocusedItem(f.ok) }
+	descLabel := vtui.NewLabel(0, 0, i18n.Msg("Macro.AssignDescription"), f.desc)
+	keyLabel := vtui.NewLabel(0, 0, i18n.Msg("Macro.AssignPrompt"), f.keyField)
+	separator := vtui.NewSeparator(0, 0, width, true, true)
+
+	vbox := vtui.NewVBoxLayout(f.X1+2, f.Y1+2, width-4, height-4)
+	for i, line := range warning {
+		text := vtui.NewText(0, 0, line, vtui.Palette[vtui.ColDialogHighlightText])
+		f.AddItem(text)
+		margins := vtui.Margins{}
+		if i == len(warning)-1 {
+			margins.Bottom = 1
+		}
+		vbox.Add(text, margins, vtui.AlignLeft)
+	}
+	f.AddItem(descLabel)
+	f.AddItem(f.desc)
+	f.AddItem(keyLabel)
+	f.AddItem(f.keyField)
+	f.AddItem(separator)
+	f.AddItem(f.ok)
+	f.AddItem(cancel)
+	descRow := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	descRow.Add(descLabel, vtui.Margins{}, vtui.AlignLeft)
+	descRow.Add(f.desc, vtui.Margins{Left: labelWidth - vtui.StringWidth(strings.ReplaceAll(i18n.Msg("Macro.AssignDescription"), "&", ""))}, vtui.AlignFill)
+	vbox.Add(descRow, vtui.Margins{}, vtui.AlignFill)
+	keyRow := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	keyRow.Add(keyLabel, vtui.Margins{}, vtui.AlignLeft)
+	keyRow.Add(f.keyField, vtui.Margins{Left: labelWidth - vtui.StringWidth(strings.ReplaceAll(i18n.Msg("Macro.AssignPrompt"), "&", ""))}, vtui.AlignFill)
+	vbox.Add(keyRow, vtui.Margins{Top: 1}, vtui.AlignFill)
+	vbox.Add(separator, vtui.Margins{Left: -2, Right: -2}, vtui.AlignFill)
+	buttons := vtui.NewHBoxLayout(0, 0, width-4, 1)
+	buttons.HorizontalAlign = vtui.AlignCenter
+	buttons.Spacing = 2
+	buttons.Add(f.ok, vtui.Margins{}, vtui.AlignTop)
+	buttons.Add(cancel, vtui.Margins{}, vtui.AlignTop)
+	vbox.Add(buttons, vtui.Margins{}, vtui.AlignFill)
+	vbox.Apply()
+
+	f.ok.OnClick = func() {
+		if f.keyField.key == "" {
+			vtui.ShowMessageOn(f, i18n.Msg("Macro.AssignTitle"), i18n.Msg("Macro.AssignNoKey"), []string{"&Ok"})
+			f.SetFocusedItem(f.keyField)
+			return
+		}
+		f.assign(f.keyField.key, f.desc.GetText())
+	}
+	cancel.OnClick = func() { f.cancel() }
+	f.SetFocusedItem(f.keyField)
+	return f
+}
+
+// Key is the key chosen in the dialog so far, "" before one is pressed.
+func (f *MacroAssignFrame) Key() string { return f.keyField.key }
+
+// SetDescriptionText fills the description field.
+func (f *MacroAssignFrame) SetDescriptionText(text string) { f.desc.SetText(text) }
+
+func (f *MacroAssignFrame) cancel() {
+	f.mgr.Buffer = nil
+	f.SetExitCode(-1)
+	vtui.FrameManager.Redraw()
+}
+
+func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.Type == vtinput.KeyEventType && e.KeyDown && e.VirtualKeyCode == vtinput.VK_ESCAPE {
+		f.cancel()
+		return true
+	}
+	return f.Window.ProcessKey(e)
+}
+
+// assign gives key the recorded macro, or takes its macro away when nothing
+// was recorded, and reports what happened.
+func (f *MacroAssignFrame) assign(key, description string) {
+	keyDesc := key
 	if f.mgr.Macros == nil {
 		f.mgr.Macros = make(map[string]map[string][]*vtinput.InputEvent)
 	}
@@ -257,19 +377,20 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		f.mgr.Macros[area] = make(map[string][]*vtinput.InputEvent)
 	}
 
-	keyDesc := key
 	var msg string
 
 	removedIni := false
 	if f.mgr.Macros[area] != nil {
 		if _, exists := f.mgr.Macros[area][key]; exists {
 			delete(f.mgr.Macros[area], key)
+			f.mgr.SetDescription(area, key, "")
 			removedIni = true
 		}
 	}
 	if !removedIni && f.mgr.Macros["Common"] != nil {
 		if _, exists := f.mgr.Macros["Common"][key]; exists {
 			delete(f.mgr.Macros["Common"], key)
+			f.mgr.SetDescription("Common", key, "")
 			removedIni = true
 			area = "Common"
 		}
@@ -300,7 +421,7 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 		if config.App.MacroRecordFormat == 1 {
 			scriptDir := filepath.Join(config.GetF4ConfigDir(), "Macros", "scripts")
-			err := f.mgr.SaveRecordedMacro(scriptDir, area, key, "", f.mgr.Buffer)
+			err := f.mgr.SaveRecordedMacro(scriptDir, area, key, strings.TrimSpace(description), f.mgr.Buffer)
 			if err != nil {
 				msg = fmt.Sprintf("Failed to save Lua macro:\n%v", err)
 			} else {
@@ -311,6 +432,7 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 				f.mgr.Macros[area] = make(map[string][]*vtinput.InputEvent)
 			}
 			f.mgr.Macros[area][key] = f.mgr.Buffer
+			f.mgr.SetDescription(area, key, description)
 			f.mgr.Save()
 			msg = fmt.Sprintf("Macro assigned to key:\n%s\nArea: %s", keyDesc, area)
 		}
@@ -324,12 +446,8 @@ func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	})
 
 	vtui.FrameManager.Redraw()
-	return true
 }
 
-func (f *MacroAssignFrame) ProcessMouse(e *vtinput.InputEvent) bool {
-	return true // Block clicks from falling through
-}
 func (f *MacroAssignFrame) GetType() vtui.FrameType { return vtui.TypeDialog }
 func (f *MacroAssignFrame) IsModal() bool           { return true }
 func (f *MacroAssignFrame) GetTitle() string        { return "Macro Assign" }

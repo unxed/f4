@@ -339,10 +339,10 @@ func TestPanelsFrame_DriveMenuListsAssignedBookmarks(t *testing.T) {
 
 	row := -1
 	for i, it := range menu.Items {
-		if strings.HasPrefix(it.Text, "&6  ") {
+		if strings.HasPrefix(it.Text, "&6 ") {
 			row = i
 		}
-		for _, empty := range []string{"&0  ", "&1  ", "&9  "} {
+		for _, empty := range []string{"&0 ", "&1 ", "&9 "} {
 			if strings.HasPrefix(it.Text, empty) {
 				t.Errorf("unassigned slot listed: %q", it.Text)
 			}
@@ -509,13 +509,14 @@ func wantDriveMenuRow(menu *vtui.VMenu, cur string) int {
 			return i
 		}
 	}
-	return otherPanelRow(menu)
+	return 0
 }
 
 func otherPanelRow(menu *vtui.VMenu) int {
 	want := strings.ReplaceAll(i18n.Msg("Panel.Other"), "&", "")
 	for i, item := range menu.Items {
-		if strings.ReplaceAll(item.Text, "&", "") == want {
+		// The row sits in the Tools section, after the reserved hotkey column.
+		if strings.TrimSpace(strings.ReplaceAll(item.Text, "&", "")) == want {
 			return i
 		}
 	}
@@ -2928,7 +2929,7 @@ func TestPanelsFrame_DriveMenu_OtherPanel(t *testing.T) {
 		t.Fatal("Drive menu not opened")
 	}
 
-	// "Other panel" follows the platform drives, but the cursor opens on the drive
+	// "Other panel" is a tool below the platform drives, and the cursor opens on the drive
 	// the panel currently shows when the menu lists it (driveMenuDefaultPos,
 	// far2l parity), so the expected row depends on where the panel sits.
 	if menu.GetTitle() != i18n.Msg("Drive.Title") {

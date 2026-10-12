@@ -14,6 +14,14 @@ import (
 // the user cannot influence; this file keeps the order the user chose with
 // Ctrl+Up and Ctrl+Down in the menu, one tool name per line.
 
+// Keys of the built-in tool rows in the order file. A plugin's name is its
+// key; these cannot be one, since a plugin name never starts with "@".
+const (
+	driveToolKeyOtherPanel     = "@other-panel"
+	driveToolKeyTemporaryPanel = "@temporary-panel"
+	driveToolKeyRegistry       = "@windows-registry"
+)
+
 // DriveToolsOrderFilePath is where the chosen order of the drive menu's tool
 // rows is stored.
 func DriveToolsOrderFilePath() string {

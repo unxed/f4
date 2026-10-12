@@ -16,6 +16,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/png"
 	"io"
@@ -77,6 +78,9 @@ func main() {
 	}
 
 	check(writeFile(filepath.Join(outDir, "f4.ico"), makeICO(pngs)))
+	xp, err := makeXPICO(pngs)
+	check(err)
+	check(writeFile(filepath.Join(outDir, "f4-xp.ico"), xp))
 	check(writeFile(filepath.Join(outDir, "f4.icns"), makeICNS(macPNGs)))
 	check(makeWindowsResources(root, filepath.Join(outDir, "f4.ico")))
 	fmt.Println("generated platform icon resources")
@@ -205,6 +209,76 @@ func makeICO(images map[int][]byte) []byte {
 	for _, size := range windowsSizes {
 		out.Write(images[size])
 	}
+	return out.Bytes()
+}
+
+// xpSizes are the icon sizes Windows XP draws.
+var xpSizes = []int{16, 24, 32, 48}
+
+// makeXPICO is f4.ico for the legacy windows/386 build (f4#897, item 1):
+// Windows XP cannot read PNG-compressed icon images, which arrived with
+// Vista, and shows the default icon instead. Each image here is a 32-bit
+// DIB with alpha, which XP reads, plus the 1-bit AND mask it still wants.
+func makeXPICO(images map[int][]byte) ([]byte, error) {
+	var bodies [][]byte
+	for _, size := range xpSizes {
+		img, err := png.Decode(bytes.NewReader(images[size]))
+		if err != nil {
+			return nil, fmt.Errorf("icon %d: %w", size, err)
+		}
+		bodies = append(bodies, iconDIB(img, size))
+	}
+	var out bytes.Buffer
+	writeLE(&out, uint16(0))
+	writeLE(&out, uint16(1))
+	writeLE(&out, uint16(len(xpSizes)))
+	offset := 6 + 16*len(xpSizes)
+	for i, size := range xpSizes {
+		out.WriteByte(byte(size))
+		out.WriteByte(byte(size))
+		out.WriteByte(0)
+		out.WriteByte(0)
+		writeLE(&out, uint16(1))
+		writeLE(&out, uint16(32))
+		writeLE(&out, uint32(len(bodies[i])))
+		writeLE(&out, uint32(offset))
+		offset += len(bodies[i])
+	}
+	for _, body := range bodies {
+		out.Write(body)
+	}
+	return out.Bytes(), nil
+}
+
+// iconDIB is one icon image as a BITMAPINFOHEADER, the BGRA pixels bottom
+// up, and the AND mask (a set bit is a transparent pixel), rows padded to
+// four bytes.
+func iconDIB(img image.Image, size int) []byte {
+	maskStride := (size + 31) / 32 * 4
+	var out bytes.Buffer
+	writeLE(&out, uint32(40))
+	writeLE(&out, int32(size))
+	writeLE(&out, int32(2*size)) // the colour image and the mask
+	writeLE(&out, uint16(1))
+	writeLE(&out, uint16(32))
+	writeLE(&out, uint32(0)) // BI_RGB
+	writeLE(&out, uint32(size*size*4+maskStride*size))
+	for i := 0; i < 4; i++ {
+		writeLE(&out, uint32(0))
+	}
+	bounds := img.Bounds()
+	mask := make([]byte, maskStride*size)
+	for y := size - 1; y >= 0; y-- {
+		row := size - 1 - y
+		for x := 0; x < size; x++ {
+			c := color.NRGBAModel.Convert(img.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.NRGBA)
+			out.Write([]byte{c.B, c.G, c.R, c.A})
+			if c.A == 0 {
+				mask[row*maskStride+x/8] |= 0x80 >> (x % 8)
+			}
+		}
+	}
+	out.Write(mask)
 	return out.Bytes()
 }
 

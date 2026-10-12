@@ -3,6 +3,7 @@
 package terminal
 
 import (
+	"math"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -69,22 +70,38 @@ func CaptureHostConsoleBuffer(w, h int) {
 	savedHostConsoleH = h
 	savedHostConsoleTop = top
 
-	bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
-	bufCoord := uintptr(0)
-	readRegion := simpleSmallRect{
-		Left:   0,
-		Top:    top,
-		Right:  int16(w - 1),
-		Bottom: top + int16(h-1),
-	}
+	consoleBlit(procReadConsoleOutputW, hOut, savedHostConsoleBuffer, w, h, top)
+}
 
-	procReadConsoleOutputW.Call(
-		uintptr(hOut),
-		uintptr(unsafe.Pointer(&savedHostConsoleBuffer[0])),
-		bufSize,
-		bufCoord,
-		uintptr(unsafe.Pointer(&readRegion)),
-	)
+// consoleBlit reads (ReadConsoleOutputW) or writes (WriteConsoleOutputW) the
+// w*h cells of buf at rows top.. of the console, in strips
+// (ConsoleStrips). One call for a whole large window does not fit the
+// console's 64 KB shared heap on XP (f4#897): the read left the snapshot for
+// Ctrl+O empty and the write did not restore it. Failures stay silent, as they
+// always were here.
+func consoleBlit(proc *syscall.LazyProc, h syscall.Handle, buf []simpleCharInfo, w, rowsTotal int, top int16) {
+	// A console is at most 32767 cells on a side; anything else did not come
+	// from one, and the conversions below rely on it.
+	if w <= 0 || w > math.MaxInt16 || rowsTotal > math.MaxInt16 || len(buf) < w*rowsTotal {
+		return
+	}
+	for _, strip := range ConsoleStrips(w, rowsTotal) {
+		row, rows := strip.Row, strip.Rows
+		bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(rows)) << 16)) //nolint:gosec // w and rows are within int16, checked above
+		region := simpleSmallRect{
+			Left:   0,
+			Top:    top + int16(row),        //nolint:gosec // row < rowsTotal <= MaxInt16
+			Right:  int16(w - 1),            //nolint:gosec // w <= MaxInt16
+			Bottom: top + int16(row+rows-1), //nolint:gosec // below rowsTotal <= MaxInt16
+		}
+		_, _, _ = proc.Call(
+			uintptr(h),
+			uintptr(unsafe.Pointer(&buf[row*w])),
+			bufSize,
+			0,
+			uintptr(unsafe.Pointer(&region)),
+		)
+	}
 }
 
 func RestoreHostConsoleBuffer() {
@@ -105,22 +122,7 @@ func RestoreHostConsoleBuffer() {
 	// window instead of on it. Falls back to row 0 if the live read fails,
 	// same as the old unconditional behavior.
 	top := currentWindowTop(hOut)
-	bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(h)) << 16))
-	bufCoord := uintptr(0)
-	writeRegion := simpleSmallRect{
-		Left:   0,
-		Top:    top,
-		Right:  int16(w - 1),
-		Bottom: top + int16(h-1),
-	}
-
-	procWriteConsoleOutputW.Call(
-		uintptr(hOut),
-		uintptr(unsafe.Pointer(&savedHostConsoleBuffer[0])),
-		bufSize,
-		bufCoord,
-		uintptr(unsafe.Pointer(&writeRegion)),
-	)
+	consoleBlit(procWriteConsoleOutputW, hOut, savedHostConsoleBuffer, w, h, top)
 }
 
 // HostConsoleBufferMatches reports whether the saved snapshot still describes a

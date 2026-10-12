@@ -120,6 +120,7 @@ func ShowCommandPalette() bool {
 			}
 		})
 	})
+	dialog.rebuild = func() []commandPaletteEntry { return buildCommandPaletteEntries(area, pf) }
 	vtui.FrameManager.Push(dialog)
 	// Pushing any ordinary overlay cancels Fast Find on focus loss. The command
 	// palette is the exception: it has just indexed the transient F2 command and

@@ -5,6 +5,8 @@ package terminal
 import (
 	"strings"
 	"unsafe"
+
+	"github.com/unxed/vtui"
 )
 
 // ReadHostConsoleFullText reads the entire host console screen buffer --
@@ -55,13 +57,13 @@ func ReadHostConsoleFullText(overlayLines int) []byte {
 		}
 	}
 
-	// Some Console API hosts choke on very large single reads; read in
-	// horizontal strips well under any such limit rather than assume one
-	// call for the whole (possibly tall) scrollback buffer is safe.
-	const maxRowsPerCall = 200
+	// Read in horizontal strips small enough for the console's shared heap
+	// (ConsoleReadRows): one call for the whole (possibly tall) scrollback
+	// buffer, or even 200 rows of it, fails on XP (f4#897, item 3).
+	rowsPerCall := ConsoleReadRows(w)
 	cells := make([]simpleCharInfo, w*h)
-	for top := 0; top < h; top += maxRowsPerCall {
-		bottom := top + maxRowsPerCall - 1
+	for top := 0; top < h; top += rowsPerCall {
+		bottom := top + rowsPerCall - 1
 		if bottom > h-1 {
 			bottom = h - 1
 		}
@@ -69,26 +71,27 @@ func ReadHostConsoleFullText(overlayLines int) []byte {
 		chunk := make([]simpleCharInfo, w*rows)
 		bufSize := uintptr(uint32(uint16(w)) | (uint32(uint16(rows)) << 16))
 		region := simpleSmallRect{Left: 0, Top: int16(top), Right: int16(w - 1), Bottom: int16(bottom)}
-		procReadConsoleOutputW.Call(
+		r1, _, callErr := procReadConsoleOutputW.Call(
 			uintptr(hOut),
 			uintptr(unsafe.Pointer(&chunk[0])),
 			bufSize,
 			0,
 			uintptr(unsafe.Pointer(&region)),
 		)
+		if r1 == 0 {
+			// The rows stay NUL and read as blank lines (consoleRowText).
+			vtui.DebugLog("CONSOLE_LOG: ReadConsoleOutputW rows %d..%d of %dx%d failed: %v", top, bottom, w, h, callErr)
+		}
 		copy(cells[top*w:(top+rows)*w], chunk)
 	}
 
 	var sb strings.Builder
+	chars := make([]uint16, w)
 	for row := 0; row < excludeFrom; row++ {
-		line := cells[row*w : (row+1)*w]
-		last := w - 1
-		for last >= 0 && line[last].UnicodeChar == ' ' {
-			last--
+		for i, c := range cells[row*w : (row+1)*w] {
+			chars[i] = c.UnicodeChar
 		}
-		for i := 0; i <= last; i++ {
-			sb.WriteRune(rune(line[i].UnicodeChar))
-		}
+		sb.WriteString(consoleRowText(chars))
 		sb.WriteByte('\n')
 	}
 	return []byte(sb.String())

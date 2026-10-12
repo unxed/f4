@@ -52,8 +52,14 @@ func init() {
 	panel.OpenUserMenuSettings = settings.OpenUserMenu
 	panel.OpenSettingsCategoryOnly = settings.OpenCategoryOnly
 	plughost.SettingsCommand = func(id string) bool {
-		category, ok := map[string]string{"visren.configure": "operations", "f4.envman.configure": "terminal", "f4.mediainfo.configure": "metadata"}[strings.ToLower(id)]
-		return ok && settings.Open(category)
+		// The Settings button of a plugin opens that plugin's settings alone,
+		// not the whole Settings Center (f4#918).
+		route, ok := map[string]struct{ category, prefix, title string }{
+			"visren.configure":       {"operations", "visren.", "Visual File Renamer"},
+			"f4.envman.configure":    {"terminal", "envman.", "Environment Manager"},
+			"f4.mediainfo.configure": {"metadata", "mediainfo.", "Media information"},
+		}[strings.ToLower(id)]
+		return ok && settings.OpenFieldsOnly(route.category, route.prefix, route.title)
 	}
 }
 func (*coreAPI) RegisterSettingsProvider(p f4settings.Provider) (vfs.Registration, error) {

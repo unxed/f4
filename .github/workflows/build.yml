@@ -111,7 +111,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Compute build impact
@@ -442,7 +442,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Build binaries
@@ -693,7 +693,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Build lite and control binaries
@@ -859,7 +859,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: plugins/cloudfox/go.sum
 
     # go mod tidy asks sum.golang.org and proxy.golang.org for every module of a
@@ -978,7 +978,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: plugins/android/go.sum
 
     # go.sum entries don't affect the compiled binary -- that's controlled
@@ -1093,7 +1093,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: plugins/ios/go.sum
 
     # go mod tidy asks sum.golang.org and proxy.golang.org for every module of a
@@ -1191,7 +1191,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Compute build impact
@@ -1323,7 +1323,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Compute build impact
@@ -1440,7 +1440,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Compute build impact
@@ -1472,6 +1472,11 @@ jobs:
         # like the checked-in amd64/arm64 ones, so generate it here instead
         # of checking in another binary asset; same tool, pinned version and
         # icon file as tools/icons/main.go's makeWindowsResources.
+        # The icon is f4-xp.ico, not f4.ico: every image of f4.ico is
+        # PNG-compressed, which XP cannot read (Vista added it), so XP showed
+        # the default icon even with the resource in place (f4#897, item 1,
+        # still open after the resource was added). f4-xp.ico holds 32-bit
+        # DIBs of 16, 24, 32 and 48 pixels (tools/icons makeXPICO).
         # GOOS/GOARCH are job-level env for cross-compiling f4.exe itself;
         # go-winres has to run on the runner, not on the (386) target.
         (cd cmd/f4 && env -u GOOS -u GOARCH go run github.com/tc-hib/go-winres@v0.3.3 simply \
@@ -1481,7 +1486,7 @@ jobs:
           --product-name f4 \
           --file-description "f4 file manager" \
           --original-filename f4.exe \
-          --icon ../../internal/gui/assets/icon/generated/f4.ico)
+          --icon ../../internal/gui/assets/icon/generated/f4-xp.ico)
         ls -l cmd/f4/rsrc_windows_386.syso
 
     - name: Build binaries
@@ -1630,7 +1635,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Run go vet
@@ -1672,7 +1677,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Restore Go build cache (quality)
@@ -1743,7 +1748,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Compile standalone ConPTY probe
@@ -1874,7 +1879,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         # The salt file is part of the key on purpose: the cache stores
         # absolute paths, so a cache saved before a GOCACHE/GOMODCACHE move
         # above would restore to the old location -- and with the key
@@ -2172,7 +2177,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache: false
 
     - name: Compute affected packages
@@ -2501,7 +2506,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Install Wine
@@ -2689,7 +2694,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Check the release against installed updaters
@@ -2854,7 +2859,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.6'
+        go-version: '1.26.9'
         cache-dependency-path: go.sum
 
     - name: Check the release against installed updaters

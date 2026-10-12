@@ -96,6 +96,10 @@ func panelModeErrorText(err error) string {
 // editPanelViewMode is far2l's mode dialog: column types and widths, the
 // full screen switch, and Reset back to the built-in definition. Closing it
 // returns to the list, as in far2l.
+// editModeColumns opens the column list editor; a variable so tests can see
+// which fields a button hands it.
+var editModeColumns = showModeColumnsEditor
+
 func editPanelViewMode(pf *PanelsFrame, pos int) {
 	key := panelModesMenuKey(pos)
 	mode, ok := ViewModeForKey(key)
@@ -106,13 +110,14 @@ func editPanelViewMode(pf *PanelsFrame, pos int) {
 	types, widths := ViewSettingsToText(settings.Columns)
 
 	const width = 64
-	// Rows the vbox stacks: five label/edit pairs, two checkboxes and the
-	// button row (13) plus the blank row before each group after the first
-	// (6). The frame, the row under the title and the row over the bottom
+	// Rows the vbox stacks: five label/edit pairs, the status line's
+	// Columns... button, two checkboxes and the button row (14) plus the
+	// blank row before each group after the first and before that button
+	// (7). The frame, the row under the title and the row over the bottom
 	// frame add four more. The dialog used to be 20 rows tall, three short
 	// of that, so the button row landed below the bottom frame and only
 	// the modal clip kept it on screen.
-	const contentRows = 13 + 6
+	const contentRows = 14 + 7
 	height := 4 + contentRows
 	// On a console shorter than the dialog the frame would be drawn past
 	// its bottom row; the modal viewport then scrolls the controls instead.
@@ -121,6 +126,7 @@ func editPanelViewMode(pf *PanelsFrame, pos int) {
 	}
 	dlg := vtui.NewCenteredDialog(width, height, " "+panelViewModeName(key)+" ")
 	dlg.ShowClose = true
+	dlg.SetHelp("PanelModes")
 
 	editName := vtui.NewEdit(0, 0, width-6, settings.Name)
 	if settings.Name == "" {
@@ -145,6 +151,9 @@ func editPanelViewMode(pf *PanelsFrame, pos int) {
 	btnReset := vtui.NewButton(0, 0, i18n.Msg("Panel.Modes.Reset"))
 	btnCancel := vtui.NewButton(0, 0, i18n.Msg("vtui.Cancel"))
 	btnColumns := vtui.NewButton(0, 0, i18n.Msg("Panel.Modes.EditColumns"))
+	// The status line's columns get the same list editor as the panel's,
+	// under their own fields (montoner0, f4#410).
+	btnStatusColumns := vtui.NewButton(0, 0, i18n.Msg("Panel.Modes.EditStatusColumns"))
 	lblName := vtui.NewLabel(0, 0, i18n.Msg("Panel.Modes.Name"), editName)
 	lblTypes := vtui.NewLabel(0, 0, i18n.Msg("Panel.Modes.ColumnTypes"), editTypes)
 	lblStatusTypes := vtui.NewLabel(0, 0, i18n.Msg("Panel.Modes.StatusColumnTypes"), editStatusTypes)
@@ -161,6 +170,7 @@ func editPanelViewMode(pf *PanelsFrame, pos int) {
 	dlg.AddItem(editStatusTypes)
 	dlg.AddItem(lblStatusWidths)
 	dlg.AddItem(editStatusWidths)
+	dlg.AddItem(btnStatusColumns)
 	dlg.AddItem(chkFullScreen)
 	dlg.AddItem(chkUppercaseDirs)
 	// Tab walks the controls in the order they are added, so the buttons go in
@@ -182,6 +192,7 @@ func editPanelViewMode(pf *PanelsFrame, pos int) {
 	vbox.Add(editStatusTypes, vtui.Margins{}, vtui.AlignFill)
 	vbox.Add(lblStatusWidths, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(editStatusWidths, vtui.Margins{}, vtui.AlignFill)
+	vbox.Add(btnStatusColumns, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkFullScreen, vtui.Margins{Top: 1}, vtui.AlignLeft)
 	vbox.Add(chkUppercaseDirs, vtui.Margins{}, vtui.AlignLeft)
 	btnRow := vtui.NewHBoxLayout(0, 0, width-6, 1)
@@ -208,9 +219,16 @@ func editPanelViewMode(pf *PanelsFrame, pos int) {
 	btnCancel.OnClick = func() { finish(nil, false) }
 	// The column list edits the two strings above in place (f4#410).
 	btnColumns.OnClick = func() {
-		showModeColumnsEditor(editTypes.GetText(), editWidths.GetText(), func(types, widths string) {
+		editModeColumns(editTypes.GetText(), editWidths.GetText(), func(types, widths string) {
 			editTypes.SetText(types)
 			editWidths.SetText(widths)
+			vtui.FrameManager.Redraw()
+		})
+	}
+	btnStatusColumns.OnClick = func() {
+		editModeColumns(editStatusTypes.GetText(), editStatusWidths.GetText(), func(types, widths string) {
+			editStatusTypes.SetText(types)
+			editStatusWidths.SetText(widths)
 			vtui.FrameManager.Redraw()
 		})
 	}

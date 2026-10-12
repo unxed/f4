@@ -38,8 +38,8 @@ var DriveMenuOptionSpecs = []driveMenuOptionSpec{
 	{config.DriveMenuShowSize, "Drive.ShowSize"},
 	{config.DriveMenuShowSizeFloat, "Drive.ShowSizeFloat"},
 	{config.DriveMenuShowNetworkName, "Drive.ShowNetworkName"},
-	{config.DriveMenuShowPlugins, "Drive.ShowPlugins"},
-	{config.DriveMenuSortPluginsByHotkey, "Drive.SortPluginsByHotkey"},
+	{config.DriveMenuShowPlugins, "Drive.ShowTools"},
+	{config.DriveMenuSortPluginsByHotkey, "Drive.SortToolsByHotkey"},
 	{config.DriveMenuShowRemovable, "Drive.ShowRemovable"},
 	{config.DriveMenuShowCD, "Drive.ShowCD"},
 	{config.DriveMenuShowRemote, "Drive.ShowRemote"},
@@ -60,8 +60,10 @@ func driveMenuNameWithoutMarker(name string) string {
 func driveMenuAssignableText(actionName, label string) string {
 	shortcut := PluginActionConfiguredKey(actionName)
 	if shortcut == "" {
+		// The hotkey column stays reserved, so the names of the Tools do not
+		// jump left and right with a letter being assigned (f4#1148).
 		clean, _, _ := vtui.ParseAmpersandString(label)
-		return clean
+		return "  " + clean
 	}
 	return PluginMenuItemText(label, shortcut, 1)
 }
@@ -327,7 +329,56 @@ func driveMenuPlatformItemVisible(drv sysinfo.DriveEntry, options uint32) bool {
 	}
 }
 
+// openDriveMenuTools is what F9 does in the drive menu: the settings window of
+// the drive chooser with its pages, Drive options, Tools, Bookmarks and Links,
+// without a window of the tools in between (f4#1148).
+func (pf *PanelsFrame) openDriveMenuTools(panelIdx int, menu *vtui.VMenu) {
+	pf.openDriveMenuOptions(panelIdx, menu)
+}
+
+// driveMenuBelowSettings rebuilds the drive menu the drive chooser's settings
+// window was opened from (see RefreshDriveMenuBelow); nil when no such window
+// was opened from a drive menu.
+var driveMenuBelowSettings func(settings vtui.Frame)
+
+// RefreshDriveMenuBelow is called by the drive chooser's settings window after
+// Apply or OK: the drive menu under it is rebuilt from the settings just
+// written, while the window stays open on top (mitek1977-coder, f4#1148). It
+// does nothing unless that menu is right under the window.
+func RefreshDriveMenuBelow(settings vtui.Frame) {
+	if driveMenuBelowSettings != nil {
+		driveMenuBelowSettings(settings)
+	}
+}
+
 func (pf *PanelsFrame) openDriveMenuOptions(panelIdx int, menu *vtui.VMenu) {
+	// The menu is built once, from the settings of the moment: rebuild it
+	// when the window opened below applies new ones. The window is taken off
+	// the stack for that, not closed, and put back on top of the new menu.
+	current := menu
+	driveMenuBelowSettings = func(settings vtui.Frame) {
+		fm := vtui.FrameManager
+		if fm == nil {
+			return
+		}
+		frames := fm.GetActiveFrames(fm.ActiveIdx)
+		n := len(frames)
+		if n < 2 || frames[n-1] != settings {
+			return
+		}
+		under, ok := frames[n-2].(*DriveMenuFrame)
+		if !ok || under.VMenu != current || current.IsDone() {
+			return
+		}
+		pos := current.SelectPos
+		fm.RemoveFrame(settings)
+		fm.RemoveFrame(under)
+		pf.showDriveMenuAt(panelIdx, pos)
+		if rebuilt, ok := fm.GetTopFrame().(*DriveMenuFrame); ok {
+			current = rebuilt.VMenu
+		}
+		fm.Push(settings)
+	}
 	// F9 belongs to the drive menu, so it opens the drive-chooser page on
 	// its own rather than the whole Settings Center (#1148). The compact
 	// dialog below stays as the fallback when settings are not wired.

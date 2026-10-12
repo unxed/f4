@@ -23,16 +23,26 @@ import (
 // This walk keeps metadata lazy and stats only hits, which is the same shape
 // as the native find implementations used by Far.
 func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]FoundEntry, error) {
+	var found []FoundEntry
+	err := v.FindFilesStream(ctx, dir, q, func(hit FoundEntry) { found = append(found, hit) })
+	return found, err
+}
+
+// FindFilesStream keeps rejected entries cheap and publishes only matching
+// metadata. The root is listed once; its files precede its child subtrees.
+func (v *OSVFS) FindFilesStream(ctx context.Context, dir string, q FindQuery, onFound func(FoundEntry)) error {
 	masks := q.Masks
 	if len(masks) == 0 {
 		masks = []string{"*"}
 	}
 	matcher, err := newFindQueryMatcher(q)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var found []FoundEntry
+	var found int64
+	var completedDirs, totalDirs int64
+	var totalKnown bool
 	var scanned int64
 	var lastProgress time.Time
 	report := func(path string, force bool) {
@@ -44,7 +54,7 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 			return
 		}
 		lastProgress = now
-		q.Progress(FindProgress{Scanned: scanned, Found: int64(len(found)), Path: path})
+		q.Progress(FindProgress{Scanned: scanned, Found: found, Path: path, DirectoryTotalKnown: totalKnown, CompletedDirs: completedDirs, TotalDirs: totalDirs})
 	}
 
 	var walk func(string) error
@@ -64,11 +74,12 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 			return nil
 		}
 
+		var rootChildren []string
 		for _, entry := range entries {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if q.Limit > 0 && len(found) >= q.Limit {
+			if q.Limit > 0 && found >= int64(q.Limit) {
 				return nil
 			}
 			name := entry.Name()
@@ -92,11 +103,14 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 			if isDir {
 				if q.FindFolders && q.Text == "" && findMaskMatches(name, masks, q.IgnoreCase) {
 					if item, statErr := v.Stat(ctx, child); statErr == nil {
-						found = append(found, FoundEntry{Path: child, Item: item})
+						found++
+						onFound(FoundEntry{Path: child, Item: item})
 						report(child, true)
 					}
 				}
-				if err := walk(child); err != nil {
+				if current == dir {
+					rootChildren = append(rootChildren, child)
+				} else if err := walk(child); err != nil {
 					return err
 				}
 				continue
@@ -115,17 +129,36 @@ func (v *OSVFS) FindFiles(ctx context.Context, dir string, q FindQuery) ([]Found
 			if statErr != nil {
 				continue
 			}
-			found = append(found, FoundEntry{Path: child, Item: item})
+			found++
+			onFound(FoundEntry{Path: child, Item: item})
 			report(child, true)
 		}
-		return nil
+		if current == dir {
+			totalDirs = int64(len(rootChildren))
+			totalKnown = true
+			report(current, true)
+			for _, child := range rootChildren {
+				if q.Limit > 0 && found >= int64(q.Limit) {
+					break
+				}
+				if err := walk(child); err != nil {
+					return err
+				}
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				completedDirs++
+				report(child, true)
+			}
+		}
+		return ctx.Err()
 	}
 
 	if err := walk(dir); err != nil {
-		return found, err
+		return err
 	}
 	report(dir, true)
-	return found, nil
+	return nil
 }
 
 func findMaskMatches(name string, masks []string, ignoreCase bool) bool {

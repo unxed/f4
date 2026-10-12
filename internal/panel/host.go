@@ -32,6 +32,13 @@ var (
 	// BuildMenuBarItems builds the menu bar for an area from the action table.
 	BuildMenuBarItems = func(area string) []vtui.MenuBarItem { return nil }
 
+	// RefreshMenuRowStates brings the dimmed flag of each row of a menu built
+	// by BuildMenuBarItems up to date with the application's state. The menu
+	// itself is cached between frames, but whether a row can be used depends on
+	// things that change without the cache noticing, the cursor above all
+	// (f4#1814).
+	RefreshMenuRowStates = func(items []vtui.MenuBarItem) {}
+
 	// SaveSession persists the workspace layout after a change to it.
 	SaveSession = func() {}
 )

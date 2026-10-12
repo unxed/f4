@@ -2,7 +2,6 @@
 
 package vfs
 
-// Windows uses UAC elevation for operations that need administrator access.
-// The Unix socket dispatcher cannot work there, so callers must not attempt
-// to start it (in particular, this prevents an accidental `sudo` invocation).
-func sudoClientSupported() bool { return false }
+// Windows elevates through UAC: SudoClient.Connect starts the elevated
+// dispatcher of f4#1768 (connectsByUAC), never sudo.
+func sudoClientSupported() bool { return true }

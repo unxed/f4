@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -183,5 +184,74 @@ func TestRenderPaddedPNGLeavesTransparentMargin(t *testing.T) {
 	}
 	if _, _, _, a := img.At(64, 64).RGBA(); a == 0 {
 		t.Error("center of the body is transparent")
+	}
+}
+
+// f4#897, item 1: Windows XP reads no PNG-compressed icon image, so the
+// legacy build carries f4-xp.ico, made of 32-bit DIBs.
+func TestXPICOHasNoPNGImages(t *testing.T) {
+	images := map[int][]byte{}
+	for _, size := range xpSizes {
+		img := image.NewNRGBA(image.Rect(0, 0, size, size))
+		img.Set(1, 1, color.NRGBA{R: 255, A: 255}) // the rest stays transparent
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			t.Fatal(err)
+		}
+		images[size] = buf.Bytes()
+	}
+	data, err := makeXPICO(images)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := binary.LittleEndian.Uint16(data[4:6]); got != uint16(len(xpSizes)) {
+		t.Fatalf("XP ICO image count = %d, want %d", got, len(xpSizes))
+	}
+	for index, size := range xpSizes {
+		entry := data[6+index*16:]
+		offset := binary.LittleEndian.Uint32(entry[12:16])
+		body := data[offset:]
+		if bytes.HasPrefix(body, []byte("\x89PNG")) {
+			t.Fatalf("XP ICO entry %d is PNG", index)
+		}
+		if binary.LittleEndian.Uint32(body[0:4]) != 40 || int32(binary.LittleEndian.Uint32(body[4:8])) != int32(size) ||
+			int32(binary.LittleEndian.Uint32(body[8:12])) != int32(2*size) || binary.LittleEndian.Uint16(body[14:16]) != 32 {
+			t.Fatalf("XP ICO entry %d header is not a 32-bit DIB of %d pixels", index, size)
+		}
+		maskStride := (size + 31) / 32 * 4
+		if got, want := binary.LittleEndian.Uint32(entry[8:12]), uint32(40+size*size*4+maskStride*size); got != want {
+			t.Fatalf("XP ICO entry %d length = %d, want %d", index, got, want)
+		}
+	}
+}
+
+// The checked-in f4-xp.ico is the one the checked-in PNGs make; run with
+// F4_UPDATE_XP_ICO=1 to write it again after the PNGs change.
+func TestXPICOIsCurrent(t *testing.T) {
+	dir := filepath.Join("..", "..", "internal", "gui", "assets", "icon", "generated")
+	images := map[int][]byte{}
+	for _, size := range xpSizes {
+		data, err := os.ReadFile(filepath.Join(dir, fmt.Sprintf("f4-%d.png", size))) // #nosec G304 -- the repository's own generated icons
+		if err != nil {
+			t.Fatal(err)
+		}
+		images[size] = data
+	}
+	want, err := makeXPICO(images)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "f4-xp.ico")
+	if os.Getenv("F4_UPDATE_XP_ICO") == "1" {
+		if err := os.WriteFile(path, want, 0o644); err != nil { // #nosec G306 -- a checked-in asset
+			t.Fatal(err)
+		}
+	}
+	got, err := os.ReadFile(path) // #nosec G304 -- the repository's own generated icon
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("f4-xp.ico is out of date; run this test with F4_UPDATE_XP_ICO=1")
 	}
 }

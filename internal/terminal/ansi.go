@@ -55,7 +55,16 @@ type AnsiParser struct {
 	// the PTY reader's.
 	syncEchoTracked atomic.Bool
 	syncEchoArms    atomic.Int32
-	osc52WG         sync.WaitGroup // tracks OSC 52 read goroutines while tests or owners replace clipboard state
+	// unixEchoArms counts the POSIX directory-sync lines f4 typed whose echo
+	// is still due (ExpectUnixSyncEcho); while one is, the echo is held from
+	// its " cd '" to the end of its line and cut whole, however the shell
+	// splits it (#1886). unixEchoHeld is the part held so far, seenUnixSync
+	// the possible start of one that already went to the screen.
+	unixEchoArms  atomic.Int32
+	unixEchoHeld  []byte
+	unixEchoShown int // leading bytes of unixEchoHeld already on the screen
+	seenUnixSync  []byte
+	osc52WG       sync.WaitGroup // tracks OSC 52 read goroutines while tests or owners replace clipboard state
 
 	// DCS state: the final byte of the introducer and the string that
 	// follows it, kept apart from CurParam because the parameters of the
@@ -150,6 +159,121 @@ func (p *AnsiParser) consumeWindowsSyncEcho() {
 			return
 		}
 	}
+}
+
+// UnixSyncCommandPrefix is how the line f4 types into a POSIX shell to
+// follow the panel's directory begins: " cd 'path' && true f4_sync".
+var UnixSyncCommandPrefix = []byte(" cd '")
+
+var unixSyncMarker = []byte("f4_sync")
+
+// ExpectUnixSyncEcho announces that f4 has typed one " cd '...' && true
+// f4_sync" line whose echo is due in the output.
+func (p *AnsiParser) ExpectUnixSyncEcho() {
+	for {
+		n := p.unixEchoArms.Load()
+		if n >= maxSyncEchoArms || p.unixEchoArms.CompareAndSwap(n, n+1) {
+			return
+		}
+	}
+}
+
+func (p *AnsiParser) consumeUnixSyncEcho() {
+	for {
+		n := p.unixEchoArms.Load()
+		if n <= 0 || p.unixEchoArms.CompareAndSwap(n, n-1) {
+			return
+		}
+	}
+}
+
+// containsInOrder reports whether every byte of want occurs in data in
+// order, other bytes in between allowed: zsh redraws a line it wraps with
+// " \r\x1b[K" and repeats a character, so the marker is not contiguous.
+func containsInOrder(data, want []byte) bool {
+	i := 0
+	for _, b := range data {
+		if i < len(want) && b == want[i] {
+			i++
+		}
+	}
+	return i == len(want)
+}
+
+// exciseUnixSync cuts the echo of a directory-sync line f4 typed into a POSIX
+// shell. bash echoes the line in one piece, which the plain search in
+// ProcessFiltered already cuts; zsh's line editor echoes it a character or
+// two at a time and redraws it where it wraps (#1886), so the line never sat
+// in one chunk and stayed on the console. While an echo is due, the output
+// from its " cd '" up to the end of its line is held and dropped whole once
+// it shows the f4_sync marker; anything else ending the line is let through
+// unchanged. Nothing is held unless f4 typed such a line, so a " cd '" the
+// user types is shown as it is typed.
+func (p *AnsiParser) exciseUnixSync(data []byte) []byte {
+	if p.unixEchoHeld == nil && len(p.seenUnixSync) == 0 && p.unixEchoArms.Load() <= 0 {
+		return data
+	}
+	skip := 0
+	if p.unixEchoHeld == nil && len(p.seenUnixSync) > 0 {
+		// Bytes already on the screen last time, prepended for matching only.
+		skip = len(p.seenUnixSync)
+		data = append(append([]byte(nil), p.seenUnixSync...), data...)
+		p.seenUnixSync = nil
+	}
+	var visible []byte
+	emit := func(b []byte) {
+		if skip > 0 {
+			if len(b) <= skip {
+				skip -= len(b)
+				return
+			}
+			b = b[skip:]
+			skip = 0
+		}
+		visible = append(visible, b...)
+	}
+	for len(data) > 0 {
+		if p.unixEchoHeld == nil {
+			if p.unixEchoArms.Load() <= 0 {
+				emit(data)
+				return visible
+			}
+			start := bytes.Index(data, UnixSyncCommandPrefix)
+			if start < 0 {
+				emit(data)
+				p.seenUnixSync = cloneBytes(data[len(data)-longestSuffixPrefix(data, UnixSyncCommandPrefix):])
+				return visible
+			}
+			emit(data[:start])
+			// What of the start is already on the screen: the erase takes
+			// it, or a line that is not ours must not print it twice.
+			p.unixEchoShown = skip
+			skip = 0
+			p.unixEchoHeld = []byte{}
+			data = data[start:]
+		}
+		nl := bytes.IndexByte(data, '\n')
+		if nl < 0 {
+			p.unixEchoHeld = append(p.unixEchoHeld, data...)
+			if len(p.unixEchoHeld) > maxPendingWindowsSync {
+				visible = append(visible, p.unixEchoHeld[p.unixEchoShown:]...)
+				p.unixEchoHeld, p.unixEchoShown = nil, 0
+			}
+			return visible
+		}
+		line := append(p.unixEchoHeld, data[:nl+1]...)
+		shown := p.unixEchoShown
+		p.unixEchoHeld, p.unixEchoShown = nil, 0
+		data = data[nl+1:]
+		if !containsInOrder(line, unixSyncMarker) {
+			visible = append(visible, line[shown:]...)
+			continue
+		}
+		vtui.DebugLog("ANSI_PARSER: Excising background Unix CD sync (streamed)")
+		p.consumeUnixSyncEcho()
+		visible = append(visible, []byte("\r\x1b[2K")...)
+	}
+	return visible
 }
 
 func cloneBytes(data []byte) []byte {
@@ -359,6 +483,10 @@ func (p *AnsiParser) ProcessFiltered(data []byte) []byte {
 			data = data[idx+3:]
 		}
 	}
+
+	// A line f4 typed and announced is cut here whatever pieces it comes in;
+	// the search below is for a whole one nobody announced.
+	data = p.exciseUnixSync(data)
 
 	for {
 		startIdx := bytes.Index(data, []byte(" cd '"))

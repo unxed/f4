@@ -35,7 +35,7 @@ var hotkeyConditions = map[string]func() bool{
 			return false
 		}
 		if pf := FindPanelsFrameAnyScreen(); pf != nil {
-			if !pf.CmdLine.IsEmpty() {
+			if pf.PanelsLocked() || !pf.CmdLine.IsEmpty() {
 				return false
 			}
 			if pf.ShowPanels {
@@ -62,6 +62,9 @@ var hotkeyConditions = map[string]func() bool{
 	// included (#249, #1376), use noterminalapp.
 	"noaltscreenapp": func() bool {
 		if pf := FindPanelsFrameAnyScreen(); pf != nil {
+			if pf.PanelsLocked() {
+				return false
+			}
 			if pf.ShowPanels {
 				return true
 			}
@@ -95,6 +98,11 @@ var hotkeyConditions = map[string]func() bool{
 	// then, and Ctrl+O has to be able to hand it back.
 	"noterminalapp": func() bool {
 		if pf := FindPanelsFrameAnyScreen(); pf != nil {
+			// A terminal-only workspace (Ctrl+Shift+O) owns the keyboard
+			// outright: none of the file-manager keys gated here may fire.
+			if pf.PanelsLocked() {
+				return false
+			}
 			// Same reasoning for SimpleInline as noaltscreenapp above: no
 			// terminal.PTY means no foreign process can be busy on screen in
 			// this mode. A command f4 itself launched (runSimpleInlineCommand)

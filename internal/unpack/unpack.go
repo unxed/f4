@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -59,19 +60,23 @@ func writeFileSafe(targetPath string, r io.Reader, mode os.FileMode) error {
 		_ = vfs.GetSudoClient().MkDir(dir, 0755)
 	}
 
-	var f *os.File
+	var f io.WriteCloser
 	f, err = os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil && os.IsPermission(err) && vfs.GetSudoClient().IsAvailable() {
-		vtui.DebugLog("UPDATER: Permission denied for %q, attempting elevated write via sudo...", targetPath)
-		f, err = vfs.GetSudoClient().Open(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, uint32(mode))
+		vtui.DebugLog("UPDATER: Permission denied for %q, attempting elevated write...", targetPath)
+		// CreateFile, not Open: on Windows no descriptor crosses from the
+		// elevated dispatcher, the contents go by requests (f4#1768).
+		f, err = vfs.GetSudoClient().CreateFile(targetPath, uint32(mode))
 	}
 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
-
 	_, err = io.Copy(f, r)
+	// The elevated writer sends what is left at Close, so its error counts.
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return err
 	}
@@ -100,6 +105,9 @@ type archiveEntry struct {
 	name  string
 	isDir bool
 	mode  os.FileMode
+	// mtime is the member's own modification time; zero when the archive has
+	// none. The extracted file takes it (applyArchiveTimes).
+	mtime time.Time
 	open  func() (io.ReadCloser, error)
 }
 
@@ -230,6 +238,9 @@ func extractEntryWithPrefix(e archiveEntry, destDir, prefix string) error {
 	}
 	err = writeFileSafe(targetPath, rc, mode)
 	_ = rc.Close()
+	if err == nil {
+		applyArchiveTimes(targetPath, e.mtime)
+	}
 	return err
 }
 
@@ -262,6 +273,7 @@ func tarGz(data []byte, destDir, prefix string) error {
 			name:  hdr.Name,
 			isDir: hdr.Typeflag == tar.TypeDir,
 			mode:  mode,
+			mtime: hdr.ModTime,
 			open:  func() (io.ReadCloser, error) { return io.NopCloser(tr), nil },
 		}, destDir, prefix); err != nil {
 			return err

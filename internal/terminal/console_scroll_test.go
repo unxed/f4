@@ -124,3 +124,61 @@ func TestWindowFollowingCursorKeepsTheLastPrintedRowVisible(t *testing.T) {
 		t.Errorf("last printed row %d not visible in %d..%d", lastPrinted, got.Top, got.Bottom)
 	}
 }
+
+// f4#897 item 2: in a console window opened to run f4, the cursor sits on the
+// second row (under "C:\>f4"), and the first command's output must still start
+// at the bottom of the window, as in Far.
+func TestCommandOutputRow(t *testing.T) {
+	tests := []struct {
+		name    string
+		win     ConsoleWindowRect
+		cursorY int16
+		wantRow int16
+		wantOK  bool
+	}{
+		{
+			name:    "fresh XP console: cursor under the prompt that started f4",
+			win:     ConsoleWindowRect{Left: 0, Top: 0, Right: 79, Bottom: 24},
+			cursorY: 1,
+			wantRow: 24,
+			wantOK:  true,
+		},
+		{
+			name:    "window scrolled down a 300-row buffer",
+			win:     ConsoleWindowRect{Left: 0, Top: 40, Right: 79, Bottom: 64},
+			cursorY: 50,
+			wantRow: 64,
+			wantOK:  true,
+		},
+		{
+			name:    "cursor already on the last row: stays",
+			win:     ConsoleWindowRect{Left: 0, Top: 0, Right: 79, Bottom: 24},
+			cursorY: 24,
+			wantRow: 24,
+			wantOK:  false,
+		},
+		{
+			name:    "cursor below the window (ReactOS): stays for the fit after the command",
+			win:     ConsoleWindowRect{Left: 0, Top: 12, Right: 79, Bottom: 36},
+			cursorY: 48,
+			wantRow: 48,
+			wantOK:  false,
+		},
+		{
+			name:    "broken geometry: nothing moves",
+			win:     ConsoleWindowRect{Left: 0, Top: 10, Right: 79, Bottom: 5},
+			cursorY: 1,
+			wantRow: 1,
+			wantOK:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row, ok := CommandOutputRow(tt.win, tt.cursorY)
+			if row != tt.wantRow || ok != tt.wantOK {
+				t.Fatalf("CommandOutputRow(%+v, %d) = %d, %v; want %d, %v",
+					tt.win, tt.cursorY, row, ok, tt.wantRow, tt.wantOK)
+			}
+		})
+	}
+}

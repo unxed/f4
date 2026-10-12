@@ -531,6 +531,22 @@ func FormatFarColor(attr uint64) string {
 	return fmt.Sprintf("foreground:#%06x | background:#%06x", fg, bg)
 }
 
+// exportSlotValue is the text a farcolors.ini line gives slot: its colour in
+// the current palette, "inherit" for the two optional surfaces that follow
+// their parent, or the expression the colour was taken from when the palette
+// still holds exactly that.
+func exportSlotValue(slot ColorSlot) string {
+	attr := vtui.Palette[slot.Index]
+	value := FormatFarColor(attr)
+	if (slot.Index == vtui.ColDialogIndicatorBackground || slot.Index == ColDialogSettingsBackground) && attr == 0 {
+		value = "inherit"
+	}
+	if source, ok := colorSourceExpressions[slot.Canonical]; ok && colorSourcePalette[slot.Canonical] == attr {
+		value = source
+	}
+	return value
+}
+
 // ExportColors writes the current palette to a farcolors.ini file.
 func ExportColors(path string) error {
 	var sb strings.Builder
@@ -557,15 +573,7 @@ func ExportColors(path string) error {
 			return slots[i].Canonical < slots[j].Canonical
 		})
 		for _, slot := range slots {
-			attr := vtui.Palette[slot.Index]
-			value := FormatFarColor(attr)
-			if (slot.Index == vtui.ColDialogIndicatorBackground || slot.Index == ColDialogSettingsBackground) && attr == 0 {
-				value = "inherit"
-			}
-			if source, ok := colorSourceExpressions[slot.Canonical]; ok && colorSourcePalette[slot.Canonical] == attr {
-				value = source
-			}
-			fmt.Fprintf(&sb, "%s = %s\n", slot.Canonical, value)
+			fmt.Fprintf(&sb, "%s = %s\n", slot.Canonical, exportSlotValue(slot))
 		}
 	}
 

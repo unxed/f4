@@ -187,3 +187,34 @@ func TestSettingsCollectionCursorIsVisible(t *testing.T) {
 	}
 	check("field focused")
 }
+
+// The Settings button of a plugin opens that plugin's own settings: the fields
+// of its category whose ids carry its prefix, under its name (f4#918).
+func TestSettingsRestrictToOnePluginsFields(t *testing.T) {
+	fields := []f4settings.Field{
+		{ID: "visren.WordDiv", Category: "operations", Group: "Visual File Renamer", Label: f4settings.Text{English: "Word delimiters"}, Kind: f4settings.String},
+		{ID: "copy.Overwrite", Category: "operations", Group: "Copying", Label: f4settings.Text{English: "Overwrite"}, Kind: f4settings.String},
+	}
+	d := f4settings.NewDraft(map[string]string{"visren.WordDiv": " ", "copy.Overwrite": "ask"}, nil)
+	defer d.Close()
+	c := newSettingsCenter([]*settingsSession{{catalog: f4settings.Catalog{ID: "test", Categories: Categories, Fields: fields}, draft: d}})
+	c.SetPosition(0, 0, 129, 34)
+	c.fieldPrefix, c.fieldTitle = "visren.", "Visual File Renamer"
+	c.restrictTo("operations")
+
+	if c.category != "operations" || len(c.categories) != 1 {
+		t.Fatalf("scope = %q, %d categories", c.category, len(c.categories))
+	}
+	if title := c.windowTitle(); title != "Visual File Renamer" {
+		t.Errorf("window title = %q, want the plugin's name", title)
+	}
+	var ids []string
+	for _, r := range c.page.rows {
+		if !r.heading {
+			ids = append(ids, r.field.ID)
+		}
+	}
+	if len(ids) != 1 || ids[0] != "visren.WordDiv" {
+		t.Errorf("the page lists %v, want only the plugin's own field", ids)
+	}
+}

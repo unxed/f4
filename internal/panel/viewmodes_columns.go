@@ -28,6 +28,43 @@ type modeColumnRow struct {
 // column syntax table in docs/ISSUES/ISSUE_1400_PANEL_MODES.md.
 var panelColumnTypeChoices = []string{"N", "S", "P", "D", "T", "DM", "DC", "DA", "DE", "A", "O", "U", "LN"}
 
+// modeColumnModifierChoices are the modifiers Insert offers after a type,
+// one at a time, with what each does (montoner0, f4#410: the list showed S,
+// not that SC works too). The ones kept only for far2l compatibility (NO, NR,
+// SA, OL) change nothing and are left out; several at once are still typed
+// by hand in the Column types string.
+var modeColumnModifierChoices = map[string]string{
+	"N": "M", "S": "CEFT", "P": "CEFT",
+	"DM": "BM", "DC": "BM", "DA": "BM", "DE": "BM",
+}
+
+// modeColumnVariants is a type token followed by the token with each of its
+// modifiers; a type without modifiers is only itself.
+func modeColumnVariants(token string) []string {
+	out := []string{token}
+	for _, m := range modeColumnModifierChoices[token] {
+		out = append(out, token+string(m))
+	}
+	return out
+}
+
+// modeColumnVariantLabel names a variant in the second Insert menu: the
+// column's title, and for a modifier what it changes.
+func modeColumnVariantLabel(base, token string) string {
+	label := fmt.Sprintf("%-4s %s", token, modeColumnTitle(token))
+	if mod := strings.TrimPrefix(token, base); mod != "" {
+		kind := "Size"
+		switch {
+		case base == "N":
+			kind = "Name"
+		case strings.HasPrefix(base, "D"):
+			kind = "Date"
+		}
+		label += " — " + i18n.Msg("Panel.Modes.Modifier."+kind+mod)
+	}
+	return label
+}
+
 // splitModeColumns pairs the comma separated types with their widths; a
 // missing width is 0, the type's default, as TextToViewSettings reads it.
 func splitModeColumns(types, widths string) []modeColumnRow {
@@ -84,6 +121,7 @@ func showModeColumnsEditor(types, widths string, onOk func(types, widths string)
 	const height = 18
 	dlg := vtui.NewCenteredDialog(width, height, " "+i18n.Msg("Panel.Modes.ColumnsTitle")+" ")
 	dlg.ShowClose = true
+	dlg.SetHelp("PanelModes")
 
 	lb := vtui.NewListBox(dlg.X1+3, dlg.Y1+2, width-6, height-7, nil)
 	hint := vtui.NewText(dlg.X1+3, dlg.Y2-4, i18n.Msg("Panel.Modes.ColumnsHint"), 0)
@@ -104,6 +142,15 @@ func showModeColumnsEditor(types, widths string, onOk func(types, widths string)
 		vtui.FrameManager.Redraw()
 	}
 
+	insertColumn := func(token string) {
+		at := 0
+		if len(rows) > 0 {
+			at = lb.SelectPos + 1
+		}
+		row := modeColumnRow{token: token, width: "0"}
+		rows = append(rows[:at], append([]modeColumnRow{row}, rows[at:]...)...)
+		refresh(at)
+	}
 	addColumn := func() {
 		menu := vtui.NewVMenu(i18n.Msg("Panel.Modes.AddColumn"))
 		for _, token := range panelColumnTypeChoices {
@@ -113,21 +160,27 @@ func showModeColumnsEditor(types, widths string, onOk func(types, widths string)
 			if idx < 0 || idx >= len(panelColumnTypeChoices) {
 				return
 			}
-			at := 0
-			if len(rows) > 0 {
-				at = lb.SelectPos + 1
+			base := panelColumnTypeChoices[idx]
+			variants := modeColumnVariants(base)
+			if len(variants) == 1 {
+				insertColumn(base)
+				return
 			}
-			row := modeColumnRow{token: panelColumnTypeChoices[idx], width: "0"}
-			rows = append(rows[:at], append([]modeColumnRow{row}, rows[at:]...)...)
-			refresh(at)
+			// A type with modifiers asks which variant (f4#410).
+			vtui.FrameManager.PostTask(func() {
+				sub := vtui.NewVMenu(base)
+				for _, token := range variants {
+					sub.AddItem(vtui.MenuItem{Text: modeColumnVariantLabel(base, token)})
+				}
+				sub.OnAction = func(i int) {
+					if i >= 0 && i < len(variants) {
+						insertColumn(variants[i])
+					}
+				}
+				showModeColumnsMenu(sub, 56, len(variants))
+			})
 		}
-		screenW, screenH := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
-		w := min(36, screenW)
-		h := min(len(panelColumnTypeChoices)+2, screenH)
-		x := max(0, (screenW-w)/2)
-		y := max(0, (screenH-h)/2)
-		menu.SetPosition(x, y, x+w-1, y+h-1)
-		vtui.FrameManager.Push(menu)
+		showModeColumnsMenu(menu, 36, len(panelColumnTypeChoices))
 	}
 	editWidth := func() {
 		pos := lb.SelectPos
@@ -195,4 +248,15 @@ func showModeColumnsEditor(types, widths string, onOk func(types, widths string)
 	refresh(0)
 	dlg.SetFocusedItem(lb)
 	vtui.FrameManager.Push(dlg)
+}
+
+// showModeColumnsMenu centres an Insert menu of n rows, w columns wide.
+func showModeColumnsMenu(menu *vtui.VMenu, w, n int) {
+	screenW, screenH := vtui.FrameManager.GetScreenSize(), vtui.FrameManager.GetScreenHeight()
+	w = min(w, screenW)
+	h := min(n+2, screenH)
+	x := max(0, (screenW-w)/2)
+	y := max(0, (screenH-h)/2)
+	menu.SetPosition(x, y, x+w-1, y+h-1)
+	vtui.FrameManager.Push(menu)
 }
