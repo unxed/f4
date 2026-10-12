@@ -2,6 +2,7 @@ package keymap
 
 import (
 	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/unxed/f4/internal/numeric"
@@ -9,6 +10,11 @@ import (
 )
 
 func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) string {
+	if e.TextInput && e.KeyDown && e.RepeatCount > 1 {
+		single := *e
+		single.RepeatCount = 1
+		return strings.Repeat(TranslateKeyToKitty(&single, flags, appCursorKeys), int(e.RepeatCount))
+	}
 	if e.VirtualKeyCode == 0xFC { // VK_NONAME
 		if e.KeyDown {
 			if e.Char != 0 {
@@ -24,7 +30,12 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 	enhanced := (e.ControlKeyState & vtinput.EnhancedKey) != 0
 
 	disambiguate := (ctrl && !alt && !shift) || (!ctrl && alt && !shift) || (ctrl && alt && !shift) || (!ctrl && alt && shift)
-	isTextKey := e.Char > 0x1F && e.Char != 0x7F && !ctrl && !alt
+	isTextKey := e.Char > 0x1F && e.Char != 0x7F && ((!ctrl && !alt) || e.TextInput)
+	// Without associated text support, send committed text literally rather
+	// than turn AltGr into a Ctrl+Alt shortcut in the child application.
+	if e.TextInput && e.KeyDown && flags&16 == 0 {
+		return string(e.Char)
+	}
 
 	if (flags&2) != 0 && (flags&8) == 0 && !e.KeyDown {
 		if (e.VirtualKeyCode == vtinput.VK_RETURN && !ctrl && !alt && !shift) ||
@@ -480,7 +491,7 @@ func TranslateKeyToKitty(e *vtinput.InputEvent, flags int, appCursorKeys bool) s
 		skipped = true
 	}
 
-	if (flags&16) != 0 && e.Char >= 32 && !alt && !ctrl {
+	if (flags&16) != 0 && e.KeyDown && e.Char >= 32 && ((!alt && !ctrl) || e.TextInput) {
 		if skipped {
 			out += ";"
 		}

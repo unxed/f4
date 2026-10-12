@@ -141,14 +141,15 @@ func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType {
 		return false
 	}
-	if text, consumed := keymap.NormalizeAltGr(e); text || consumed {
-		// Confirmed layout text bypasses remaps, commands and macro triggers.
+	if e.TextInput && e.KeyDown {
+		// Producer-confirmed text bypasses remaps, commands and macro triggers.
 		// Recording still retains what the user actually typed.
-		if text && m != nil && m.Recording {
+		vtui.DebugLog("[FIX:1815] Confirmed text bypasses shortcuts: source=%s repeat=%d", e.InputSource, e.RepeatCount)
+		if m != nil && m.Recording {
 			copy := *e
 			m.Buffer = append(m.Buffer, &copy)
 		}
-		return consumed
+		return false
 	}
 
 	// Wayland reports the translated keysym for the active layout. Restore the

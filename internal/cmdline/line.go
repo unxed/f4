@@ -94,6 +94,7 @@ func (cl *CommandLine) DisplayObject(scr *vtui.ScreenBuf) {
 }
 
 func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
+	e = vtui.TextInputView(e)
 	handled := cl.Edit.ProcessKey(e)
 	if handled && cl.Edit.HistoryPos != -1 {
 		// If a key was handled by the edit control, it means the text was modified.

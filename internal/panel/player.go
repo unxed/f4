@@ -544,7 +544,7 @@ func (pp *PlayerPanel) adjustVolume(delta float64) {
 // ---- keys ------------------------------------------------------------
 
 func (pp *PlayerPanel) ProcessKey(e *vtinput.InputEvent) bool {
-	if !e.KeyDown || !pp.focused {
+	if !e.KeyDown || !pp.focused || e.TextInput {
 		return false
 	}
 	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0

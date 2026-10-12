@@ -4,6 +4,12 @@
 works one layer below: it substitutes one key for another as the keystroke
 arrives, before anything in f4 has looked at it. Two problems need that layer.
 
+Confirmed text input (for example, AltGr or a composed character) bypasses key
+remapping, command bindings and macro triggers. The input library supplies this
+distinction; f4 does not infer a remote terminal's layout from the local Windows
+keyboard layout. Original key metadata stays available when forwarding input to
+a child terminal, while text controls use the committed character.
+
 Before reaching for either file: **`Ctrl+Shift+P` opens the command palette**,
 which finds any command by name and shows the key it currently sits on;
 `Ctrl+K` on a result assigns a key to that command. On a
@@ -144,26 +150,25 @@ key you meant, and it does not collide with the wildcard `*`.
 
 ## Windows AltGr text (issue #1815)
 
-Windows layout-generated AltGr text reaches the editor, command line and dialog
-fields before key remapping, macro triggers or assigned commands. f4 requires
-Right Alt (without Left Alt or Right Ctrl) and verifies the character against the
-foreground window's keyboard layout; a printable character with arbitrary
-Ctrl/Alt flags is not sufficient. The synthetic Left Ctrl flag is removed only
-for confirmed text. A shortcut without a layout-generated character keeps its
-normal behavior, including Ctrl+Left Alt shortcuts.
+The input libraries mark confirmed AltGr or composed text with
+`InputEvent.TextInput`. f4 checks this before remapping, macro triggers, and
+assigned commands. Text controls use `vtui.TextInputView`, an insertion-only
+copy; the original VK, scan code, modifiers, repeat count, and `InputSource`
+remain available for recording and child-terminal forwarding.
 
-The Win32 and gogpu hosts send a physical modified key followed by text. f4
-defers the physical event when the layout assigns AltGr text or a dead key,
-then accepts the translated character once. Debug mode logs this routing with
-`[FIX:1815]`. Windows reports an intentional Ctrl+Right Alt chord with the same
-flags as AltGr; when the layout assigns text to that chord, f4 treats it as text.
+Win32 and gogpu input producers defer text-producing physical presses until
+the OS commits their characters. They retain the source snapshot across queued
+key releases and layout changes. This uses the non-mutating `ToUnicodeEx`
+probe on Windows 10 version 1607 and later; older systems keep legacy behavior.
+Remote terminal text is classified from the sender's protocol, without querying
+the local keyboard layout. A shortcut with no confirmed text keeps its normal
+behavior. Debug mode logs text routing with `[FIX:1815]` without logging the text.
 
-Layout validation uses `ToUnicodeEx` with its non-mutating flag, available from
-Windows 10 version 1607; older systems retain their previous input behavior to
-avoid disturbing dead-key composition. Regression tests exercise German `@`/`€`,
-Polish Shift+AltGr `Ą`, French spacing dead-key `~`, ordinary shortcuts and an
-unassigned US layout, plus insertion into
-the editor, command line and `vtui.Edit` with conflicting hotkey/macro bindings.
+Producer regression tests cover AltGr, dead keys, Unicode pairs, repeats, and
+ordinary shortcuts. f4 tests insertion into the editor, command line, and dialog
+fields with conflicting bindings, panel routing, macro save/replay, and child
+terminal encoding. Recorded confirmed text uses the versioned token described
+in [MACROS.md](MACROS.md).
 
 ## What a terminal cannot send
 

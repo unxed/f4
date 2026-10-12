@@ -20,7 +20,7 @@ func (e *settingsEdit) ProcessKey(event *vtinput.InputEvent) bool {
 	if !e.readOnly {
 		return e.Edit.ProcessKey(event)
 	}
-	if event.Type == vtinput.PasteEventType {
+	if event.Type == vtinput.PasteEventType || event.TextInput {
 		return true
 	}
 	if !event.KeyDown {

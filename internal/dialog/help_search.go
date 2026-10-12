@@ -112,6 +112,7 @@ func HandleHelpSearchHotkey(e *vtinput.InputEvent) bool {
 	if e == nil {
 		return false
 	}
+	e = vtui.TextInputView(e)
 	frame := vtui.FrameManager.GetTopFrame()
 	_, _, isHelp := HelpTopicForFrame(frame)
 	if !isHelp {
@@ -168,9 +169,16 @@ func HandleHelpSearchHotkey(e *vtinput.InputEvent) bool {
 			return true
 		}
 	}
-	if e.Char != 0 && !ctrl && !alt && unicode.IsPrint(e.Char) {
+	textChar := unicode.IsPrint(e.Char) || (e.TextInput && e.Char >= ' ' && !unicode.IsControl(e.Char))
+	if e.Char != 0 && !ctrl && !alt && textChar {
 		ensureHelpSearch(frame)
-		CurrentHelpSearch.Query = append(CurrentHelpSearch.Query, e.Char)
+		repeat := 1
+		if e.TextInput {
+			repeat = max(1, int(e.RepeatCount))
+		}
+		for range repeat {
+			CurrentHelpSearch.Query = append(CurrentHelpSearch.Query, e.Char)
+		}
 		UpdateHelpSearch(frame)
 		return true
 	}

@@ -3777,6 +3777,16 @@ func shiftSelectDirection(vk uint16) int {
 }
 
 func (fp *FileSystemPanel) ProcessKey(e *vtinput.InputEvent) bool {
+	e = vtui.TextInputView(e)
+	if e.TextInput && e.KeyDown && e.RepeatCount > 1 {
+		single := *e
+		single.RepeatCount = 1
+		handled := false
+		for range e.RepeatCount {
+			handled = fp.processKey(&single, false) || handled
+		}
+		return handled
+	}
 	return fp.processKey(e, false)
 }
 
