@@ -6403,38 +6403,7 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 		}})
 	}
 
-	// 3. Folder bookmarks. far2l lists the assigned slots right here in
-	// the same menu (panels/panel.cpp, AddBookmarkItems) with the slot
-	// digit as the hotkey, so Alt+F1 followed by 6 lands on slot 6.
-	// Unassigned slots are left out.
-	bookmarkRows := map[int]int{} // menu row -> slot, for the keys below
-	if driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuShowBookmarks) {
-		if set, err := LoadBookmarks(BookmarksFilePath()); err == nil {
-			firstBookmark := true
-			for i := range set {
-				if set[i].IsEmpty() {
-					continue
-				}
-				if firstBookmark {
-					// Captioned in the rule, as Tools and Links are (f4#1148).
-					menu.AddItem(vtui.MenuItem{Separator: true, Text: strings.TrimSpace(i18n.Msg("Bookmarks.Title"))})
-					firstBookmark = false
-				}
-				bookmark := set[i]
-				path := bookmark.Path
-				usedHotkeys[rune('0'+i)] = true
-				bookmarkRows[menu.GetItemCount()] = i
-				menu.AddItem(vtui.MenuItem{
-					Text: fmt.Sprintf("&%d %s", i, dialog.EscapeAmpersand(dialog.TruncPathLeft(path, 64))),
-					UserData: func(fsp *FileSystemPanel) {
-						pf.NavigateToBookmark(fsp, bookmark)
-					},
-				})
-			}
-		}
-	}
-
-	// 4. Plugins & custom drives
+	// 3. Plugins & custom drives
 	drives := []sysinfo.DriveEntry(nil)
 	if driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuShowPlugins) {
 		drives = sysinfo.DriveRegistrySnapshot()
@@ -6456,7 +6425,6 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	// together with the plugins', each under a key no plugin name can have.
 	toolRows := map[int]string{}
 	{
-		menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Tools")})
 		type toolRow struct {
 			key string
 			add func()
@@ -6553,12 +6521,50 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 				hiddenTools[name] = true
 			}
 		}
+		// The rule of the section only when a tool is left to show (f4#1148).
+		toolsCaptioned := false
 		for _, r := range rows {
 			if hiddenTools[r.key] {
 				continue
 			}
+			if !toolsCaptioned {
+				menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Tools")})
+				toolsCaptioned = true
+			}
 			toolRows[menu.GetItemCount()] = r.key
 			r.add()
+		}
+	}
+
+	// Folder bookmarks, under the tools as the pages of the drive chooser go:
+	// Tools, Bookmarks, Links (f4#1148). far2l lists the assigned slots right here in
+	// the same menu (panels/panel.cpp, AddBookmarkItems) with the slot
+	// digit as the hotkey, so Alt+F1 followed by 6 lands on slot 6.
+	// Unassigned slots are left out.
+	bookmarkRows := map[int]int{} // menu row -> slot, for the keys below
+	if driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuShowBookmarks) {
+		if set, err := LoadBookmarks(BookmarksFilePath()); err == nil {
+			firstBookmark := true
+			for i := range set {
+				if set[i].IsEmpty() {
+					continue
+				}
+				if firstBookmark {
+					// Captioned in the rule, as Tools and Links are (f4#1148).
+					menu.AddItem(vtui.MenuItem{Separator: true, Text: strings.TrimSpace(i18n.Msg("Bookmarks.Title"))})
+					firstBookmark = false
+				}
+				bookmark := set[i]
+				path := bookmark.Path
+				usedHotkeys[rune('0'+i)] = true
+				bookmarkRows[menu.GetItemCount()] = i
+				menu.AddItem(vtui.MenuItem{
+					Text: fmt.Sprintf("&%d %s", i, dialog.EscapeAmpersand(dialog.TruncPathLeft(path, 64))),
+					UserData: func(fsp *FileSystemPanel) {
+						pf.NavigateToBookmark(fsp, bookmark)
+					},
+				})
+			}
 		}
 	}
 
@@ -6829,13 +6835,28 @@ func (pf *PanelsFrame) clearBookmarkSlot(slot int, menu *vtui.VMenu, reopen func
 		vtui.DebugLog("BOOKMARKS: load %q failed: %v", File, err)
 		return
 	}
-	set.DeleteAtSlot(slot)
-	if err := SaveBookmarks(File, set); err != nil {
-		vtui.DebugLog("BOOKMARKS: save %q failed: %v", File, err)
+	if slot < 0 || slot >= len(set) || set[slot].IsEmpty() {
 		return
 	}
-	menu.Close()
-	vtui.FrameManager.PostTask(reopen)
+	// Asked first, as Del on a link is (f4#1148).
+	question := fmt.Sprintf(i18n.Msg("Bookmarks.DeleteQuestion"), slot, set[slot].Path)
+	vtui.ShowMessageOn(menu, i18n.Msg("Bookmarks.DeleteTitle"), question, []string{"&Delete", i18n.Msg("DriveLink.Cancel")}).OnResult = func(choice int) {
+		if choice != 0 {
+			return
+		}
+		current, err := LoadBookmarks(File)
+		if err != nil {
+			vtui.DebugLog("BOOKMARKS: load %q failed: %v", File, err)
+			return
+		}
+		current.DeleteAtSlot(slot)
+		if err := SaveBookmarks(File, current); err != nil {
+			vtui.DebugLog("BOOKMARKS: save %q failed: %v", File, err)
+			return
+		}
+		menu.Close()
+		vtui.FrameManager.PostTask(reopen)
+	}
 }
 
 // unmountDriveMenuEntry runs Del on a live mount-point row (f4#415): it

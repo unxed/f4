@@ -334,6 +334,22 @@ func TestFitText(t *testing.T) {
 	}
 }
 
+func TestFitCellWidthKeepsRoomForSeparator(t *testing.T) {
+	s := New()
+	s.SetColumnWidth(0, 5)
+	s.SetText(0, 0, "abcde")
+	if got := s.FitCellWidth(0, 0, 4); got != "abc"+string(TruncationMarker) {
+		t.Errorf("FitCellWidth = %q, want %q", got, "abc"+string(TruncationMarker))
+	}
+	s.SetText(0, 0, "ab")
+	if got := s.FitCellWidth(0, 0, 4); got != "ab  " {
+		t.Errorf("FitCellWidth = %q, want %q", got, "ab  ")
+	}
+	if got := s.FitCell(0, 0); got != "ab   " {
+		t.Errorf("FitCell = %q, want %q", got, "ab   ")
+	}
+}
+
 func TestFindAndReplace(t *testing.T) {
 	s := New()
 	s.SetText(0, 0, "alpha")

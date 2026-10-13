@@ -36,6 +36,31 @@ func mapTestFile(t *testing.T, content string) (*MappedFile, string, vfs.VFS, vf
 	return m, path, v, f
 }
 
+func TestCanMemoryMapFileSkipsMultiplyLinkedFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "linked.txt")
+	ordinary := filepath.Join(dir, "ordinary.txt")
+	// #nosec G703 -- both paths are controlled files inside t.TempDir.
+	if err := os.WriteFile(path, []byte("linked"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G703 -- both paths are controlled files inside t.TempDir.
+	if err := os.WriteFile(ordinary, []byte("ordinary"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(path, filepath.Join(dir, "linked-alias.txt")); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+
+	v := vfs.NewOSVFS(dir)
+	if CanMemoryMapFile(context.Background(), v, path) {
+		t.Fatal("multiply-linked file must not be memory mapped")
+	}
+	if !CanMemoryMapFile(context.Background(), v, ordinary) {
+		t.Fatal("ordinary file should remain eligible for memory mapping")
+	}
+}
+
 func TestMapEditorFile_BacksThePieceTableWithoutCopying(t *testing.T) {
 	content := "hello world\nsecond line\n"
 	m, _, _, _ := mapTestFile(t, content)

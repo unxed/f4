@@ -272,8 +272,8 @@ github.com/uranic2/gogpu v0.0.0-20261012163327-2d133f83dc34 h1:ba6QUkfqaVJ3G9DjW
 github.com/uranic2/gogpu v0.0.0-20261012163327-2d133f83dc34/go.mod h1:pUqsHA1Lo5qi4SNBYuJ1fyMqnwWMn3APHx6K63S3+mc=
 github.com/uranic2/vtinput v0.0.0-20261012155615-7fd23cf8705b h1:owDIvHmV9X7ZPnS/j896v6XAsq84A4pbnTDrDovUKQI=
 github.com/uranic2/vtinput v0.0.0-20261012155615-7fd23cf8705b/go.mod h1:jmJMDwgdEP3RcX4SOSGFOjlJ3czjbT5OQIQ/PTyRn8s=
-github.com/uranic2/vtui v0.0.0-20261012163651-4163d0a6dc93 h1:9MZ9PRFIU0ld0u3h2i+6/cBdrrM3FimfbWoX94NyTXg=
-github.com/uranic2/vtui v0.0.0-20261012163651-4163d0a6dc93/go.mod h1:KrkVnD21xmmlF7IPpOnDBytupawinddUeTyWLQ2yFcw=
+github.com/uranic2/vtui v0.0.0-20261013042845-b72719d8eaf7 h1:KHgg+DZPSwUQy0GW6Xx8V1PWizde0sqnrTiJkEPhzI8=
+github.com/uranic2/vtui v0.0.0-20261013042845-b72719d8eaf7/go.mod h1:KrkVnD21xmmlF7IPpOnDBytupawinddUeTyWLQ2yFcw=
 github.com/uranic2/winkeys v0.0.0-20261012155219-35669ea25770 h1:8oRlCYZZYjW1YXysvQrb2Tuihud+kYBC0DbbqeSkuV4=
 github.com/uranic2/winkeys v0.0.0-20261012155219-35669ea25770/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
 github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=

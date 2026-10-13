@@ -21,6 +21,7 @@ func TestCommandPaletteSheetEntries(t *testing.T) {
 		"Sheet.Save", "Sheet.SaveAs", "Sheet.Open", "Sheet.Export", "Sheet.Recalc",
 		"Sheet.Goto", "Sheet.Find", "Sheet.Replace", "Sheet.SearchAgain",
 		"Sheet.CellFormat", "Sheet.ColumnWidth", "Sheet.ToggleSeparators",
+		"Sheet.CSVSeparator",
 		"Sheet.InsertRow", "Sheet.InsertColumn", "Sheet.DeleteRow", "Sheet.DeleteColumn",
 		"Sheet.Undo", "Sheet.Menu",
 	}

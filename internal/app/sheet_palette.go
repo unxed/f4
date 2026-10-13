@@ -39,6 +39,12 @@ func commandPaletteSheetEntries(frame *SheetFrame) []commandPaletteEntry {
 	)
 	separators.Checked = frame.doc.Separators
 
+	csvSeparator := newEntry(
+		"CSVSeparator", "CommandPalette.Sheet.CSVSeparator", "CSV separator",
+		"CommandPalette.Sheet.CSVSeparator.Desc", "Change the field delimiter for CSV import/export", "",
+		func(sf *SheetFrame) { showSheetCSVSeparatorDialog(sf) },
+	)
+
 	return []commandPaletteEntry{
 		newEntry("Save", "CommandPalette.Sheet.Save", "Save spreadsheet",
 			"CommandPalette.Sheet.Save.Desc", "Write the spreadsheet back to its file", "F2",
@@ -74,6 +80,7 @@ func commandPaletteSheetEntries(frame *SheetFrame) []commandPaletteEntry {
 			"CommandPalette.Sheet.ColumnWidth.Desc", "Set the width of the current column", "Alt+Left, Alt+Right",
 			func(sf *SheetFrame) { showSheetWidthDialog(sf) }),
 		separators,
+		csvSeparator,
 		newEntry("InsertRow", "CommandPalette.Sheet.InsertRow", "Insert row",
 			"CommandPalette.Sheet.InsertRow.Desc", "Insert a row above the cursor and repair formulas", "Alt+I",
 			func(sf *SheetFrame) { sf.doc.InsertRow(sf.cur.Row) }),

@@ -138,9 +138,15 @@ func (p *Plugin) Init(api vfs.HostAPI) error {
 // commands in this scaffold step. It exists so IDE.Build/Run/Test are real,
 // assignable commands from day one (the owner can bind hotkeys to them
 // immediately) while the actual toolchain integration lands separately.
+//
+// The notice goes out in a worker goroutine, never inline: menu and palette
+// dispatch Run synchronously on the UI thread, and app.Message blocks until
+// the UI loop shows the dialog and reports the button back — calling it here
+// deadlocks the whole app (unxed/f4#1893). Background notifications in other
+// plugins (multiarc, intchecker) use the same `go app.Message` shape.
 func notYetImplemented(command string) func(vfs.App) {
 	return func(app vfs.App) {
-		app.Message("IDE", command+" is not implemented yet (f4#382: this is the plugin scaffold; Go build/run/test integration lands as a follow-up part).", []string{"OK"})
+		go app.Message("IDE", command+" is not implemented yet (f4#382: this is the plugin scaffold; Go build/run/test integration lands as a follow-up part).", []string{"OK"})
 	}
 }
 

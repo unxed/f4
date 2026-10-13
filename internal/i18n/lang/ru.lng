@@ -1954,6 +1954,8 @@ Bookmarks.SaveError=Не удалось сохранить закладки:\n%v
 Bookmarks.EditTitle= Изменить путь закладки
 Bookmarks.EditPrompt=&Путь:
 Bookmarks.PanelPluginUnavailable=Плагин панели "%s" недоступен; открыта только папка
+Bookmarks.DeleteTitle= Удалить закладку 
+Bookmarks.DeleteQuestion=Удалить закладку %d «%s»?
 
 KeyBar.F1=Справка
 KeyBar.F2=Меню
@@ -2677,6 +2679,8 @@ Sheet.GotoPrompt=Имя ячейки
 Sheet.BadReference=Это не похоже на имя ячейки
 Sheet.WidthTitle= Ширина колонки 
 Sheet.WidthPrompt=Ширина колонки %s
+Sheet.CSVSeparatorTitle= Разделитель CSV 
+Sheet.CSVSeparatorPrompt=Разделитель полей (comma, tab, semicolon, space)
 Sheet.FormatTitle= Формат ячейки или блока 
 Sheet.FormatDisplay=Показывать как
 Sheet.FormatAsIs=&Как есть

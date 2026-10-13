@@ -947,7 +947,7 @@ func showEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtClose
 			// and a search scans the file itself instead of a copy of it.
 			// Everything else — remote, empty, or a mapping the kernel
 			// refused — keeps the lazily fetched chunk buffer.
-			if config.App.EditorMemoryMap {
+			if config.App.EditorMemoryMap && editor.CanMemoryMapFile(context.Background(), v, path) {
 				var mapErr error
 				mapped, mapErr = editor.MapEditorFileWithOffset(v, f, dataOffset)
 				if mapErr != nil && mapErr != editor.ErrNotMappable {
@@ -1435,7 +1435,7 @@ func actionSwitchViewerToEditor(vv *viewer.ViewerView) {
 	}
 
 	if cpID == 65001 {
-		if config.App.EditorMemoryMap {
+		if config.App.EditorMemoryMap && editor.CanMemoryMapFile(ctx, vv.VFS, vv.Path) {
 			var mapErr error
 			mapped, mapErr = editor.MapEditorFileWithOffset(vv.VFS, f, dataOffset)
 			if mapErr != nil && mapErr != editor.ErrNotMappable {

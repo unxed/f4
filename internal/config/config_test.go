@@ -472,8 +472,24 @@ func TestCreateDefaultHighlightIniDocumentsColorOptions(t *testing.T) {
 			t.Errorf("generated highlight.ini still advertises the old color name %q", key)
 		}
 	}
-	if got := strings.Count(content, "# [Highlight_"); got != 2 {
-		t.Errorf("generated highlight.ini has %d examples, want 2", got)
+	if got := strings.Count(content, "# [Highlight_"); got != 3 {
+		t.Errorf("generated highlight.ini has %d highlight examples, want 3", got)
+	}
+	// f4#912 (mitek1977-coder): every example is at the end of the comments,
+	// after the description of the sort groups, and the two sort-group
+	// examples are comments only: one Highlight section with Group and one
+	// dedicated SortGroup section.
+	if strings.Contains(content, "\n[") {
+		t.Error("generated highlight.ini contains an active section")
+	}
+	if got := strings.Count(content, "# Group = "); got != 2 {
+		t.Errorf("generated highlight.ini has %d sort-group examples, want 2", got)
+	}
+	if !strings.Contains(content, "# [SortGroup_") {
+		t.Error("generated highlight.ini has no dedicated sort-group example")
+	}
+	if first, desc := strings.Index(content, "# [Highlight_"), strings.Index(content, "Sort groups put files of one kind together"); first < desc {
+		t.Errorf("the first example (at %d) is above the description of the sort groups (at %d)", first, desc)
 	}
 
 	// The ordinary colors take a background just like the cursor ones, and the

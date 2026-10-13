@@ -333,6 +333,40 @@ func showSheetWidthDialog(sf *SheetFrame) {
 }
 
 // showSheetFormatDialog is the cell/block format editor.
+// showSheetCSVSeparatorDialog lets the user change the CSV field delimiter.
+func showSheetCSVSeparatorDialog(sf *SheetFrame) {
+	sep := sf.Document().CSVSeparator
+	var initial string
+	switch sep {
+	case '\t':
+		initial = "tab"
+	case ';':
+		initial = "semicolon"
+	case ' ':
+		initial = "space"
+	default:
+		initial = "comma"
+	}
+	askSheetPathLike(i18n.Msg("Sheet.CSVSeparatorTitle"),
+		i18n.Msg("Sheet.CSVSeparatorPrompt"), initial, 12, func(text string) {
+			text = strings.TrimSpace(strings.ToLower(text))
+			var r rune
+			switch text {
+			case "comma", ",":
+				r = ','
+			case "tab", "\\t", "t":
+				r = '\t'
+			case "semicolon", ";":
+				r = ';'
+			case "space", " ":
+				r = ' '
+			default:
+				return
+			}
+			sf.Document().CSVSeparator = r
+		})
+}
+
 func showSheetFormatDialog(sf *SheetFrame) {
 	dlg := vtui.NewCenteredDialog(50, 18, i18n.Msg("Sheet.FormatTitle"))
 	dlg.ShowClose = true

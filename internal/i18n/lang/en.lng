@@ -1954,6 +1954,8 @@ Bookmarks.SaveError=Failed to save bookmarks:\n%v
 Bookmarks.EditTitle= Edit bookmark path
 Bookmarks.EditPrompt=&Path:
 Bookmarks.PanelPluginUnavailable=Panel plugin "%s" is not available; opened the folder only
+Bookmarks.DeleteTitle= Delete bookmark 
+Bookmarks.DeleteQuestion=Delete bookmark %d "%s"?
 
 KeyBar.F1=Help
 KeyBar.F2=Menu
@@ -2677,6 +2679,8 @@ Sheet.GotoPrompt=Cell name
 Sheet.BadReference=That is not a valid cell name
 Sheet.WidthTitle= Column width 
 Sheet.WidthPrompt=Width of column %s
+Sheet.CSVSeparatorTitle= CSV separator 
+Sheet.CSVSeparatorPrompt=Field delimiter (comma, tab, semicolon, space)
 Sheet.FormatTitle= Cell/block format 
 Sheet.FormatDisplay=Display as
 Sheet.FormatAsIs=&As is

@@ -5920,7 +5920,8 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 				// as mappable as the one that was opened, and dropping to the
 				// chunk buffer here would quietly cost every later search the
 				// copy that mapping avoids.
-				if ev.Mapped != nil && config.App.EditorMemoryMap {
+				if ev.Mapped != nil && config.App.EditorMemoryMap &&
+					CanMemoryMapFile(ctx.Context, ev.Vfs, finalFilePath) {
 					mapOffset := int64(0)
 					if newUTF8BOM {
 						mapOffset = vfs.UTF8BOMSize

@@ -34,7 +34,7 @@ require (
 	github.com/unxed/sevenzip v0.1.7
 	github.com/unxed/tar v0.1.141
 	github.com/unxed/vtinput v0.1.11
-	github.com/unxed/vtui v0.1.399-0.20261011170907-d9f0e6cae281
+	github.com/unxed/vtui v0.1.399-0.20261013033101-3c04f85ea530
 	github.com/unxed/zip v0.1.145
 	github.com/unxed/zipper v0.1.178
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -185,4 +185,4 @@ replace github.com/unxed/vtinput => github.com/uranic2/vtinput v0.0.0-2026101215
 
 replace github.com/gogpu/gogpu => github.com/uranic2/gogpu v0.0.0-20261012163327-2d133f83dc34
 
-replace github.com/unxed/vtui => github.com/uranic2/vtui v0.0.0-20261012163651-4163d0a6dc93
+replace github.com/unxed/vtui => github.com/uranic2/vtui v0.0.0-20261013042845-b72719d8eaf7

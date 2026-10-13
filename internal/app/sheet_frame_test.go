@@ -190,6 +190,33 @@ func TestSheetFrameRendersGrid(t *testing.T) {
 	}
 }
 
+func TestSheetFrameSeparatorsDoNotCoverText(t *testing.T) {
+	sf := newSheetFrameForTest(t)
+	typeText(sf, "aaa")
+	sf.gotoCell(0, 0)
+	sf.ProcessKey(key('S', vtinput.LeftAltPressed))
+	if !sf.Document().Separators {
+		t.Fatal("Alt+S must switch the column separators on")
+	}
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(100, 30)
+	sf.SetPosition(0, 0, 99, 28)
+	sf.Show(scr)
+
+	var firstRow strings.Builder
+	for x := 0; x < 40; x++ {
+		firstRow.WriteRune(testutil.Rune(scr.GetCell(x, sf.gridTopY()).Char))
+	}
+	rendered := firstRow.String()
+	if !strings.Contains(rendered, "aaa") {
+		t.Errorf("first grid row = %q, want the full cell text with separators on", rendered)
+	}
+	if !strings.ContainsRune(rendered, sheet.ColumnSeparator) {
+		t.Errorf("first grid row = %q, want the column separator drawn", rendered)
+	}
+}
+
 func TestSheetFrameKeyLabelsAreLocalized(t *testing.T) {
 	sf := newSheetFrameForTest(t)
 	labels := sf.GetKeyLabels()

@@ -26,11 +26,12 @@ type jsonDocument struct {
 	// doubles as the content-sniffing marker IsSheetFile looks for: any
 	// object with this key at the top level is treated as a candidate sheet
 	// file before the rest of its shape is even checked.
-	Schema     int            `json:"schema"`
-	Title      string         `json:"title"`
-	Separators bool           `json:"separators"`
-	Columns    map[string]int `json:"columns"`
-	Cells      []jsonCell     `json:"cells"`
+	Schema       int            `json:"schema"`
+	Title        string         `json:"title"`
+	Separators   bool           `json:"separators"`
+	CSVSeparator rune           `json:"csv_separator"`
+	Columns      map[string]int `json:"columns"`
+	Cells        []jsonCell     `json:"cells"`
 }
 
 type jsonCell struct {
@@ -56,10 +57,11 @@ type jsonCell struct {
 // sheet by the other.
 func (s *Sheet) Save(_ context.Context, path string) error {
 	doc := jsonDocument{
-		Schema:     SchemaVersion,
-		Title:      s.Title,
-		Separators: s.Separators,
-		Columns:    make(map[string]int),
+		Schema:       SchemaVersion,
+		Title:        s.Title,
+		Separators:   s.Separators,
+		CSVSeparator: s.CSVSeparator,
+		Columns:      make(map[string]int),
 	}
 	for col, width := range s.ColumnWidths() {
 		doc.Columns[strconv.Itoa(col)] = width
@@ -111,6 +113,9 @@ func Load(_ context.Context, path string) (*Sheet, error) {
 
 	sheet.Title = doc.Title
 	sheet.Separators = doc.Separators
+	if doc.CSVSeparator != 0 {
+		sheet.CSVSeparator = doc.CSVSeparator
+	}
 
 	for key, width := range doc.Columns {
 		col, err := strconv.Atoi(key)

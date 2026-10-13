@@ -3,6 +3,7 @@ package ide
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 )
@@ -49,15 +50,21 @@ func (h *fakeContributionHost) RegisterMacroCallProvider(vfs.MacroCallProvider) 
 type bareHost struct{ vfs.HostAPI }
 
 // fakeApp implements just enough of vfs.App to observe Message calls from
-// the placeholder Run handlers.
-type fakeApp struct {
-	vfs.App
+// the placeholder Run handlers. The handlers notify from a worker goroutine
+// (calling blocking Message on the UI thread deadlocks, unxed/f4#1893), so
+// calls arrive over a channel instead of plain fields.
+type messageCall struct {
 	title, msg string
 	buttons    []string
 }
 
+type fakeApp struct {
+	vfs.App
+	calls chan messageCall
+}
+
 func (a *fakeApp) Message(title, msg string, buttons []string) int {
-	a.title, a.msg, a.buttons = title, msg, buttons
+	a.calls <- messageCall{title, msg, buttons}
 	return 0
 }
 
@@ -134,13 +141,18 @@ func TestCommandRunReportsNotImplementedYet(t *testing.T) {
 	}
 
 	for _, c := range host.commands {
-		app := &fakeApp{}
+		app := &fakeApp{calls: make(chan messageCall, 1)}
 		c.Run(app)
-		if app.title != "IDE" {
-			t.Errorf("%s: Message title = %q, want %q", c.ID, app.title, "IDE")
-		}
-		if app.msg == "" {
-			t.Errorf("%s: Message body is empty", c.ID)
+		select {
+		case call := <-app.calls:
+			if call.title != "IDE" {
+				t.Errorf("%s: Message title = %q, want %q", c.ID, call.title, "IDE")
+			}
+			if call.msg == "" {
+				t.Errorf("%s: Message body is empty", c.ID)
+			}
+		case <-time.After(5 * time.Second):
+			t.Errorf("%s: no Message call arrived", c.ID)
 		}
 	}
 }

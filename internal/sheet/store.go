@@ -80,9 +80,10 @@ func (s *Sheet) Save(ctx context.Context, path string) error {
 	}
 
 	meta := map[string]string{
-		"schema":     strconv.Itoa(SchemaVersion),
-		"title":      s.Title,
-		"separators": strconv.FormatBool(s.Separators),
+		"schema":        strconv.Itoa(SchemaVersion),
+		"title":         s.Title,
+		"separators":    strconv.FormatBool(s.Separators),
+		"csv_separator": string(s.CSVSeparator),
 	}
 	for key, value := range meta {
 		if _, err := tx.ExecContext(ctx,
@@ -151,6 +152,10 @@ func Load(ctx context.Context, path string) (*Sheet, error) {
 			sheet.Title = value
 		case "separators":
 			sheet.Separators = value == "true"
+		case "csv_separator":
+			if len(value) == 1 {
+				sheet.CSVSeparator = rune(value[0])
+			}
 		case "schema":
 			if version, convErr := strconv.Atoi(value); convErr == nil && version > SchemaVersion {
 				_ = metaRows.Close()
