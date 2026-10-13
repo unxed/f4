@@ -2038,6 +2038,17 @@ func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 // away even when it moved nothing: Up at the top of a file left the user at the
 // top of the file, which is precisely where they did not want to be.
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.TextInput && e.KeyDown && e.RepeatCount > 1 {
+		// Expand only confirmed text, keeping each insertion's selection,
+		// overtype and multiple-caret semantics identical to separate commits.
+		single := *e
+		single.RepeatCount = 1
+		handled := false
+		for range e.RepeatCount {
+			handled = ev.ProcessKey(&single) || handled
+		}
+		return handled
+	}
 	defer stallwatch.Frame("editor.ProcessKey")()
 	defer ev.scheduleMarkdownSplit()
 	if ev.TargetLine == -1 {
@@ -2054,6 +2065,7 @@ func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
 }
 
 func (ev *EditorView) processKeyInner(e *vtinput.InputEvent) bool {
+	e = vtui.TextInputView(e)
 
 	ev.ensureEngineWidth()
 	if ev.Saving {

@@ -141,6 +141,16 @@ func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType {
 		return false
 	}
+	if e.TextInput && e.KeyDown {
+		// Producer-confirmed text bypasses remaps, commands and macro triggers.
+		// Recording still retains what the user actually typed.
+		vtui.DebugLog("[FIX:1815] Confirmed text bypasses shortcuts: source=%s repeat=%d", e.InputSource, e.RepeatCount)
+		if m != nil && m.Recording {
+			copy := *e
+			m.Buffer = append(m.Buffer, &copy)
+		}
+		return false
+	}
 
 	// Wayland reports the translated keysym for the active layout. Restore the
 	// physical Latin VK before remaps and native handlers inspect the event, so

@@ -2,6 +2,10 @@ package keymap
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
+
 	"github.com/unxed/f4/internal/numeric"
 	"github.com/unxed/vtinput"
 )
@@ -335,8 +339,18 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCu
 			kd = 1
 		}
 		// Format: CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _
-		return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
-			e.VirtualKeyCode, e.VirtualScanCode, win32UnicodeChar(e), kd, e.ControlKeyState, e.RepeatCount)
+		encode := func(char rune) string {
+			return fmt.Sprintf("\x1b[%d;%d;%d;%d;%d;%d_",
+				e.VirtualKeyCode, e.VirtualScanCode, char, kd, e.ControlKeyState, e.RepeatCount)
+		}
+		char := win32UnicodeChar(e)
+		if char > 0xffff && utf8.ValidRune(char) {
+			// Win32's UnicodeChar is one UTF-16 unit, whereas InputEvent.Char
+			// holds a complete scalar after the producer combines surrogates.
+			high, low := utf16.EncodeRune(char)
+			return encode(high) + encode(low)
+		}
+		return encode(char)
 	}
 
 	if kittyFlags != 0 {
@@ -347,6 +361,13 @@ func TranslateInput(e *vtinput.InputEvent, win32Mode bool, kittyFlags int, appCu
 		if !e.KeyDown {
 			return ""
 		}
+	}
+
+	// Text intent comes from the input producer, never from the local layout.
+	// Legacy terminals need the committed character, not an Alt escape prefix
+	// or a Ctrl conversion. Advanced protocols above retain physical metadata.
+	if e.TextInput && e.Type == vtinput.KeyEventType && e.KeyDown {
+		return strings.Repeat(string(e.Char), max(1, int(e.RepeatCount)))
 	}
 
 	// Ignore standalone modifier key presses

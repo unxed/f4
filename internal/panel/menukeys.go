@@ -7,7 +7,7 @@ import "github.com/unxed/vtinput"
 // far2l accepts Ctrl+N alongside Ins in the same menus (elfmz/far2l#3645);
 // the user menu already did so here.
 func isAddItemKey(e *vtinput.InputEvent) bool {
-	if e == nil || !e.KeyDown {
+	if e == nil || !e.KeyDown || e.TextInput {
 		return false
 	}
 	const ctrlMask = vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed

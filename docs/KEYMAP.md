@@ -4,6 +4,12 @@
 works one layer below: it substitutes one key for another as the keystroke
 arrives, before anything in f4 has looked at it. Two problems need that layer.
 
+Confirmed text input (for example, AltGr or a composed character) bypasses key
+remapping, command bindings and macro triggers. The input library supplies this
+distinction; f4 does not infer a remote terminal's layout from the local Windows
+keyboard layout. Original key metadata stays available when forwarding input to
+a child terminal, while text controls use the committed character.
+
 Before reaching for either file: **`Ctrl+Shift+P` opens the command palette**,
 which finds any command by name and shows the key it currently sits on;
 `Ctrl+K` on a result assigns a key to that command. On a
@@ -141,6 +147,28 @@ work.
 f4 folds a shifted character back onto the key that produced it, so all of
 those name the same rule. Write the `Shift1 ... Shift0` form: it says which
 key you meant, and it does not collide with the wildcard `*`.
+
+## Windows AltGr text (issue #1815)
+
+The input libraries mark confirmed AltGr or composed text with
+`InputEvent.TextInput`. f4 checks this before remapping, macro triggers, and
+assigned commands. Text controls use `vtui.TextInputView`, an insertion-only
+copy; the original VK, scan code, modifiers, repeat count, and `InputSource`
+remain available for recording and child-terminal forwarding.
+
+Win32 and gogpu input producers defer text-producing physical presses until
+the OS commits their characters. They retain the source snapshot across queued
+key releases and layout changes. This uses the non-mutating `ToUnicodeEx`
+probe on Windows 10 version 1607 and later; older systems keep legacy behavior.
+Remote terminal text is classified from the sender's protocol, without querying
+the local keyboard layout. A shortcut with no confirmed text keeps its normal
+behavior. Debug mode logs text routing with `[FIX:1815]` without logging the text.
+
+Producer regression tests cover AltGr, dead keys, Unicode pairs, repeats, and
+ordinary shortcuts. f4 tests insertion into the editor, command line, and dialog
+fields with conflicting bindings, panel routing, macro save/replay, and child
+terminal encoding. Recorded confirmed text uses the versioned token described
+in [MACROS.md](MACROS.md).
 
 ## What a terminal cannot send
 

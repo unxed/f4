@@ -15,6 +15,21 @@ You do not need Lua installed. The interpreter is inside f4.
 
 If a key has both kinds bound to it, the recorded one wins, as in Far.
 
+### Recorded text and AltGr
+
+Input producers mark confirmed modified or composed text separately from key
+shortcuts. Such text is recorded and inserted as text even when a command,
+remapping rule or macro is bound to the physical key or the resulting character.
+Ordinary character shortcuts keep their existing behavior.
+
+Recorded sequences keep normal Far key names. For confirmed text, f4 writes a
+versioned `f4-text-v1:` token containing a Base64URL-encoded keyboard record.
+Both INI sequences and exported Lua `Keys()` calls understand this token. It
+preserves the character, physical key, modifiers, repeat count and source through
+save, load and playback. This token is an f4 extension; exported macros containing
+it require f4 and are not portable to Far's `Keys()` implementation. Malformed or
+unsupported text tokens are ignored.
+
 ## Where macros go
 
 Put `.lua` files under the `Macros/scripts` directory inside f4's

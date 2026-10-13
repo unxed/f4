@@ -107,7 +107,9 @@ func (m *MacroManager) Load() {
 					if strings.HasPrefix(keyStr, "callplugin") || strings.HasPrefix(keyStr, "eval") || strings.Contains(keyStr, "(") {
 						continue // Skip far2l macro functions for now
 					}
-					events = append(events, keymap.ParseFarKey(keyStr))
+					if event := decodeMacroEvent(keyStr); event != nil {
+						events = append(events, event)
+					}
 				}
 
 				if newMacros[area] == nil {
@@ -210,7 +212,9 @@ func (m *MacroManager) Save() {
 
 			var parts []string
 			for _, e := range seq {
-				parts = append(parts, keymap.EventToFarString(e))
+				if token := encodeMacroEvent(e); token != "" {
+					parts = append(parts, token)
+				}
 			}
 			fmt.Fprintf(&sb, "Sequence=%s\n\n", strings.Join(parts, " "))
 		}
@@ -251,6 +255,11 @@ type macroKeyEdit struct {
 }
 
 func (k *macroKeyEdit) ProcessKey(e *vtinput.InputEvent) bool {
+	// Text cannot name a physical shortcut. Only the capture field consumes
+	// it here; the description field still accepts committed text normally.
+	if e.TextInput {
+		return true
+	}
 	if e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode == vtinput.VK_ESCAPE {
 		return false
 	}
@@ -354,7 +363,7 @@ func (f *MacroAssignFrame) cancel() {
 }
 
 func (f *MacroAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
-	if e.Type == vtinput.KeyEventType && e.KeyDown && e.VirtualKeyCode == vtinput.VK_ESCAPE {
+	if e.Type == vtinput.KeyEventType && e.KeyDown && !e.TextInput && e.VirtualKeyCode == vtinput.VK_ESCAPE {
 		f.cancel()
 		return true
 	}

@@ -526,7 +526,7 @@ func (e *LuaMacroEngine) Trigger(area string, event *vtinput.InputEvent) bool {
 // boundary lets EmptyCommandLine decide before the key is consumed without a
 // UI deadlock.
 func (e *LuaMacroEngine) TriggerWithCommandLine(area string, event *vtinput.InputEvent, commandLine string) bool {
-	if e == nil || event == nil {
+	if e == nil || event == nil || event.TextInput {
 		return false
 	}
 	key := keymap.EventToFarString(event)
@@ -687,7 +687,7 @@ func (e *LuaMacroEngine) Close() error {
 func parseMacroKeys(spec string) []*vtinput.InputEvent {
 	var events []*vtinput.InputEvent
 	for _, token := range strings.Fields(spec) {
-		if event := keymap.ParseFarKey(token); event != nil {
+		if event := decodeMacroEvent(token); event != nil {
 			events = append(events, event)
 		}
 	}

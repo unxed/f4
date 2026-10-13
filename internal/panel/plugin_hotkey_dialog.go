@@ -76,6 +76,7 @@ func currentPluginHotkeyText(hm *keymap.HotkeyManager, actionName, label, declar
 type pluginHotkeyEdit struct{ *vtui.Edit }
 
 func (e *pluginHotkeyEdit) ProcessKey(ev *vtinput.InputEvent) bool {
+	ev = vtui.TextInputView(ev)
 	if ev == nil || !ev.KeyDown {
 		return e.Edit.ProcessKey(ev)
 	}

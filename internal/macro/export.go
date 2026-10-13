@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/vtinput"
 )
 
@@ -18,8 +17,9 @@ const recordedMacroLineWidth = 60
 // RecordedMacroToLua renders a recorded key sequence as a Far-compatible
 // Macro{} declaration.
 //
-// A recorded macro is nothing but a list of keys, so its Lua form is a list of
-// Keys() calls. The output is meant to be opened and edited: this is the step
+// Its Lua form is a list of Keys() calls. Ordinary keys use Far spellings;
+// confirmed text uses f4's versioned text-event token so replay cannot turn it
+// into a shortcut. The output is meant to be opened and edited: this is the step
 // from "I pressed record" to "I am writing macros", and it should not read
 // like something a machine emitted.
 func RecordedMacroToLua(area, key, description string, events []*vtinput.InputEvent) string {
@@ -45,7 +45,7 @@ func RecordedMacroToLua(area, key, description string, events []*vtinput.InputEv
 	return sb.String()
 }
 
-// recordedKeyLines turns events into Far key names, wrapped into lines.
+// recordedKeyLines turns events into key/text tokens, wrapped into lines.
 func recordedKeyLines(events []*vtinput.InputEvent) []string {
 	var lines []string
 	var current string
@@ -54,7 +54,7 @@ func recordedKeyLines(events []*vtinput.InputEvent) []string {
 		if event == nil {
 			continue
 		}
-		name := keymap.EventToFarString(event)
+		name := encodeMacroEvent(event)
 		if name == "" {
 			continue
 		}

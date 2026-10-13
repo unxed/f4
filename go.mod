@@ -178,3 +178,11 @@ replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 
 replace github.com/unxed/goclip => github.com/Zoinen/goclip v0.1.3-clipboard.1
+
+replace github.com/unxed/winkeys => github.com/uranic2/winkeys v0.0.0-20261012155219-35669ea25770
+
+replace github.com/unxed/vtinput => github.com/uranic2/vtinput v0.0.0-20261012155615-7fd23cf8705b
+
+replace github.com/gogpu/gogpu => github.com/uranic2/gogpu v0.0.0-20261012163327-2d133f83dc34
+
+replace github.com/unxed/vtui => github.com/uranic2/vtui v0.0.0-20261013042845-b72719d8eaf7

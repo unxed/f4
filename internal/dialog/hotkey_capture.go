@@ -58,6 +58,10 @@ func NewHotkeyAssignFrame(hm *keymap.HotkeyManager, actionName, area string, onC
 }
 
 func (f *HotkeyAssignFrame) ProcessKey(e *vtinput.InputEvent) bool {
+	// Text commits cannot name a physical shortcut; keep waiting for a chord.
+	if e.TextInput {
+		return true
+	}
 	if e.Type == vtinput.FocusEventType {
 		if !e.SetFocus {
 			f.shiftHeld = false

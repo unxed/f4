@@ -963,6 +963,7 @@ func (c *settingsCenter) categorySidebarWidth() int {
 	return min(c.categorySidebarNaturalWidth(), max(10, available))
 }
 func (c *settingsCenter) ProcessKey(e *vtinput.InputEvent) bool {
+	e = vtui.TextInputView(e)
 	if c.category == "hotkeys" && c.GetFocusedItem() == c.page && c.hotkeyPage != nil {
 		if e.KeyDown && (e.VirtualKeyCode == vtinput.VK_ESCAPE || e.VirtualKeyCode == vtinput.VK_TAB) {
 			if c.hotkeyPage.ProcessKey(e) {

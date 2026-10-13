@@ -228,7 +228,7 @@ func pathWithTrailingSeparator(path string) string {
 // It lives in the frame-level event filter because modal dialogs otherwise
 // consume Ctrl+[ and Ctrl+] before PanelsFrame can see them.
 func HandlePanelPathEditHotkey(e *vtinput.InputEvent) bool {
-	if e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown {
+	if e == nil || e.Type != vtinput.KeyEventType || !e.KeyDown || e.TextInput {
 		return false
 	}
 	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
@@ -2849,6 +2849,10 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	if pf.consumeHostConsoleReply(e) {
 		return true
 	}
+	// Application handlers inspect the text view; a child terminal still
+	// receives the producer's physical key and modifier metadata.
+	sourceEvent := e
+	e = vtui.TextInputView(e)
 	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
 	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
 	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
@@ -2933,7 +2937,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if e.KeyDown || pf.TermView.Win32InputMode || pf.TermView.KittyFlags.Load() != 0 {
 			active := pf.GetActivePTY()
 			if active != nil {
-				if seq := keymap.TranslateInput(e, pf.TermView.Win32InputMode, int(pf.TermView.KittyFlags.Load()), pf.TermView.ApplicationCursorKeys); seq != "" {
+				if seq := keymap.TranslateInput(sourceEvent, pf.TermView.Win32InputMode, int(pf.TermView.KittyFlags.Load()), pf.TermView.ApplicationCursorKeys); seq != "" {
 					_, _ = pf.WritePTY(active, []byte(seq))
 				}
 			}
@@ -2952,7 +2956,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 
 	// Quake-style physical key: ` / ~ / ё toggles the explicit input
 	// target in search-first mode and is never inserted as text.
-	if pf.SearchFirstMode() && pf.ShowPanels && e.KeyDown && isCommandFocusToggleKey(e) && !ctrl && !alt && !shift {
+	if !e.TextInput && pf.SearchFirstMode() && pf.ShowPanels && e.KeyDown && isCommandFocusToggleKey(e) && !ctrl && !alt && !shift {
 		pf.SetCommandLineFocus(!pf.CommandLineFocused)
 		return true
 	}
@@ -3121,7 +3125,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		if e.KeyDown || pf.TermView.Win32InputMode || pf.TermView.KittyFlags.Load() != 0 {
 			active := pf.GetActivePTY()
 			if active != nil {
-				if seq := keymap.TranslateInput(e, pf.TermView.Win32InputMode, int(pf.TermView.KittyFlags.Load()), pf.TermView.ApplicationCursorKeys); seq != "" {
+				if seq := keymap.TranslateInput(sourceEvent, pf.TermView.Win32InputMode, int(pf.TermView.KittyFlags.Load()), pf.TermView.ApplicationCursorKeys); seq != "" {
 					_, _ = pf.WritePTY(active, []byte(seq))
 				}
 			}
@@ -3227,7 +3231,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return pf.CmdLine.ProcessKey(e)
 	}
 	// Vim-like hotkeys
-	if config.App.NavigationMode == config.NavigationVim && pf.ShowPanels && !alt && !ctrl && !shift && e.Char != 0 && pf.CmdLine.Edit.HistoryPos == -1 {
+	if !e.TextInput && config.App.NavigationMode == config.NavigationVim && pf.ShowPanels && !alt && !ctrl && !shift && e.Char != 0 && pf.CmdLine.Edit.HistoryPos == -1 {
 		isFastFind := false
 		if fsp := pf.GetActivePanel(); fsp != nil {
 			isFastFind = fsp.FastFindMode
@@ -3636,7 +3640,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// command line. The gray numpad keys are bound to the corresponding
 	// actions (Panel.SelectGroup / DeselectGroup / InvertSelection);
 	// both paths are suspended while fast find is active.
-	if pf.ShowPanels && config.App.NavigationMode != config.NavigationSearchFirst && !alt && !ctrl && pf.CmdLine.IsEmpty() &&
+	if !e.TextInput && pf.ShowPanels && config.App.NavigationMode != config.NavigationSearchFirst && !alt && !ctrl && pf.CmdLine.IsEmpty() &&
 		pf.focusedPluginPanel() == nil {
 		if e.Char == '+' || e.Char == '-' || e.Char == '*' {
 			isFastFind := false
