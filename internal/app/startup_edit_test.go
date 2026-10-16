@@ -69,13 +69,14 @@ func (r *startupEditorRig) open(name string) string {
 func TestTakeStartupEditorHook_MatchesThePathOnce(t *testing.T) {
 	t.Cleanup(func() { armStartupEditor("", nil) })
 	called := 0
-	armStartupEditor("/tmp/a.txt", func() { called++ })
-
-	v := vfs.NewOSVFS("/tmp")
-	if takeStartupEditorHook(v, "/tmp/other.txt") != nil {
+	dir := t.TempDir()
+	v := vfs.NewOSVFS(dir)
+	path := filepath.Join(dir, "a.txt")
+	armStartupEditor(path, func() { called++ })
+	if takeStartupEditorHook(v, filepath.Join(dir, "other.txt")) != nil {
 		t.Fatal("another file took the -e editor's hook")
 	}
-	hook := takeStartupEditorHook(v, "/tmp/a.txt")
+	hook := takeStartupEditorHook(v, path)
 	if hook == nil {
 		t.Fatal("the -e file did not get its hook")
 	}
