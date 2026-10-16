@@ -118,6 +118,37 @@ func TestTreeExpandCollapse_SpliceLogic(t *testing.T) {
 	}
 }
 
+func TestTreeShowsDirectorySymlinksWithoutFollowingThem(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("directory symlinks unavailable: %v", err)
+	}
+
+	tp := newBareTreePanel(root)
+	tp.expandAt(0)
+	idx := tp.findChild(0, "link")
+	if idx < 0 {
+		t.Fatal("directory symlink is missing from the tree")
+	}
+	item := tp.items[idx]
+	if !item.vfsItem.IsDir || !item.vfsItem.IsSymlink || vfs.LinkKindOf(&item.vfsItem) != vfs.LinkSymlink {
+		t.Fatalf("directory symlink metadata = %+v", item.vfsItem)
+	}
+	if item.expandable {
+		t.Fatal("directory symlink must be a leaf to prevent cycles")
+	}
+	before := len(tp.items)
+	tp.expandAt(idx)
+	if len(tp.items) != before {
+		t.Fatal("expanding a directory symlink followed its target")
+	}
+}
+
 // TestTreePanel_Rescan drives Rescan directly against a small real
 // directory tree that changes on disk while the tree is open: a previously
 // expanded node loses its only child, a brand new sibling appears next to
@@ -638,4 +669,51 @@ NormalColor = foreground:#00FF00
 		t.Errorf("tree row color %#x differs from the file panel's directory color %#x", got, want)
 	}
 
+}
+
+func TestTreeRowUsesSymlinkAndJunctionHighlightColors(t *testing.T) {
+	vtui.SetDefaultPalette()
+	theme.SetDefaultF4Palette()
+	oldRules, oldUser := theme.GlobalFileHighlighter.Rules, theme.GlobalFileHighlighter.UserRules
+	defer func() {
+		theme.GlobalFileHighlighter.Rules = oldRules
+		theme.GlobalFileHighlighter.UserRules = oldUser
+	}()
+	theme.GlobalFileHighlighter.LoadFromIni(ini.Parse(strings.NewReader(`[Highlight_0]
+Name = Directories
+IncludeAttributes = Directory
+NormalColor = foreground:#00FF00
+
+[Highlight_1]
+Name = Symlinks
+IncludeAttributes = Symlink
+NormalColor = foreground:#FF0000
+
+[Highlight_2]
+Name = Junctions
+IncludeAttributes = Junction
+NormalColor = foreground:#0000FF
+`)))
+
+	plain := vtui.Palette[theme.ColPanelText]
+	rows := []struct {
+		name string
+		item vfs.VFSItem
+	}{
+		{name: "symlink", item: vfs.VFSItem{Name: "symlink", IsDir: true, IsSymlink: true}},
+		{name: "junction", item: vfs.VFSItem{Name: "junction", IsDir: true, IsSymlink: true, ReparseTag: vfs.ReparseTagMountPoint}},
+	}
+	colors := make(map[string]uint64)
+	for _, tc := range rows {
+		row := treeItem{name: tc.name, vfsItem: tc.item}
+		got := row.GetCellAttr(0, plain)
+		want := theme.GlobalFileHighlighter.GetColor(&tc.item, plain, false, false)
+		if got != want || got == plain {
+			t.Errorf("%s tree color = %#x, want highlighted %#x", tc.name, got, want)
+		}
+		colors[tc.name] = got
+	}
+	if colors["symlink"] == colors["junction"] {
+		t.Errorf("symlink and junction colors are indistinguishable: %#x", colors["symlink"])
+	}
 }

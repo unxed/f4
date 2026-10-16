@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -101,6 +102,10 @@ type treeItem struct {
 	// -1 for the root. Used to find a node's contiguous descendant run
 	// (collapseAt) and to fix up indices after a splice (spliceChildren).
 	parentIndex int
+	// vfsItem carries directory/link attributes used by highlight.ini. The tree
+	// keeps links to directories as leaf rows so following one cannot create a
+	// cycle in the volume tree.
+	vfsItem vfs.VFSItem
 	// expandable is true while this directory might still have
 	// subdirectories. It starts optimistic (every directory is assumed
 	// expandable) and is corrected to false the first time expandAt
@@ -163,11 +168,10 @@ func (it treeItem) GetCellAttr(_ int, defaultAttr uint64) uint64 {
 		defaultAttr == vtui.Palette[theme.ColPanelSelectedCursor] ||
 		defaultAttr == vtui.Palette[theme.ColPanelInactiveCursor] ||
 		defaultAttr == vtui.Palette[theme.ColPanelInactiveSelectedCursor]
-	item := vfs.VFSItem{
-		Name:     it.name,
-		IsDir:    true,
-		IsHidden: runtime.GOOS != "windows" && strings.HasPrefix(it.name, "."),
-	}
+	item := it.vfsItem
+	item.Name = it.name
+	item.IsDir = true
+	item.IsHidden = item.IsHidden || (runtime.GOOS != "windows" && strings.HasPrefix(it.name, "."))
 	return theme.GlobalFileHighlighter.GetColor(&item, defaultAttr, false, isCursor)
 }
 
@@ -285,29 +289,30 @@ func treeVolumeRoot(path string) string {
 	return string(filepath.Separator)
 }
 
-// scanChildDirs lists dir's immediate subdirectories, sorted
-// case-insensitively. A symlink to a directory reports IsDir() == false on
-// the fs.DirEntry os.ReadDir returns (its type bit is DT_LNK, not DT_DIR,
-// on the platforms f4 targets), so this walk skips symlinked directories
-// rather than following them into a possible cycle, with no separate check
-// needed.
-func scanChildDirs(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+// scanChildDirs lists immediate directories and links to directories, sorted
+// case-insensitively. OSVFS supplies the same IsDir/IsSymlink/ReparseTag
+// metadata as file panels; links are shown but never expanded, avoiding
+// cycles through symlinks or junctions.
+func scanChildDirs(dir string) []vfs.VFSItem {
+	var entries []vfs.VFSItem
+	if err := vfs.NewOSVFS(dir).ReadDir(context.Background(), dir, func(batch []vfs.VFSItem) {
+		entries = append(entries, batch...)
+	}); err != nil {
 		return nil
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+	directories := make([]vfs.VFSItem, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir {
+			directories = append(directories, entry)
 		}
-		names = append(names, e.Name())
-		if len(names) >= treeChildScanCap {
+		if len(directories) >= treeChildScanCap {
 			break
 		}
 	}
-	sort.Slice(names, func(i, j int) bool { return strings.ToLower(names[i]) < strings.ToLower(names[j]) })
-	return names
+	sort.Slice(directories, func(i, j int) bool {
+		return strings.ToLower(directories[i].Name) < strings.ToLower(directories[j].Name)
+	})
+	return directories
 }
 
 // expandAt reads items[at]'s immediate subdirectories (if any) and splices
@@ -322,22 +327,24 @@ func (t *TreePanel) expandAt(at int) {
 	if !item.expandable || !item.collapsed {
 		return
 	}
-	names := scanChildDirs(item.path)
-	if len(names) == 0 {
+	entries := scanChildDirs(item.path)
+	if len(entries) == 0 {
 		item.expandable = false
 		return
 	}
 
-	children := make([]treeItem, len(names))
-	for i, name := range names {
-		last := append(append([]bool{}, item.last...), i == len(names)-1)
+	children := make([]treeItem, len(entries))
+	for i, entry := range entries {
+		link := vfs.LinkKindOf(&entry) != vfs.LinkNone
+		last := append(append([]bool{}, item.last...), i == len(entries)-1)
 		children[i] = treeItem{
-			name:        name,
-			path:        filepath.Join(item.path, name),
+			name:        entry.Name,
+			path:        filepath.Join(item.path, entry.Name),
 			depth:       item.depth + 1,
 			parentIndex: at,
-			expandable:  true,
-			collapsed:   true,
+			vfsItem:     entry,
+			expandable:  !link,
+			collapsed:   !link,
 			last:        last,
 		}
 	}
@@ -400,19 +407,11 @@ func (t *TreePanel) collapseAt(at int) {
 // somehow still reached -- rather than fail the whole tree open.
 //
 // Matching each chain component against the already-expanded children
-// (findChild) is name-based, which two platform quirks can defeat even
-// though target names a real, existing directory the source panel is
-// already sitting in (see f4#1602's tracking comment for the CI failure
-// this fixes): a path component that is itself a symlink to a directory
-// (macOS routes every os.TempDir()-derived path through /var, itself a
-// symlink to /private/var, and scanChildDirs deliberately never lists a
-// symlinked directory -- see its own doc comment -- to avoid following one
-// into a cycle during ordinary browsing), and a short (8.3-style) Windows
-// path component (e.g. "RUNNER~1" for "runneradmin", which is what GitHub's
-// Windows runners set %TEMP% to) that never appears literally in
-// os.ReadDir's listing either. revealChild covers both by falling back to
-// os.Stat, which -- unlike scanChildDirs -- follows a symlink and accepts a
-// short name.
+// (findChild) is name-based, which a short (8.3-style) Windows path component
+// (e.g. "RUNNER~1" for "runneradmin", which GitHub's Windows runners set
+// %TEMP% to) can defeat even though target names a real directory. Symlink
+// directories now appear as leaf rows, so the path chain can still be
+// revealed through one without making ordinary expansion follow it.
 func (t *TreePanel) revealPath(target string) {
 	if idx := t.resolvePath(target); idx != -1 {
 		t.setCursor(idx)
@@ -474,17 +473,11 @@ func pathNamesEqual(a, b string) bool {
 	return a == b
 }
 
-// revealChild splices in a single node for name under items[parent], for
-// the case findChild alone cannot handle: name is a real subdirectory of
-// items[parent].path that scanChildDirs's own listing does not surface
-// (see revealPath's doc comment for why -- a symlinked directory on macOS,
-// a short Windows name). os.Stat, unlike os.ReadDir's DirEntry, follows a
-// symlink and accepts a short name, so it can confirm the directory exists
-// without needing it to appear in that filtered listing -- and because this
-// single bounded lookup is anchored to the one already-real target path
-// revealPath is unwinding, not a general directory walk, following that
-// one symlink here carries none of scanChildDirs's own cycle risk. Returns
-// -1 if name is not actually a subdirectory there.
+// revealChild splices in a single node for a real subdirectory under
+// items[parent] when its spelling does not match a listed child (notably an
+// 8.3-style Windows path). This bounded lookup is anchored to the target path
+// revealPath is unwinding, rather than a general directory walk. Returns -1
+// if name is not actually a subdirectory there.
 func (t *TreePanel) revealChild(parent int, name string) int {
 	path := filepath.Join(t.items[parent].path, name)
 	info, err := os.Stat(path)
