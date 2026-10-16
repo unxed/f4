@@ -657,7 +657,6 @@ func TestTreeRowTakesTheDirectoryHighlightColor_Issue1602(t *testing.T) {
 Name = Directories
 IncludeAttributes = Directory
 NormalColor = foreground:#00FF00
-ContinueProcessing = 1
 `)))
 
 	plain := vtui.Palette[theme.ColPanelText]
@@ -684,11 +683,13 @@ func TestTreeRowUsesSymlinkAndJunctionHighlightColors(t *testing.T) {
 Name = Directories
 IncludeAttributes = Directory
 NormalColor = foreground:#00FF00
+ContinueProcessing = 1
 
 [Highlight_1]
 Name = Symlinks
 IncludeAttributes = Symlink
 NormalColor = foreground:#FF0000
+ContinueProcessing = 1
 
 [Highlight_2]
 Name = Junctions
