@@ -2463,7 +2463,8 @@ func actionRunSizeScan(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, scan p
 	taskCtx = vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		var totalStats vfs.OpStats
 		lastScanUpdate := time.Now()
-		totalStats, scanErr := scan(ctx.Context, func(currentPath string, stats vfs.OpStats) {
+		// Several marked folders are one count, asking for the password once.
+		totalStats, scanErr := scan(vfs.WithElevationScope(ctx.Context), func(currentPath string, stats vfs.OpStats) {
 			now := time.Now()
 			if now.Sub(lastScanUpdate) > 50*time.Millisecond {
 				lastScanUpdate = now

@@ -394,6 +394,8 @@ func (qm *OpQueueManager) Enqueue(task *QueueTask) {
 	task.State = "Queued"
 	task.mu.Unlock()
 	task.ctx, task.cancel = context.WithCancel(context.Background())
+	// One queued operation asks for the sudo password at most once (f4#1998).
+	task.ctx = vfs.WithElevationScope(task.ctx)
 	qm.tasks = append(qm.tasks, task)
 	qm.mu.Unlock()
 	qm.signalWorker()

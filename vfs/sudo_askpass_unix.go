@@ -211,6 +211,19 @@ func (c *SudoClient) handleAskpassRequest(conn net.Conn) {
 	}
 }
 
+// setPrompt records how to close the password dialog that was just shown;
+// nil when it has gone.
+func (c *SudoClient) setPrompt(withdraw func()) {
+	c.promptMu.Lock()
+	c.withdrawPrompt = withdraw
+	c.promptMu.Unlock()
+}
+
+// markDeclined records that the user cancelled the password dialog.
+func (c *SudoClient) markDeclined() {
+	c.declines.Add(1)
+}
+
 // Dummy for SudoClient to satisfy RunOnUI if not imported
 func (c *SudoClient) RunOnUI(fn func()) {
 	if vtui.FrameManager != nil {

@@ -179,7 +179,7 @@ func (v *OSVFS) ReadDir(ctx context.Context, path string, onChunk func([]VFSItem
 		}
 	}
 	if err != nil {
-		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		if os.IsPermission(err) && ElevationAllowed(ctx) && globalSudoClient.IsAvailable() {
 			vtui.DebugLog("VFS: Permission denied for ReadDir(%q), attempting sudo...", dirPath)
 			items, sudoErr := sudoReadDirCancellable(ctx, prepareOSPath(dirPath))
 			if errors.Is(sudoErr, context.Canceled) || errors.Is(sudoErr, context.DeadlineExceeded) {
@@ -320,9 +320,11 @@ func (v *OSVFS) Stat(ctx context.Context, path string) (VFSItem, error) {
 	preparedPath := prepareOSPath(path)
 	linkInfo, err := hostfs.Lstat(preparedPath)
 	if err != nil {
-		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		if os.IsPermission(err) && ElevationAllowed(ctx) && globalSudoClient.IsAvailable() {
 			vtui.DebugLog("VFS: Permission denied for Stat(%q), attempting sudo...", path)
+			before := globalSudoClient.declines.Load()
 			item, sudoErr := globalSudoClient.Stat(prepareOSPath(path))
+			noteElevationRefusal(ctx, before)
 			if sudoErr == nil {
 				vtui.DebugLog("VFS: Sudo Stat(%q) SUCCESS", path)
 				return item, nil
@@ -381,8 +383,10 @@ func (v *OSVFS) Lstat(ctx context.Context, path string) (VFSItem, error) {
 	preparedPath := prepareOSPath(absPath)
 	info, err := hostfs.Lstat(preparedPath)
 	if err != nil {
-		if os.IsPermission(err) && globalSudoClient.IsAvailable() {
+		if os.IsPermission(err) && ElevationAllowed(ctx) && globalSudoClient.IsAvailable() {
+			before := globalSudoClient.declines.Load()
 			item, sudoErr := globalSudoClient.Stat(prepareOSPath(path))
+			noteElevationRefusal(ctx, before)
 			if sudoErr == nil {
 				return item, nil
 			}
@@ -756,6 +760,15 @@ func (v *OSVFS) Open(ctx context.Context, path string) (ReadAtCloser, error) {
 	return &osFileWrapper{File: f, size: size}, nil
 }
 
+// noteElevationRefusal ends elevation for the rest of the operation of ctx
+// when the user cancelled the password dialog since before was read: one
+// refusal is enough for one operation (f4#1998).
+func noteElevationRefusal(ctx context.Context, before int64) {
+	if scope := elevationScopeOf(ctx); scope != nil && globalSudoClient.declines.Load() != before {
+		scope.declined.Store(true)
+	}
+}
+
 // sudoOpenCancellable is globalSudoClient.Open that gives up when ctx is
 // cancelled. The elevated open can wait a long time on a PAM prompt or the
 // password dialog and takes no context, so the Cancel button of the progress
@@ -767,8 +780,10 @@ func sudoOpenCancellable(ctx context.Context, path string) (*os.File, error) {
 		err error
 	}
 	done := make(chan result, 1)
+	before := globalSudoClient.declines.Load()
 	go func() {
 		f, err := globalSudoClient.Open(path, os.O_RDONLY, 0)
+		noteElevationRefusal(ctx, before)
 		done <- result{f, err}
 	}()
 	select {
@@ -798,8 +813,10 @@ func sudoReadDirCancellable(ctx context.Context, path string) ([]VFSItem, error)
 		err   error
 	}
 	done := make(chan result, 1)
+	before := globalSudoClient.declines.Load()
 	go func() {
 		items, err := globalSudoClient.ReadDir(path)
+		noteElevationRefusal(ctx, before)
 		done <- result{items, err}
 	}()
 	select {

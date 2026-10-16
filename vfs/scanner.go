@@ -118,6 +118,9 @@ func CalculateStats(ctx context.Context, v VFS, basePath string, names []string,
 // to the generic walk since the remote-side Scan protocol has no
 // place to carry an option struct.
 func CalculateStatsWithOptions(ctx context.Context, v VFS, basePath string, names []string, opts ScanOptions, cb ScanCallback) (OpStats, error) {
+	// A scan is one operation: one refused password ends elevation for all
+	// of it (f4#1998).
+	ctx = WithElevationScope(ctx)
 	if opts.FollowSymlinkDirs {
 		// Historical path — try the FastScanner shortcut for VFSes
 		// that implement it (they can offload the walk to the server).
@@ -130,6 +133,7 @@ func CalculateStatsWithOptions(ctx context.Context, v VFS, basePath string, name
 
 // GenericScan performs a recursive, client-side tree traversal to gather stats.
 func GenericScan(ctx context.Context, v VFS, basePath string, names []string, cb ScanCallback) (OpStats, error) {
+	ctx = WithElevationScope(ctx)
 	return genericScan(ctx, v, basePath, names, ScanOptions{FollowSymlinkDirs: true}, cb)
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/unxed/vtinput"
@@ -1173,13 +1174,47 @@ func WithoutElevation(ctx context.Context) context.Context {
 }
 
 // ElevationAllowed reports whether a refused call made with ctx may be
-// retried through sudo.
+// retried through sudo: not when the caller ruled it out, and not once the
+// password was refused earlier in the same operation (WithElevationScope).
 func ElevationAllowed(ctx context.Context) bool {
 	if ctx == nil {
 		return true
 	}
-	off, _ := ctx.Value(noElevationKeyType{}).(bool)
-	return !off
+	if off, _ := ctx.Value(noElevationKeyType{}).(bool); off {
+		return false
+	}
+	if scope := elevationScopeOf(ctx); scope != nil && scope.declined.Load() {
+		return false
+	}
+	return true
+}
+
+type elevationScopeKeyType struct{}
+
+// elevationScope is one operation the user started: a size count (F3, the
+// quick view), a copy, a search. Once the sudo password is refused inside
+// it, the rest of the operation goes on without elevation and does not ask
+// again, however long it runs; the next operation asks once more (f4#1998).
+type elevationScope struct {
+	declined atomic.Bool
+}
+
+// WithElevationScope starts an operation scope in ctx, or keeps the one
+// ctx already belongs to, so that an operation made of several scans stays
+// one operation.
+func WithElevationScope(ctx context.Context) context.Context {
+	if elevationScopeOf(ctx) != nil {
+		return ctx
+	}
+	return context.WithValue(ctx, elevationScopeKeyType{}, &elevationScope{})
+}
+
+func elevationScopeOf(ctx context.Context) *elevationScope {
+	if ctx == nil {
+		return nil
+	}
+	scope, _ := ctx.Value(elevationScopeKeyType{}).(*elevationScope)
+	return scope
 }
 
 type ProgressCallback func(msg string, percent int)

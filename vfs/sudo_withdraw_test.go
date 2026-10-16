@@ -55,7 +55,7 @@ func TestWithdrawPromptClosesTheDialogWithoutDeclining(t *testing.T) {
 	for {
 		select {
 		case <-finished:
-			if c.recentlyDeclined() {
+			if c.declines.Load() != 0 {
 				t.Fatal("a withdrawn dialog must not silence the next ones")
 			}
 			c.promptMu.Lock()
@@ -73,7 +73,7 @@ func TestWithdrawPromptClosesTheDialogWithoutDeclining(t *testing.T) {
 	}
 }
 
-// The same dialog closed by the user does silence the next ones (f4#1998).
+// The same dialog closed by the user is a refusal (f4#1998).
 func TestClosingThePasswordDialogDeclines(t *testing.T) {
 	c := &SudoClient{}
 	dlg, finished := showPasswordDialog(t, c)
@@ -84,7 +84,7 @@ func TestClosingThePasswordDialogDeclines(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("closing the dialog did not release the request")
 	}
-	if !c.recentlyDeclined() {
+	if c.declines.Load() == 0 {
 		t.Fatal("a dialog closed by the user should count as a refusal")
 	}
 }
