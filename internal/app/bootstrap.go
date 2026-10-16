@@ -30,6 +30,7 @@ import (
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/internal/update"
 	"github.com/unxed/f4/internal/viewer"
+	"github.com/unxed/f4/internal/winex11drag"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/f4/vfs/hostmode"
 	"github.com/unxed/vtinput"
@@ -974,6 +975,7 @@ func shouldTryGui() bool {
 // they need the frames that SetupUI creates.
 func setupGuiUI() {
 	SetupUI()
+	winex11drag.Install()
 	openStartupFilesIfRequested()
 }
 

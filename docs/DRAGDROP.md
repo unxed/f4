@@ -67,10 +67,10 @@ covers them: `Z:` for the root is the common case but not the only one.
 The old string rules are kept as the fallback for when those exports are
 missing, which is every real Windows.
 
-A drag out under Wine reaches other Wine windows only, including f4's own
-other panel. Wine bridges XDND into OLE for drops coming in, but has no
-bridge the other way, so files offered to a native X11 application find no
-target and the pointer says no. That is upstream, not here.
+A drag out under Wine reaches other Wine windows, including f4's own other
+panel, through OLE. When `hostmode.Posix()` is active, f4 also tries a native
+XDND source for X11 applications and falls back to OLE if it cannot open an X11
+session. The Wine/X11 end-to-end path is not yet verified; see unxed/f4#566.
 
 ## When nothing happens
 

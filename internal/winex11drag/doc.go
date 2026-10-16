@@ -9,8 +9,8 @@
 // the user's real X server directly -- the way yabridge does it for VST
 // plugins.
 //
-// This package holds only the first two of the issue's seven steps, landed
-// ahead of the rest so each piece can be reviewed and tested on its own:
+// This package holds the first two steps and the platform backend for step C2,
+// landed ahead of the rest so each piece can be reviewed and tested on its own:
 //
 //   - step 1 (x11window_windows.go, x11window.go): find the Xlib Window of
 //     f4's own top-level HWND, via the "__wine_x11_whole_window" property
@@ -20,16 +20,11 @@
 //     AF_UNIX socket on the Linux side. This goes through libwinescape for
 //     the raw socket and file I/O, and github.com/jezek/xgb for the X11
 //     protocol and its authentication handshake.
+//   - step C2 (backend.go, install_windows.go, pointer_windows.go): wrap the
+//     existing GUI drag backend under Wine and follow the Windows pointer.
 //
-// Step C's first piece, backend.go, is a vtui.DragBackend that follows the
-// pointer through a platform-supplied Pointer and feeds it to a Session; the
-// Pointer for Windows and the installation in the win32 backend come next.
-//
-// Everything here is additive and unwired: nothing else in f4 calls into
-// this package yet, and none of it runs unless vfs/hostmode.Posix() is true,
-// which -- by that package's own contract -- is never the case on real
-// Windows or on a native (non-Wine) build. Steps 3-7 (reusing vtui's XDND
-// source, owning the selection, the gesture loop, cursor feedback, and
-// wiring it all into the win32 backend's StartDrag) are future work; see the
-// issue for the full seven-step design and its pitfalls.
+// The wiring is additive: Install only wraps an existing backend when
+// vfs/hostmode.Posix() is true, which -- by that package's contract -- is never
+// the case on real Windows or a native (non-Wine) build. The remaining work is
+// the Wine/X11 end-to-end check; see the issue for its acceptance criteria.
 package winex11drag
