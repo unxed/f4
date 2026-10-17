@@ -3,6 +3,7 @@ package panel
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -181,6 +182,9 @@ func loadRootForMode(mode MenuMode, path string) []UserMenuItem {
 // on-disk format that source uses (flat INI for the main menu, FarMenu.ini
 // text for the per-directory and near-binary files).
 func SaveRootForMode(mode MenuMode, path string, items []UserMenuItem) error {
+	if err := backupMenuFile(path); err != nil {
+		return err
+	}
 	switch mode {
 	case MenuModeMain:
 		return SaveMainMenu(path, items)
@@ -200,6 +204,9 @@ func SaveRootForModeVFS(ctx context.Context, fs vfs.VFS, mode MenuMode, path str
 	if err := WriteFarMenu(&buf, items); err != nil {
 		return err
 	}
+	if err := backupMenuFileVFS(ctx, fs, path); err != nil {
+		return err
+	}
 	f, err := fs.Create(ctx, path)
 	if err != nil {
 		return err
@@ -209,6 +216,50 @@ func SaveRootForModeVFS(ctx context.Context, fs vfs.VFS, mode MenuMode, path str
 		return err
 	}
 	return f.Close()
+}
+
+// menuBackupSuffix names the copy a menu file is kept as before f4 writes
+// over it: one version back, next to the file, so a change made from the
+// menu can be undone by hand (f4#2036).
+const menuBackupSuffix = ".bak"
+
+// backupMenuFile copies the menu file about to be replaced to its backup.
+// A file that does not exist yet has nothing to keep.
+func backupMenuFile(path string) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return config.WriteUserFileAtomically(path+menuBackupSuffix, data, 0o600)
+}
+
+// backupMenuFileVFS is backupMenuFile through fs, for a menu file that
+// needs elevation to be written.
+func backupMenuFileVFS(ctx context.Context, fs vfs.VFS, path string) error {
+	if _, err := fs.Stat(ctx, path); err != nil {
+		return nil
+	}
+	r, err := fs.Open(ctx, path)
+	if err != nil {
+		return err
+	}
+	data, err := io.ReadAll(contextReader{ctx: ctx, reader: r})
+	_ = r.Close()
+	if err != nil {
+		return err
+	}
+	w, err := fs.Create(ctx, path+menuBackupSuffix)
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(data); err != nil {
+		_ = w.Close()
+		return err
+	}
+	return w.Close()
 }
 
 // defaultSavePath returns the path Ctrl+F4 should open in the editor
