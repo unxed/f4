@@ -348,25 +348,29 @@ func DriveMenuPlatformRowsText(rows []DriveMenuPlatformRow, options uint32) []st
 	}
 
 	texts := make([]string, len(rows))
+	anyDetails := false
+	for _, columns := range rowColumns {
+		if driveMenuPlatformRowHasDetails(columns) {
+			anyDetails = true
+			break
+		}
+	}
 	for i, row := range rows {
 		columns := rowColumns[i]
-		if !driveMenuPlatformRowHasDetails(columns) {
+		if !anyDetails || len(columns) == 0 {
 			texts[i] = row.Base
 			continue
 		}
+		// Keep every configured column on every drive row. In particular, a
+		// removable/CD/remote drive with hidden parameters still needs the same
+		// separators as neighboring rows for the columns to read as solid rules.
 		last := len(columns) - 1
-		for column := last; column >= 0; column-- {
-			if columns[column].text != "" {
-				last = column
-				break
-			}
-		}
 		parts := make([]string, 1, last+2)
 		parts[0] = row.Base
 		for column := 0; column <= last; column++ {
 			parts = append(parts, driveMenuPadColumn(columns[column], columnWidths[column], column == last))
 		}
-		texts[i] = strings.Join(parts, " | ")
+		texts[i] = strings.Join(parts, " │ ")
 	}
 	return texts
 }
