@@ -435,6 +435,23 @@ func (s *userMenuState) saveRoot() bool {
 	return true
 }
 
+// shownItems is items with their labels as the menu shows them: the
+// metasymbols expanded for the panels as they are now. Editing and running
+// keep working on items, so a label is saved as it was written.
+func (s *userMenuState) shownItems(items []UserMenuItem) []UserMenuItem {
+	if s.Pf == nil {
+		return items
+	}
+	ctx := &SubstContext{Active: snapshotPanel(s.Pf, s.Pf.ActiveIdx), Passive: snapshotPanel(s.Pf, 1-s.Pf.ActiveIdx)}
+	shown := append([]UserMenuItem(nil), items...)
+	for i := range shown {
+		if !shown[i].IsSeparator() {
+			shown[i].Label = SubstMenuLabel(shown[i].Label, ctx)
+		}
+	}
+	return shown
+}
+
 func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSelect int) {
 	menu := vtui.NewVMenu(" " + title + " ")
 	history.MarkUserMenu(menu)
@@ -443,8 +460,9 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 	// vtui already handles single-char (&-prefixed) hotkeys natively.
 	fnKeyTarget := map[uint32]int{}
 
+	shown := s.shownItems(items)
 	hasSubmenus := false
-	for i, it := range items {
+	for i, it := range shown {
 		if it.IsSeparator() {
 			// Carry UserData so Del / Ctrl+up/down can find the items
 			// index from the UI index uniformly across all entries.
@@ -467,7 +485,7 @@ func (s *userMenuState) pushLevel(items []UserMenuItem, title string, initialSel
 		menu.AddItem(mi)
 	}
 
-	w, h := menuSize(s.Pf, menu.GetItemCount(), items, hasSubmenus)
+	w, h := menuSize(s.Pf, menu.GetItemCount(), shown, hasSubmenus)
 	x := (s.Pf.LastW - w) / 2
 	y := (s.Pf.LastH - h) / 2
 	if x < 0 {

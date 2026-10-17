@@ -59,6 +59,10 @@ type SubstContext struct {
 	// MarkedListTempDir overrides the temp directory for !@! files
 	// (mainly for tests). Defaults to os.TempDir().
 	MarkedListTempDir string
+
+	// Label expands a menu item's label rather than its command: !@!
+	// stays as written, so showing a menu writes no list file.
+	Label bool
 }
 
 // SubstResult holds the outcome of a substitution.
@@ -213,6 +217,11 @@ func SubstFileName(cmd string, ctx *SubstContext) SubstResult {
 		}
 		// !@!  →  path of a temp file with marked basenames (one per line)
 		if strings.HasPrefix(rest, "!@!") {
+			if ctx.Label {
+				out.WriteString("!@!")
+				i += 3
+				continue
+			}
 			path, err := writeMarkedListFile(marked(panel), ctx.MarkedListTempDir)
 			if err == nil {
 				out.WriteString(path)
@@ -236,6 +245,19 @@ func SubstFileName(cmd string, ctx *SubstContext) SubstResult {
 		Cancelled: cancelled,
 		ListFiles: listFiles,
 	}
+}
+
+// SubstMenuLabel expands the metasymbols in a menu item's label for the
+// menu to show, as Far shows "!\\" in a label as the folder of the panel
+// (f4#1395). Nothing is asked: a prompt shows its initial value.
+func SubstMenuLabel(label string, ctx *SubstContext) string {
+	if ctx == nil || !strings.Contains(label, "!") {
+		return label
+	}
+	labelCtx := *ctx
+	labelCtx.AskUser = nil
+	labelCtx.Label = true
+	return SubstFileName(label, &labelCtx).Command
 }
 
 // parsePromptToken returns the body between !? and the closing !, plus
