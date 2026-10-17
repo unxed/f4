@@ -735,7 +735,7 @@ PlugRing.BtnClose=&Aizvērt
 
 Attributes.Title= Atributi
 Attributes.BtnSet=Iestatīt
-Attributes.BtnSecurity=&Drošība
+Attributes.BtnSecurity=Sistēmas &rekvizīti
 Attributes.Read=Lasīt
 Attributes.Write=Rakstīt
 Attributes.Execute=Izpildīt

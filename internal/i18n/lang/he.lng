@@ -735,7 +735,7 @@ PlugRing.BtnClose=&סגירה
 
 Attributes.Title= מאפיינים
 Attributes.BtnSet=קבע
-Attributes.BtnSecurity=&אבטחה
+Attributes.BtnSecurity=מאפייני מ&ערכת
 Attributes.Read=קריאה
 Attributes.Write=כתיבה
 Attributes.Execute=הפעלה

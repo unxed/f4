@@ -738,7 +738,7 @@ PlugRing.BtnClose=&Закрити
 
 Attributes.Title= Атрибути
 Attributes.BtnSet=Встановити
-Attributes.BtnSecurity=&Безпека
+Attributes.BtnSecurity=Системні &властивості
 Attributes.Read=Читання
 Attributes.Write=Запис
 Attributes.Execute=Виконання

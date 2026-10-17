@@ -397,7 +397,7 @@ PlugRing.BtnClose=बं&द करें
 
 Attributes.Title= विशेषताएं
 Attributes.BtnSet=सेट करें
-Attributes.BtnSecurity=&सुरक्षा
+Attributes.BtnSecurity=सिस्टम &गुण
 Attributes.Read=पढ़ना
 Attributes.Write=लिखना
 Attributes.Execute=निष्पादन

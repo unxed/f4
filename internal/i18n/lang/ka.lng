@@ -735,7 +735,7 @@ PlugRing.BtnClose=&დახურვა
 
 Attributes.Title= ატრიბუტები
 Attributes.BtnSet=დაყენება
-Attributes.BtnSecurity=&უსაფრთხოება
+Attributes.BtnSecurity=სისტემის &თვისებები
 Attributes.Read=კითხვა
 Attributes.Write=ჩაწერა
 Attributes.Execute=გაშვება

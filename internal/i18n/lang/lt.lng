@@ -735,7 +735,7 @@ PlugRing.BtnClose=&Uždaryti
 
 Attributes.Title= Atributai 
 Attributes.BtnSet=Nustatyti
-Attributes.BtnSecurity=&Saugumas
+Attributes.BtnSecurity=Sistemos &ypatybės
 Attributes.Read=Skaitymas
 Attributes.Write=Rašymas
 Attributes.Execute=Vykdymas

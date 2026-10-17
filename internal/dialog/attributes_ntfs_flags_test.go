@@ -235,7 +235,7 @@ func TestIsCloudFileItem(t *testing.T) {
 //	║                                                          ║
 //	║  Last write:   15.10.2026 16:44:35                       ║
 //	║                                                          ║
-//	║            [ Set ]  [ Security ]  [ Cancel ]             ║
+//	║        [ Set ]  [ System properties ]  [ Cancel ]        ║
 //	║                                                          ║
 //	╚══════════════════════════════════════════════════════════╝
 func TestAttributesDialog_AdvancedFlagsLayout(t *testing.T) {

@@ -692,7 +692,7 @@ PlugRing.BtnClose=إ&غلاق
 
 Attributes.Title= الخصائص
 Attributes.BtnSet=تعيين
-Attributes.BtnSecurity=الأ&مان
+Attributes.BtnSecurity=خصائص ال&نظام
 Attributes.Read=قراءة
 Attributes.Write=كتابة
 Attributes.Execute=تنفيذ

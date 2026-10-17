@@ -735,7 +735,7 @@ PlugRing.BtnClose=&Sulje
 
 Attributes.Title= Määritteet
 Attributes.BtnSet=Aseta
-Attributes.BtnSecurity=&Suojaus
+Attributes.BtnSecurity=Järjestelmän &ominaisuudet
 Attributes.Read=Luku
 Attributes.Write=Kirjoitus
 Attributes.Execute=Suoritus

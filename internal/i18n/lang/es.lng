@@ -738,7 +738,7 @@ PlugRing.BtnClose=&Cerrar
 
 Attributes.Title= Atributos
 Attributes.BtnSet=Establecer
-Attributes.BtnSecurity=&Seguridad
+Attributes.BtnSecurity=&Propiedades del sistema
 Attributes.Read=Leer
 Attributes.Write=Escribir
 Attributes.Execute=Ejecutar

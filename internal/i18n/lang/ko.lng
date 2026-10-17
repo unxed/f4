@@ -730,7 +730,7 @@ PlugRing.BtnClose=닫기(&C)
 
 Attributes.Title= 속성
 Attributes.BtnSet=설정
-Attributes.BtnSecurity=보안(&S)
+Attributes.BtnSecurity=시스템 속성(&P)
 Attributes.Read=읽기
 Attributes.Write=쓰기
 Attributes.Execute=실행

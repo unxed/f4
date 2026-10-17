@@ -730,7 +730,7 @@ PlugRing.BtnClose=閉じる(&C)
 
 Attributes.Title= 属性
 Attributes.BtnSet=設定
-Attributes.BtnSecurity=セキュリティ(&S)
+Attributes.BtnSecurity=システムのプロパティ(&P)
 Attributes.Read=読み取り
 Attributes.Write=書き込み
 Attributes.Execute=実行

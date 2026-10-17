@@ -735,7 +735,7 @@ PlugRing.BtnClose=বন্ধ করুন (&C)
 
 Attributes.Title= বৈশিষ্ট্যসমূহ 
 Attributes.BtnSet=সেট করুন
-Attributes.BtnSecurity=নিরাপত্তা (&S)
+Attributes.BtnSecurity=সিস্টেম বৈশিষ্ট্য (&P)
 Attributes.Read=পাঠ
 Attributes.Write=লিখন
 Attributes.Execute=সম্পাদন

@@ -735,7 +735,7 @@ PlugRing.BtnClose=&Kapat
 
 Attributes.Title= Öznitelikler
 Attributes.BtnSet=Ayarla
-Attributes.BtnSecurity=&Güvenlik
+Attributes.BtnSecurity=Sistem ö&zellikleri
 Attributes.Read=Okuma
 Attributes.Write=Yazma
 Attributes.Execute=Çalıştırma
