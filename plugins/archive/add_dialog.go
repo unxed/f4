@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -65,11 +66,12 @@ var addArchiveLevels = []struct {
 
 // addArchiveSettings is what the Add to archive window was told.
 type addArchiveSettings struct {
-	Name   string
-	Format int // index in addArchiveFormats
-	Level  int // index in addArchiveLevels
-	Method int // index in the format's Methods
-	Solid  bool
+	Name              string
+	Format            int // index in addArchiveFormats
+	Level             int // index in addArchiveLevels
+	Method            int // index in the format's Methods
+	Solid             bool
+	KeepFileExtension bool
 	// Password encrypts the files of the archive (WinZip AES for zip, AES for
 	// 7z); empty for none.
 	Password string
@@ -224,12 +226,15 @@ func archiveNameForFormat(name string, format int) string {
 // addArchiveDialog is the Add to archive window: the archive name, its
 // format, compression level and method, and solid where the format has it.
 type addArchiveDialog struct {
-	dlg    *vtui.Window
-	name   *vtui.Edit
-	format *vtui.ComboBox
-	level  *vtui.ComboBox
-	method *vtui.ComboBox
-	solid  *vtui.Checkbox
+	dlg               *vtui.Window
+	name              *vtui.Edit
+	archiveBase       string
+	sourceIsFile      bool
+	lastSuggestedName string
+	format            *vtui.ComboBox
+	level             *vtui.ComboBox
+	method            *vtui.ComboBox
+	solid             *vtui.Checkbox
 	// password and showPassword: the archive password and the box that
 	// shows it in clear (f4#2002, part 2).
 	password     *vtui.Edit
@@ -238,9 +243,10 @@ type addArchiveDialog struct {
 	split      *vtui.Checkbox
 	volumeSize *vtui.ComboBox
 	// deleteAfter, skipErrors and filter: part 4.
-	deleteAfter *vtui.Checkbox
-	skipErrors  *vtui.Checkbox
-	filter      *vtui.Edit
+	deleteAfter   *vtui.Checkbox
+	skipErrors    *vtui.Checkbox
+	filter        *vtui.Edit
+	keepExtension *vtui.Checkbox
 	// profile, saveProfile and deleteProfile: named sets of these options
 	// (part 5).
 	profile       *vtui.ComboBox
@@ -249,9 +255,16 @@ type addArchiveDialog struct {
 	create        *vtui.Button
 }
 
-func newAddArchiveDialog(initialName string, done func(addArchiveSettings)) *addArchiveDialog {
+func newAddArchiveDialog(initialName string, done func(addArchiveSettings), sourceIsFile ...bool) *addArchiveDialog {
 	const w, h = 64, 25
 	d := &addArchiveDialog{}
+	if len(sourceIsFile) > 0 {
+		d.sourceIsFile = sourceIsFile[0]
+	}
+	d.archiveBase = initialName
+	if format := addArchiveFormatOf(initialName); format >= 0 {
+		d.archiveBase = initialName[:len(initialName)-len(addArchiveFormats[format].Ext)]
+	}
 	d.dlg = vtui.NewCenteredDialog(w, h, vtui.Msg("Archive.Add.Title"))
 	d.dlg.ShowClose = true
 	x, y := d.dlg.X1+2, d.dlg.Y1+2
@@ -303,8 +316,10 @@ func newAddArchiveDialog(initialName string, done func(addArchiveSettings)) *add
 	d.deleteAfter = vtui.NewCheckbox(x, y+13, vtui.Msg("Archive.Add.DeleteAfter"), false)
 	d.skipErrors = vtui.NewCheckbox(x, y+14, vtui.Msg("Archive.Add.SkipErrors"), false)
 	d.filter = vtui.NewEdit(x+labelW, y+16, inner-labelW, "")
+	d.keepExtension = vtui.NewCheckbox(x, y+15, vtui.Msg("Archive.Add.KeepExtension"), loadKeepArchiveFileExtension())
 	d.dlg.AddItem(d.deleteAfter)
 	d.dlg.AddItem(d.skipErrors)
+	d.dlg.AddItem(d.keepExtension)
 	d.dlg.AddItem(vtui.NewLabel(x, y+16, vtui.Msg("Archive.Add.Filter"), d.filter))
 	d.dlg.AddItem(d.filter)
 
@@ -340,12 +355,29 @@ func newAddArchiveDialog(initialName string, done func(addArchiveSettings)) *add
 		d.name.SetText(archiveNameForFormat(initialName, format))
 	}
 	d.selectFormat(format)
+	d.name.SetText(d.suggestedName(format))
+	d.lastSuggestedName = d.name.GetText()
 	d.format.Menu.OnAction = func(idx int) {
-		d.name.SetText(archiveNameForFormat(d.name.GetText(), idx))
+		if d.name.GetText() == d.lastSuggestedName {
+			d.name.SetText(d.suggestedName(idx))
+			d.lastSuggestedName = d.name.GetText()
+		} else {
+			d.name.SetText(archiveNameForFormat(d.name.GetText(), idx))
+		}
 		d.selectFormat(idx)
+	}
+	d.keepExtension.OnChange = func(int) {
+		if d.name.GetText() == d.lastSuggestedName {
+			d.name.SetText(d.suggestedName(d.format.Menu.SelectPos))
+			d.lastSuggestedName = d.name.GetText()
+		}
 	}
 
 	d.create.OnClick = func() {
+		if err := saveKeepArchiveFileExtension(d.keepExtension.State == 1); err != nil {
+			vtui.ShowMessageEx(vtui.Msg("Archive.Add.Title"), err.Error(), []string{vtui.Msg("vtui.Ok")}, vtui.MessageWarn)
+			return
+		}
 		settings := d.settings()
 		if strings.TrimSpace(settings.Name) == "" {
 			return
@@ -364,6 +396,16 @@ func newAddArchiveDialog(initialName string, done func(addArchiveSettings)) *add
 	cancel.OnClick = func() { d.dlg.Close() }
 	d.dlg.SetFocusedItem(d.name)
 	return d
+}
+
+func (d *addArchiveDialog) suggestedName(format int) string {
+	base := d.archiveBase
+	if d.sourceIsFile && d.keepExtension.State != 1 {
+		if ext := filepath.Ext(base); ext != "" && ext != base {
+			base = strings.TrimSuffix(base, ext)
+		}
+	}
+	return base + addArchiveFormats[format].Ext
 }
 
 func newAddArchiveCombo(x, y, w int, items []string) *vtui.ComboBox {
@@ -456,7 +498,12 @@ func (d *addArchiveDialog) currentProfile() addArchiveProfile {
 // format no longer offered, stays as it was.
 func (d *addArchiveDialog) applyProfile(p addArchiveProfile) {
 	if format := addArchiveFormatOf("x" + p.Format); format >= 0 && addArchiveFormats[format].Ext == p.Format {
-		d.name.SetText(archiveNameForFormat(d.name.GetText(), format))
+		if d.name.GetText() == d.lastSuggestedName {
+			d.name.SetText(d.suggestedName(format))
+			d.lastSuggestedName = d.name.GetText()
+		} else {
+			d.name.SetText(archiveNameForFormat(d.name.GetText(), format))
+		}
 		d.selectFormat(format)
 	}
 	f := addArchiveFormats[d.format.Menu.SelectPos]
@@ -540,12 +587,13 @@ func (d *addArchiveDialog) refreshProfiles(selected string) {
 
 func (d *addArchiveDialog) settings() addArchiveSettings {
 	return addArchiveSettings{
-		Name:     strings.TrimSpace(d.name.GetText()),
-		Format:   d.format.Menu.SelectPos,
-		Level:    d.level.Menu.SelectPos,
-		Method:   d.method.Menu.SelectPos,
-		Solid:    d.solid.State == 1,
-		Password: d.password.GetText(),
+		Name:              strings.TrimSpace(d.name.GetText()),
+		Format:            d.format.Menu.SelectPos,
+		Level:             d.level.Menu.SelectPos,
+		Method:            d.method.Menu.SelectPos,
+		Solid:             d.solid.State == 1,
+		Password:          d.password.GetText(),
+		KeepFileExtension: d.keepExtension.State == 1,
 
 		DeleteAfter:    d.deleteAfter.State == 1,
 		SkipUnreadable: d.skipErrors.State == 1,
@@ -555,11 +603,11 @@ func (d *addArchiveDialog) settings() addArchiveSettings {
 
 // showAddArchiveDialog opens the Add to archive window; a variable so that
 // tests can answer it.
-var showAddArchiveDialog = func(_ vfs.App, initialName string, done func(addArchiveSettings)) {
+var showAddArchiveDialog = func(_ vfs.App, initialName string, sourceIsFile bool, done func(addArchiveSettings)) {
 	if vtui.FrameManager == nil {
 		return
 	}
-	vtui.FrameManager.Push(newAddArchiveDialog(initialName, done).dlg)
+	vtui.FrameManager.Push(newAddArchiveDialog(initialName, done, sourceIsFile).dlg)
 }
 
 // splitIntoVolumes cuts the archive at path into volumes of size bytes,

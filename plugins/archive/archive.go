@@ -1039,8 +1039,12 @@ func actionAddArchive(app vfs.App) {
 	// (f4#1504). Only an explicit multi-selection keeps the old directory-
 	// derived suggestion, since there is no single item to name it after.
 	var arcName string
+	sourceIsFile := false
 	if len(names) == 1 {
 		arcName = names[0]
+		if info, err := activeVfs.Stat(context.Background(), activeVfs.Join(activeVfs.GetPath(), names[0])); err == nil {
+			sourceIsFile = !info.IsDir()
+		}
 	} else {
 		arcName = activeVfs.Base(activeVfs.GetPath())
 		if arcName == "." || arcName == "" {
@@ -1055,7 +1059,7 @@ func actionAddArchive(app vfs.App) {
 
 	// The window with the format, level, method and solid (f4#2002) in
 	// place of the plain name prompt.
-	showAddArchiveDialog(app, arcName, func(settings addArchiveSettings) {
+	showAddArchiveDialog(app, arcName, sourceIsFile, func(settings addArchiveSettings) {
 		name := settings.Name
 		opts := settings.options()
 		fullArcPath := activeVfs.Join(activeVfs.GetPath(), name)

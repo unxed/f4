@@ -2181,6 +2181,7 @@ Archive.Add.DeleteAfter=&Delete files after archiving
 Archive.Add.SkipErrors=S&kip files that cannot be read
 Archive.Add.Filter=F&ilter:
 Archive.Add.Skipped=%d files could not be read and were left out.
+Archive.Add.KeepExtension=Keep file e&xtension in archive name
 Archive.Add.Profile=P&rofile:
 Archive.Add.ProfileSave=Sav&e
 Archive.Add.ProfileDelete=Dele&te

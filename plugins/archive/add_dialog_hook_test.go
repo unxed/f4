@@ -7,7 +7,7 @@ import "github.com/unxed/f4/vfs"
 // with the format its extension names and the other settings at their
 // defaults; an empty name cancels, as Cancel does.
 func init() {
-	showAddArchiveDialog = func(app vfs.App, initialName string, done func(addArchiveSettings)) {
+	showAddArchiveDialog = func(app vfs.App, initialName string, _ bool, done func(addArchiveSettings)) {
 		app.InputBox(" Add to archive ", "Archive name:", initialName, func(name string) {
 			if name == "" {
 				return

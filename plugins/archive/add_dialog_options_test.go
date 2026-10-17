@@ -22,7 +22,7 @@ func addArchiveTree(t *testing.T, settings addArchiveSettings) (string, []string
 	t.Cleanup(func() { showAddArchiveDialog = old })
 	settings.Name = "out.zip"
 	settings.Format = addArchiveFormatIndex(t, ".zip")
-	showAddArchiveDialog = func(_ vfs.App, _ string, done func(addArchiveSettings)) { done(settings) }
+	showAddArchiveDialog = func(_ vfs.App, _ string, _ bool, done func(addArchiveSettings)) { done(settings) }
 
 	dir := t.TempDir()
 	for _, f := range []string{"src/a.txt", "src/b.bin", "src/sub/c.txt"} {
@@ -108,7 +108,7 @@ func TestAddArchiveSkipsUnreadableFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(filepath.Join(dir, "locked.txt"), 0o600) })
-	showAddArchiveDialog = func(_ vfs.App, _ string, done func(addArchiveSettings)) {
+	showAddArchiveDialog = func(_ vfs.App, _ string, _ bool, done func(addArchiveSettings)) {
 		done(addArchiveSettings{Name: "out.zip", Format: addArchiveFormatIndex(t, ".zip"), SkipUnreadable: true})
 	}
 	app := &mockAppForProgress{t: t, activeVfs: vfs.NewOSVFS(dir), passiveVfs: vfs.NewOSVFS(dir), names: []string{"ok.txt", "locked.txt"}, done: make(chan struct{})}

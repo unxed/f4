@@ -49,7 +49,7 @@ func addArchiveRandomFile(t *testing.T, settings addArchiveSettings, size int) (
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	old := showAddArchiveDialog
 	t.Cleanup(func() { showAddArchiveDialog = old })
-	showAddArchiveDialog = func(_ vfs.App, _ string, done func(addArchiveSettings)) { done(settings) }
+	showAddArchiveDialog = func(_ vfs.App, _ string, _ bool, done func(addArchiveSettings)) { done(settings) }
 
 	dir = t.TempDir()
 	data := make([]byte, size)

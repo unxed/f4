@@ -94,7 +94,7 @@ func TestAddArchiveWritesWithTheChosenMethod(t *testing.T) {
 			store = i
 		}
 	}
-	showAddArchiveDialog = func(_ vfs.App, _ string, done func(addArchiveSettings)) {
+	showAddArchiveDialog = func(_ vfs.App, _ string, _ bool, done func(addArchiveSettings)) {
 		done(addArchiveSettings{Name: "out.zip", Format: zipIdx, Method: store})
 	}
 

@@ -55,7 +55,7 @@ func addArchiveWithSettings(t *testing.T, settings addArchiveSettings) string {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	old := showAddArchiveDialog
 	t.Cleanup(func() { showAddArchiveDialog = old })
-	showAddArchiveDialog = func(_ vfs.App, _ string, done func(addArchiveSettings)) { done(settings) }
+	showAddArchiveDialog = func(_ vfs.App, _ string, _ bool, done func(addArchiveSettings)) { done(settings) }
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "file1.txt"), bytes.Repeat([]byte("data "), 200), 0o600); err != nil {

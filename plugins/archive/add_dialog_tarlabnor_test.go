@@ -92,7 +92,7 @@ func TestAddArchiveUnmarksWhatItArchived(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	old := showAddArchiveDialog
 	t.Cleanup(func() { showAddArchiveDialog = old })
-	showAddArchiveDialog = func(_ vfs.App, _ string, done func(addArchiveSettings)) {
+	showAddArchiveDialog = func(_ vfs.App, _ string, _ bool, done func(addArchiveSettings)) {
 		done(addArchiveSettings{Name: "out.zip", Format: 0})
 	}
 	dir := t.TempDir()

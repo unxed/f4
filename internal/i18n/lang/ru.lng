@@ -2181,6 +2181,7 @@ Archive.Add.DeleteAfter=Удалить файлы после &архивации
 Archive.Add.SkipErrors=Пропускать нечитаемые фа&йлы
 Archive.Add.Filter=Фи&льтр:
 Archive.Add.Skipped=Не удалось прочитать файлов: %d, они не попали в архив.
+Archive.Add.KeepExtension=Сохранять расширение файла в имени архива
 Archive.Add.Profile=Пр&офиль:
 Archive.Add.ProfileSave=Со&хранить
 Archive.Add.ProfileDelete=У&далить
