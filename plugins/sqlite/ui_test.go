@@ -170,6 +170,14 @@ func TestBrowserWritesWithAffinityAndMutatesRows(t *testing.T) {
 func TestBrowserWindowRoutesDatabaseGestures(t *testing.T) {
 	b, _, fm := newSQLiteBrowserTest(t, true)
 
+	if !b.frame.ProcessKey(&vtinput.InputEvent{KeyDown: true, VirtualKeyCode: vtinput.VK_F1}) {
+		t.Fatal("F1 was not handled")
+	}
+	if fm.GetTopFrame() == b.frame {
+		t.Fatal("F1 did not open the SQLite browser help")
+	}
+	dismissSQLiteTopFrame(fm)
+
 	if !b.frame.ProcessKey(&vtinput.InputEvent{KeyDown: true, VirtualKeyCode: vtinput.VK_F9}) {
 		t.Fatal("F9 was not handled")
 	}

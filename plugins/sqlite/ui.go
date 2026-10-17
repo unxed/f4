@@ -23,6 +23,10 @@ type browserWindow struct {
 // statement stayed where it was typed and the only way to run it was to tab
 // to the button.
 func (w *browserWindow) ProcessKey(e *vtinput.InputEvent) bool {
+	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_F1 {
+		vfs.ShowPanelHelp(browserHelpTitle(), browserHelpText())
+		return true
+	}
 	if e.KeyDown && e.VirtualKeyCode == vtinput.VK_F9 {
 		w.browser.runQuery()
 		return true
