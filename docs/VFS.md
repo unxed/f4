@@ -98,6 +98,11 @@ makes the empty file through the dispatcher first (`SudoWriteExclusive`), so a
 taken name fails at `Create` and the editor's temp-then-rename save works
 elevated. Still to come: checks on Windows 10/11 and Server 2019.
 
+On Unix, cancelling an operation while it waits for the sudo password withdraws
+the prompt. This also applies to elevated mutations such as delete and rename,
+not only directory reads and file opens; withdrawal is not recorded as a
+password refusal (f4#1993).
+
 ## Copying to the null device (f4#1966)
 
 F5 onto the null device reads every selected file (folders recursively) and

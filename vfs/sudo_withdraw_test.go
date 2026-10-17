@@ -3,6 +3,8 @@
 package vfs
 
 import (
+	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -94,4 +96,43 @@ func TestWithdrawPromptWithoutDialogDoesNothing(t *testing.T) {
 	(&SudoClient{}).WithdrawPrompt()
 	var none *SudoClient
 	none.WithdrawPrompt()
+}
+
+// Any elevated operation that waits on Connect must withdraw its prompt when
+// the operation is cancelled, not only Open and ReadDir (f4#1993).
+func TestElevatedCallWithdrawsPromptOnCancellation(t *testing.T) {
+	c := &SudoClient{}
+	old := globalSudoClient
+	globalSudoClient = c
+	t.Cleanup(func() { globalSudoClient = old })
+	_, finished := showPasswordDialog(t, c)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wantErr := errors.New("prompt closed")
+	result := make(chan error, 1)
+	go func() {
+		result <- elevatedCall(ctx, func() error {
+			<-finished // Connect is blocked until its password prompt closes.
+			return wantErr
+		})
+	}()
+	cancel()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case err := <-result:
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("elevated call error = %v, want %v", err, wantErr)
+			}
+			if c.declines.Load() != 0 {
+				t.Fatal("withdrawing a cancelled operation must not count as refusal")
+			}
+			return
+		case task := <-vtui.FrameManager.TaskChan:
+			task()
+		case <-deadline:
+			t.Fatal("cancelling the operation did not withdraw its password prompt")
+		}
+	}
 }

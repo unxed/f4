@@ -777,6 +777,11 @@ func mayElevate(ctx context.Context, err error) bool {
 // that operation.
 func elevatedCall(ctx context.Context, call func() error) error {
 	before := globalSudoClient.declines.Load()
+	// Connect can be blocked in the password prompt, which has no context of
+	// its own. Withdraw that prompt when the operation is cancelled, just as
+	// the cancellable Open and ReadDir paths do (f4#1993).
+	stopWithdraw := context.AfterFunc(ctx, globalSudoClient.WithdrawPrompt)
+	defer stopWithdraw()
 	err := call()
 	noteElevationRefusal(ctx, before)
 	return err
