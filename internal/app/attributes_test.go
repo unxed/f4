@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/dialog"
+	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
@@ -1125,7 +1126,7 @@ func TestAttributesDialog_WindowsSetTime(t *testing.T) {
 		t.Errorf("Windows MTime update failed. Expected %v, got %v", expected, capturedItem.MTime)
 	}
 }
-func TestAttributesDialog_SecurityButton(t *testing.T) {
+func TestAttributesDialog_PropertiesButton(t *testing.T) {
 	fm := vtui.FrameManager
 	fm.Init(vtui.NewSilentScreenBuf())
 
@@ -1145,30 +1146,30 @@ func TestAttributesDialog_SecurityButton(t *testing.T) {
 	})
 	dlg := fm.GetTopFrame().(vtui.Container)
 
-	var btnSec *vtui.Button
+	var btnProperties *vtui.Button
 	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
 		if b, ok := el.(*vtui.Button); ok {
 			clean, _, _ := vtui.ParseAmpersandString(b.GetText())
-			if strings.Contains(clean, "Security") {
-				btnSec = b
+			if strings.Contains(clean, i18n.Msg("Attributes.BtnSecurity")) {
+				btnProperties = b
 			}
 		}
 		return true
 	})
 
-	if btnSec == nil {
-		t.Fatal("Security button not found in Windows attributes dialog")
+	if btnProperties == nil {
+		t.Fatal("properties button not found in Windows attributes dialog")
 	}
 
-	if btnSec.IsDisabled() {
-		t.Error("Security button should be enabled for local OSVFS files")
+	if btnProperties.IsDisabled() {
+		t.Error("properties button should be enabled for local OSVFS files")
 	}
 
 	// Exercise the callback through a stub. Calling the real Windows shell here
 	// used to race t.TempDir cleanup and leave a native "file not found" dialog
 	// on the developer's desktop after the test had passed.
-	if btnSec.OnClick != nil {
-		btnSec.OnClick()
+	if btnProperties.OnClick != nil {
+		btnProperties.OnClick()
 	}
 	expectedPropertiesPath, err := mockVFS.Abs("winfile.exe")
 	if err != nil {
@@ -1186,23 +1187,23 @@ func TestAttributesDialog_SecurityButton(t *testing.T) {
 	dialog.ShowAttributesWindows(nil, mockNullVFS, "winfile.exe", item)
 	dlgNull := fm.GetTopFrame().(vtui.Container)
 
-	var btnSecNull *vtui.Button
+	var btnPropertiesNull *vtui.Button
 	walkUI(dlgNull.(vtui.UIElement), func(el vtui.UIElement) bool {
 		if b, ok := el.(*vtui.Button); ok {
 			clean, _, _ := vtui.ParseAmpersandString(b.GetText())
-			if strings.Contains(clean, "Security") {
-				btnSecNull = b
+			if strings.Contains(clean, i18n.Msg("Attributes.BtnSecurity")) {
+				btnPropertiesNull = b
 			}
 		}
 		return true
 	})
 
-	if btnSecNull == nil {
-		t.Fatal("Security button not found in non-local Windows attributes dialog")
+	if btnPropertiesNull == nil {
+		t.Fatal("properties button not found in non-local Windows attributes dialog")
 	}
 
-	if !btnSecNull.IsDisabled() {
-		t.Error("Security button should be disabled for non-local VFS files")
+	if !btnPropertiesNull.IsDisabled() {
+		t.Error("properties button should be disabled for non-local VFS files")
 	}
 
 	fm.GetTopFrame().SetExitCode(-1)
