@@ -316,7 +316,10 @@ func newAddArchiveDialog(initialName string, done func(addArchiveSettings), sour
 	d.deleteAfter = vtui.NewCheckbox(x, y+13, vtui.Msg("Archive.Add.DeleteAfter"), false)
 	d.skipErrors = vtui.NewCheckbox(x, y+14, vtui.Msg("Archive.Add.SkipErrors"), false)
 	d.filter = vtui.NewEdit(x+labelW, y+16, inner-labelW, "")
-	d.keepExtension = vtui.NewCheckbox(x, y+15, vtui.Msg("Archive.Add.KeepExtension"), loadKeepArchiveFileExtension())
+	d.keepExtension = vtui.NewCheckbox(x, y+15, vtui.Msg("Archive.Add.KeepExtension"), false)
+	if loadKeepArchiveFileExtension() {
+		d.keepExtension.State = 1
+	}
 	d.dlg.AddItem(d.deleteAfter)
 	d.dlg.AddItem(d.skipErrors)
 	d.dlg.AddItem(d.keepExtension)
