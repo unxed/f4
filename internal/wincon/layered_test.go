@@ -77,6 +77,23 @@ func TestTrackStepFollowsTheConsoleWhenItMoves(t *testing.T) {
 	}
 }
 
+// f4#1885 (sogonov, cmd.exe): a picture whose frame starts inside the client
+// area, quick view in the left panel, was moved to the client's top left
+// corner by the next tick, since the tick compared the window's place with
+// the client origin alone.
+func TestTrackStepKeepsTheFrameOffsetInTheClientArea(t *testing.T) {
+	s := trackerState{WantVisible: true, OnScreen: true, X: 100 + 96, Y: 200 + 64, OffX: 96, OffY: 64}
+	if ops := trackStep(s, aliveConsole()); ops.MoveTo {
+		t.Fatalf("a frame in its place inside the client area was moved: %+v", ops)
+	}
+	o := aliveConsole()
+	o.ClientX, o.ClientY = 140, 260
+	ops := trackStep(s, o)
+	if !ops.MoveTo || ops.X != 140+96 || ops.Y != 260+64 {
+		t.Fatalf("got %+v, want a move to %d,%d: the console's move with the frame's offset kept", ops, 140+96, 260+64)
+	}
+}
+
 func TestTrackStepKeepsTheOverlayDirectlyAboveTheConsole(t *testing.T) {
 	s := trackerState{WantVisible: true, OnScreen: true, X: 100, Y: 200}
 

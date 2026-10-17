@@ -610,6 +610,7 @@ func (o *Overlay) push(hwnd uintptr) {
 	o.stats.paints.Add(1)
 	o.tracker.WantVisible = true
 	o.tracker.X, o.tracker.Y = x, y
+	o.tracker.OffX, o.tracker.OffY = rect.X, rect.Y
 	if !o.shown {
 		o.shown = true
 		procShowWindow.Call(hwnd, swShowNoActivate)

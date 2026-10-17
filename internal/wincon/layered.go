@@ -63,6 +63,9 @@ type trackerState struct {
 	WantVisible bool // the caller asked for a picture to be on screen
 	OnScreen    bool // the window is currently shown
 	X, Y        int  // where the window was last put, in screen coordinates
+	// OffX, OffY is where the picture's frame starts in the console's client
+	// area: the window goes there, not to the client origin (f4#1885).
+	OffX, OffY int
 }
 
 // trackOps is what the tick should do. Each field maps to exactly one syscall,
@@ -114,9 +117,9 @@ func trackStep(s trackerState, o consoleObservation) trackOps {
 	if !s.OnScreen {
 		ops.Show = true
 	}
-	if o.ClientX != s.X || o.ClientY != s.Y || !s.OnScreen {
+	if x, y := o.ClientX+s.OffX, o.ClientY+s.OffY; x != s.X || y != s.Y || !s.OnScreen {
 		ops.MoveTo = true
-		ops.X, ops.Y = o.ClientX, o.ClientY
+		ops.X, ops.Y = x, y
 	}
 	if o.PrevInZOrder != o.Self {
 		ops.Restack = true
