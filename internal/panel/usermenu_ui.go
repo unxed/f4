@@ -919,10 +919,16 @@ func showEditItemDialog(s *userMenuState, current *vtui.VMenu, items []UserMenuI
 
 		var newItem UserMenuItem
 		if isSubmenu {
+			sub := []UserMenuItem{}
+			if !isCreate && idx >= 0 && idx < len(items) && items[idx].Submenu != nil {
+				// The editor shows a group's hotkey and label only, so
+				// what is in the group stays as it was (f4#2036).
+				sub = items[idx].Submenu
+			}
 			newItem = UserMenuItem{
 				HotKey:  hkey,
 				Label:   lbl,
-				Submenu: []UserMenuItem{},
+				Submenu: sub,
 			}
 		} else {
 			newItem = UserMenuItem{
