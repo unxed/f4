@@ -1043,7 +1043,7 @@ func actionAddArchive(app vfs.App) {
 	if len(names) == 1 {
 		arcName = names[0]
 		if info, err := activeVfs.Stat(context.Background(), activeVfs.Join(activeVfs.GetPath(), names[0])); err == nil {
-			sourceIsFile = !info.IsDir()
+			sourceIsFile = !info.IsDir
 		}
 	} else {
 		arcName = activeVfs.Base(activeVfs.GetPath())
