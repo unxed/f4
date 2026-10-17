@@ -32,7 +32,7 @@ func TestDriveMenuPlatformRowsAlignColumns(t *testing.T) {
 			t.Fatalf("column %q starts at %d and %d, want equal starts", column, got, want)
 		}
 	}
-	if !strings.Contains(lines[0], "953.0 GiB | 300.6 GiB") || !strings.Contains(lines[1], " 13.8 TiB |   1.2 TiB") {
+	if !strings.Contains(lines[0], "953.0 GiB │ 300.6 GiB") || !strings.Contains(lines[1], " 13.8 TiB │   1.2 TiB") {
 		t.Fatalf("size columns are not aligned/right-justified: %q", lines)
 	}
 }
