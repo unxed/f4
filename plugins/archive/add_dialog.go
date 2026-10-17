@@ -571,6 +571,14 @@ func splitIntoVolumes(ctx context.Context, path string, size int64) (retErr erro
 	if err != nil {
 		return err
 	}
+	// An archive no bigger than one volume keeps its name: path.001 alone
+	// is a volume number on an archive that was never cut (f4#2002).
+	if info, err := src.Stat(); err != nil {
+		_ = src.Close() // Read-only; nothing to flush.
+		return err
+	} else if info.Size() <= size {
+		return src.Close()
+	}
 	var written []string
 	defer func() {
 		_ = src.Close() // Read-only; nothing to flush.
@@ -611,4 +619,37 @@ func splitIntoVolumes(ctx context.Context, path string, size int64) (retErr erro
 	}
 	_ = src.Close() // Closed before the remove for Windows; the defer's second close is harmless.
 	return os.Remove(path)
+}
+
+// collapseSingleVolume renames path.001 to path when an archiver that writes
+// volumes itself wrote only one: the archive was never cut, so it keeps its
+// own name (f4#2002).
+func collapseSingleVolume(path string) error {
+	if _, err := os.Stat(path + ".002"); err == nil || !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(path + ".001"); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.Rename(path+".001", path)
+}
+
+// captureAddArchiveSelection remembers which of names are marked, when the
+// host can unmark them later (vfs.SelectionClearHost); the tokens leave alone
+// what the user marked or unmarked in the meantime.
+func captureAddArchiveSelection(app vfs.App, names []string) []vfs.SelectionToken {
+	host, ok := app.(vfs.SelectionClearHost)
+	if !ok {
+		return nil
+	}
+	var tokens []vfs.SelectionToken
+	for _, name := range names {
+		if token, exists := host.CaptureSelectionToken(name); exists {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
 }

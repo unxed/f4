@@ -1049,6 +1049,10 @@ func actionAddArchive(app vfs.App) {
 	}
 	arcName += ".zip"
 
+	// What was marked is unmarked once it is in the archive, as after a
+	// copy (f4#2002).
+	selection := captureAddArchiveSelection(app, names)
+
 	// The window with the format, level, method and solid (f4#2002) in
 	// place of the plain name prompt.
 	showAddArchiveDialog(app, arcName, func(settings addArchiveSettings) {
@@ -1223,6 +1227,10 @@ func actionAddArchive(app vfs.App) {
 					if err := splitIntoVolumes(ctx, absArcPath, settings.VolumeSize); err != nil {
 						return err
 					}
+				} else if settings.VolumeSize > 0 {
+					if err := collapseSingleVolume(absArcPath); err != nil {
+						return err
+					}
 				}
 				if settings.DeleteAfter {
 					reporter.UpdateTransfer("Archiving", "deleting...", -1, "", -1, "")
@@ -1236,7 +1244,14 @@ func actionAddArchive(app vfs.App) {
 					go app.Message(vtui.Msg("Archive.Add.Title"), fmt.Sprintf(vtui.Msg("Archive.Add.Skipped"), skipped), []string{"&Ok"})
 				}
 				if err == nil {
-					app.SetPendingSelection(settings.archiveFile(name))
+					target := settings.archiveFile(name)
+					if _, statErr := os.Stat(absArcPath); statErr == nil {
+						target = name // it came out as one volume
+					}
+					app.SetPendingSelection(target)
+					for _, token := range selection {
+						token.Clear()
+					}
 				}
 				app.RefreshAll()
 			})
