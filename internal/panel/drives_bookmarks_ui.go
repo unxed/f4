@@ -184,7 +184,7 @@ func (d *driveBookmarkEditDialog) submit() {
 		Name:      strings.TrimSpace(d.nameEdit.GetText()),
 		Path:      strings.TrimSpace(d.pathEdit.GetText()),
 		Hotkey:    strings.TrimSpace(d.HotkeyEdit.GetText()),
-		QuickCall: d.quickCall.Checked,
+		QuickCall: d.quickCall.State == 1,
 	}
 	if bookmark.Name == "" {
 		vtui.ShowMessageOn(d, i18n.Msg("DriveLink.ErrorTitle"), i18n.Msg("DriveLink.NameRequired"), []string{"&Ok"})
