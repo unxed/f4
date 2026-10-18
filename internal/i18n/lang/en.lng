@@ -2458,6 +2458,7 @@ DriveLink.EditTitle= Edit link
 DriveLink.Name=&Name:
 DriveLink.Path=&Path:
 DriveLink.Hotkey=Hot key:
+DriveLink.QuickCall=Use for quick call with RCtrl / Ctrl+Alt
 DriveLink.HotkeyHint=Type a character, or Del to clear
 DriveLink.Create=&Create
 DriveLink.Save=&Save

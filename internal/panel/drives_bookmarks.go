@@ -17,9 +17,10 @@ import (
 // slots. Hotkey contains the Far-style raw spelling (for example "Q" or
 // "CtrlF5").
 type DriveBookmark struct {
-	Name   string
-	Path   string
-	Hotkey string
+	Name      string
+	Path      string
+	Hotkey    string
+	QuickCall bool
 }
 
 // DriveBookmarksFilePath returns the user-config location of the named drive
@@ -84,6 +85,8 @@ func LoadDriveBookmarks(path string) ([]DriveBookmark, error) {
 			bookmark.Path = value
 		case "Hotkey":
 			bookmark.Hotkey = value
+		case "QuickCall":
+			bookmark.QuickCall = strings.EqualFold(value, "true") || value == "1"
 		}
 		byIndex[current] = bookmark
 	}
@@ -137,6 +140,8 @@ func SaveDriveBookmarks(path string, bookmarks []DriveBookmark) error {
 		buf.WriteString(pathValue)
 		buf.WriteString("\nHotkey=")
 		buf.WriteString(strings.TrimSpace(bookmark.Hotkey))
+		buf.WriteString("\nQuickCall=")
+		buf.WriteString(strconv.FormatBool(bookmark.QuickCall))
 		buf.WriteByte('\n')
 	}
 	return config.WriteUserFileAtomically(path, []byte(buf.String()), 0o600)

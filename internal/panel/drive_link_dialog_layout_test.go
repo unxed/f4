@@ -3,6 +3,7 @@ package panel
 import (
 	"testing"
 
+	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/vtui"
 )
 
@@ -14,11 +15,14 @@ func TestDriveLinkDialogRows(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	d := NewDriveBookmarkEditDialog(DriveBookmark{}, "/tmp", nil)
 	var sep *vtui.Separator
+	var quickCall *vtui.Checkbox
 	var buttons []*vtui.Button
 	for _, child := range d.GetChildren() {
 		switch c := child.(type) {
 		case *vtui.Separator:
 			sep = c
+		case *vtui.Checkbox:
+			quickCall = c
 		case *vtui.Button:
 			buttons = append(buttons, c)
 		}
@@ -26,9 +30,13 @@ func TestDriveLinkDialogRows(t *testing.T) {
 	if sep == nil || len(buttons) != 2 {
 		t.Fatalf("separator %v, %d buttons", sep != nil, len(buttons))
 	}
+	if quickCall == nil {
+		t.Fatal("quick-call checkbox is missing")
+	}
 	_, nameY, _, _ := d.nameEdit.GetPosition()
 	_, pathY, _, _ := d.pathEdit.GetPosition()
-	_, hotkeyY, _, _ := d.HotkeyEdit.GetPosition()
+	hotkeyX, hotkeyY, hotkeyWidth, _ := d.HotkeyEdit.GetPosition()
+	quickX, quickY, _, _ := quickCall.GetPosition()
 	_, sepY, _, _ := sep.GetPosition()
 	_, buttonY, _, _ := buttons[0].GetPosition()
 	if pathY != nameY+2 {
@@ -39,6 +47,16 @@ func TestDriveLinkDialogRows(t *testing.T) {
 	}
 	if hotkeyY != pathY+2 {
 		t.Errorf("Hot key at row %d, Path field at %d: want one blank row between", hotkeyY, pathY)
+	}
+	if quickY != hotkeyY || quickX != hotkeyX+hotkeyWidth+1 {
+		t.Errorf("quick-call checkbox at (%d,%d), hotkey at (%d,%d) width %d: want same row, one cell after field", quickX, quickY, hotkeyX, hotkeyY, hotkeyWidth)
+	}
+	if hotkeyX != d.X1+2+vtui.StringWidth(i18n.Msg("DriveLink.Hotkey")) {
+		t.Errorf("hotkey field x = %d: want label immediately followed by field after shifting it left one cell", hotkeyX)
+	}
+	d.HotkeyEdit.SetText("Ctrl+Alt+anything")
+	if got := d.HotkeyEdit.GetText(); got != "Ctrl+Alt+anything" {
+		t.Errorf("hotkey field constrained arbitrary input: got %q", got)
 	}
 	if sepY != hotkeyY+2 {
 		t.Errorf("rule at row %d, Hot key at %d: want only the hint between them", sepY, hotkeyY)

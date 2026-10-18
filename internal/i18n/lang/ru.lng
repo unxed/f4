@@ -2458,6 +2458,7 @@ DriveLink.EditTitle= Изменить ссылку
 DriveLink.Name=&Имя:
 DriveLink.Path=&Путь:
 DriveLink.Hotkey=Горячая клавиша:
+DriveLink.QuickCall=Использовать для быстрого вызова с RCtrl / Ctrl+Alt
 DriveLink.HotkeyHint=Введите символ или нажмите Del для очистки
 DriveLink.Create=&Создать
 DriveLink.Save=&Сохранить
