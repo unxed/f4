@@ -214,7 +214,7 @@ func TestHelpPanelModesTopic(t *testing.T) {
 			}
 			paragraphIsReflowable := false
 			for _, line := range topic.Lines {
-				paragraphIsReflowable = paragraphIsReflowable || line == paragraph
+				paragraphIsReflowable = paragraphIsReflowable || strings.TrimSpace(line) == paragraph
 			}
 			if !paragraphIsReflowable {
 				t.Errorf("PanelModes first paragraph is not kept as one reflowable source line: %q", paragraph)
