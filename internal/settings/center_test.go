@@ -84,7 +84,7 @@ func TestSettingsCatalogComplete(t *testing.T) {
 		t.Fatalf("unexpectedly small catalog: %d", len(c.Fields))
 	}
 	for _, f := range c.Fields {
-		if !strings.HasPrefix(f.ID, "DriveMenuOptions.") && !settingsConfigField(reflect.ValueOf(config.App), f.ID).IsValid() {
+		if !strings.HasPrefix(f.ID, "DriveMenuOptions.") && f.ID != terminalThemeID && !settingsConfigField(reflect.ValueOf(config.App), f.ID).IsValid() {
 			t.Fatalf("unknown config field %s", f.ID)
 		}
 		_ = coreSettingValue(config.App, f.ID)

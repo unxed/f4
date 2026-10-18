@@ -57,7 +57,7 @@ func TestEveryCoreSettingIsStoredInAKey(t *testing.T) {
 		}
 	}
 	for _, field := range coreSettingsStaticFields() {
-		if !stored[field.ID] {
+		if !stored[field.ID] && field.ID != terminalThemeID { // derived from the colour keys, stores nothing itself
 			t.Errorf("Settings Center field %s changes no settings.ini key", field.ID)
 		}
 	}

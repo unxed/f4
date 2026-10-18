@@ -1529,6 +1529,11 @@ func (c *settingsCenter) makeControl(r *settingsRow) vtui.UIElement {
 		}
 		c.describe(r)
 		c.updateMatches()
+		if f.ID == terminalThemeID {
+			c.applyTerminalTheme(v)
+		} else if isTerminalColorField(f.ID) {
+			c.syncTerminalTheme()
+		}
 	}
 	var control vtui.UIElement
 	switch f.Kind {

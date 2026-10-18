@@ -70,7 +70,8 @@ var architectureLayers = map[string]int{
 	// package may — 0 to 0 is not an upward import — because eight settings
 	// steer it and threading eight parameters through a colour table buys
 	// nothing.
-	"internal/theme": 0,
+	"internal/theme":      0,
+	"internal/termthemes": 0,
 
 	// The string table and the language packs, with lang/ embedded beside them.
 	// It takes the two configured languages and the profile directory as

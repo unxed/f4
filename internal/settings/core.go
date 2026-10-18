@@ -40,6 +40,9 @@ func settingsConfigField(v reflect.Value, path string) reflect.Value {
 	return v
 }
 func coreSettingValue(cfg config.F4Config, id string) string {
+	if id == terminalThemeID {
+		return terminalThemeOf(func(key string) string { return coreSettingValue(cfg, key) })
+	}
 	if id == "StartupMode" {
 		return cfg.StartupMode.String()
 	}
@@ -61,6 +64,10 @@ func coreSettingValue(cfg config.F4Config, id string) string {
 	}
 }
 func setCoreSetting(cfg *config.F4Config, id, value string) error {
+	if id == terminalThemeID {
+		// Not stored: the colour fields carry the theme (terminal_themes.go).
+		return nil
+	}
 	if id == "StartupMode" {
 		cfg.StartupMode = config.ParseStartupMode(value)
 		return nil

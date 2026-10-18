@@ -23,6 +23,7 @@ func (c *settingsCenter) resetTerminalColors() {
 		for _, key := range config.TerminalColorKeys {
 			s.draft.Values[key] = ""
 		}
+		s.draft.Values[terminalThemeID] = terminalThemeDefault
 	}
 	c.rebuildCategory()
 }

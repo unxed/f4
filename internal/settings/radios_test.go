@@ -15,7 +15,7 @@ import (
 
 func TestSettingsRadioPresentationAudit(t *testing.T) {
 	catalog := (coreSettingsProvider{}).Catalog()
-	dropdowns := map[string]bool{"Language": true, "HelpLanguage": true, "GuiFont": true, "ColorStyle": true, "GuiBackend": true, "EditorDefaultCodePage": true, "ViewerDefaultCodePage": true, "EditorColorerScheme": true}
+	dropdowns := map[string]bool{"Language": true, "HelpLanguage": true, "GuiFont": true, "ColorStyle": true, "GuiBackend": true, "EditorDefaultCodePage": true, "ViewerDefaultCodePage": true, "EditorColorerScheme": true, "TerminalTheme": true}
 	for _, f := range catalog.Fields {
 		if f.Kind == f4settings.ChoiceKind && settingsUseRadios(f) == dropdowns[f.ID] {
 			t.Errorf("unexpected presentation for %s", f.ID)

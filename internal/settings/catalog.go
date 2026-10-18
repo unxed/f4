@@ -166,6 +166,7 @@ CursorOvertypeShape|terminal|Cursor|Overtype mode cursor|Cursor shape while typi
 CursorBlink|terminal|Cursor|Blinking cursor|Make the text cursor blink. Not applied in a terminal while its own cursor style is preserved, nor in the Linux console or the classic Windows console.||live
 ConsoleMode|terminal|Presentation|Terminal presentation|Use the embedded terminal, host terminal with f4 overlay, or host terminal without overlay. Unsupported host styles fall back according to terminal capabilities.|own:Embedded;far:Host with overlay;mc:Host without overlay|new workspaces
 HostConsoleDefaultColors|terminal|Presentation|Keep host console default colors|In the host console modes, draw the console f4 shows beside a hidden panel (Ctrl+F1, Ctrl+F2) in the host terminal's own default colours, so a translucent or themed terminal shows through instead of a black rectangle. Off keeps the black background. No effect in the embedded terminal.||live
+TerminalTheme|terminal|Colors|Theme|Pick a ready set of colors: Default is f4's own palette, then come the themes, and Custom is what the fields show when they match none of them. Picking a theme fills the 16 ANSI colors and the terminal's text, background, cursor and selection colors below; editing any of them selects Custom. Apply keeps the change, Cancel drops it.||live
 AnsiColorBlack|terminal|Colors|ANSI black|Terminal color 0 (black), written as #RRGGBB. The embedded terminal draws it and f4 loads it into the host terminal, so programs that print the 16 basic colors show it. Leave the field empty for the default, #2E3436.||live
 AnsiColorRed|terminal|Colors|ANSI red|Terminal color 1 (red), written as #RRGGBB. The embedded terminal draws it and f4 loads it into the host terminal, so programs that print the 16 basic colors show it. Leave the field empty for the default, #800000.||live
 AnsiColorGreen|terminal|Colors|ANSI green|Terminal color 2 (green), written as #RRGGBB. The embedded terminal draws it and f4 loads it into the host terminal, so programs that print the 16 basic colors show it. Leave the field empty for the default, #008000.||live
@@ -218,6 +219,13 @@ func coreSettingsFields() []f4settings.Field {
 				pair := strings.SplitN(item, ":", 2)
 				f.Choices = append(f.Choices, f4settings.Choice{Value: pair[0], Label: f4settings.Text{English: pair[1]}})
 			}
+		}
+		if f.ID == terminalThemeID {
+			f.Kind = f4settings.ChoiceKind
+			f.Choices = terminalThemeChoices()
+			// Not translated yet: the list names are literal, and so is the text.
+			f.Label = f4settings.Text{English: p[3], Literal: true}
+			f.Description = f4settings.Text{English: p[4], Literal: true}
 		}
 		if f.ID == "ProxyPass" {
 			f.Kind = f4settings.Secret
