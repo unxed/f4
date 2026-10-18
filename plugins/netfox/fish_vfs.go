@@ -1339,7 +1339,7 @@ func (p *fishProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vf
 	if err != nil {
 		return nil, err
 	}
-	return res, nil
+	return enterStartPath(res, cfg.Path), nil
 }
 
 type fishProtocolHandler struct{}

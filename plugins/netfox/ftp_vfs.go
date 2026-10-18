@@ -509,7 +509,7 @@ func (p *ftpProvider) Open(ctx context.Context, parent vfs.VFS, pth string) (vfs
 	if err != nil {
 		return nil, err
 	}
-	return res, nil
+	return enterStartPath(res, cfg.Path), nil
 }
 
 type ftpProtocolHandler struct{}

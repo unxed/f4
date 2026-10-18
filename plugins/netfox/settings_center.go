@@ -34,6 +34,7 @@ func (p *settingsProvider) Catalog() f4settings.Catalog {
 		{"Port", "Port", "Server port; an empty value uses the protocol default.", f4settings.String},
 		{"User", "Username", "Login name sent to the server.", f4settings.String},
 		{"Pass", "Password", "Server login password. Values are excluded from search.", f4settings.Secret},
+		{"Path", "Start folder", "Folder to open after connecting; an empty value uses the server's default folder.", f4settings.Path},
 		{"KeyPath", "SSH private key", "Private-key file used for SFTP or FISH authentication.", f4settings.Path},
 		{"Timeout", "Connection timeout (seconds)", "Connection timeout in seconds; the default is 15.", f4settings.String},
 		{"Codepage", "Filename encoding", "Filename codepage used by FTP and SFTP. FISH does not consume this field.", f4settings.String},

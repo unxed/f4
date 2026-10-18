@@ -9,7 +9,7 @@ import (
 func TestSettingsRenamePreservesOptionsAndCredentials(t *testing.T) {
 	store := NewNetFoxVFS(filepath.Join(t.TempDir(), "NetFox.json"))
 	ctx := context.Background()
-	if err := store.SaveConfig("original", NetFoxConfig{Type: "sftp", Host: "example.test", Pass: "secret", Options: map[string]string{"future": "keep"}}); err != nil {
+	if err := store.SaveConfig("original", NetFoxConfig{Type: "sftp", Host: "example.test", Pass: "secret", Path: "/work", Options: map[string]string{"future": "keep"}}); err != nil {
 		t.Fatal(err)
 	}
 	p := &settingsProvider{store: store}
@@ -24,8 +24,8 @@ func TestSettingsRenamePreservesOptionsAndCredentials(t *testing.T) {
 			t.Fatal(r.Errors)
 		}
 		cfg := store.getConfigs()[name]
-		if cfg.Options["future"] != "keep" || cfg.Pass != "secret" {
-			t.Fatal("rename lost hidden options or credentials")
+		if cfg.Options["future"] != "keep" || cfg.Pass != "secret" || cfg.Path != "/work" {
+			t.Fatal("rename lost hidden options, credentials, or start folder")
 		}
 	}
 	if err := store.SaveConfig("other", NetFoxConfig{Type: "ftp", Host: "elsewhere"}); err != nil {

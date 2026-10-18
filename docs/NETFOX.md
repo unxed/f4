@@ -10,6 +10,11 @@ The NetFox plugin (the connection manager, and the `sftp://`, `scp://` and `smb:
 | SMB | `smb://[domain;]user[:password]@host[:port]/share/path` | Windows and Samba shares |
 | FISH+ | connection manager (type `fish+`, `fish` is a synonym) | see [FISH+.md](FISH+.md) |
 
+Saved NetFox connections can store a **Start folder** in Settings Center. When
+the connection opens, f4 enters that folder; if it is no longer available, the
+connection opens at the server's default folder and records the failure in the
+debug log.
+
 ## SCP (f4#187)
 
 `scp://` and the connection type **SCP** are the SFTP backend under the name people expect from `scp`: an SSH server that speaks SCP today also speaks SFTP, and SFTP gives real file listing, random access and rename, which the SCP protocol has no wire format for. A host with only the old SCP subsystem and no SFTP is not supported.
