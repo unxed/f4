@@ -102,8 +102,11 @@ func NewDriveBookmarkEditDialog(initial DriveBookmark, defaultPath string, onFin
 		nameEdit:   vtui.NewEdit(0, 0, width-6, initial.Name),
 		pathEdit:   vtui.NewEdit(0, 0, width-6, initial.Path),
 		HotkeyEdit: &driveLinkHotkeyEdit{vtui.NewEdit(0, 0, max(1, vtui.StringWidth(initial.Hotkey)), initial.Hotkey)},
-		quickCall:  vtui.NewCheckbox(0, 0, i18n.Msg("DriveLink.QuickCall"), initial.QuickCall),
+		quickCall:  vtui.NewCheckbox(0, 0, i18n.Msg("DriveLink.QuickCall"), false),
 		onFinish:   onFinish,
+	}
+	if initial.QuickCall {
+		dialog.quickCall.State = 1
 	}
 	if dialog.pathEdit.GetText() == "" {
 		dialog.pathEdit.SetText(defaultPath)

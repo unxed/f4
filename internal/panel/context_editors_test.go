@@ -31,7 +31,7 @@ func TestContextEditorsRemainLocalWithSettingsAvailable(t *testing.T) {
 					idx = 0
 				}
 				pf := &PanelsFrame{}
-				pf.openDriveBookmarkEditor(-1, nil, []DriveBookmark{{Name: "Example", Path: "/example", Hotkey: "Q"}}, idx, func() {})
+				pf.openDriveBookmarkEditor(-1, nil, []DriveBookmark{{Name: "Example", Path: "/example", Hotkey: "Q", QuickCall: true}}, idx, func() {})
 				select {
 				case task := <-vtui.FrameManager.TaskChan:
 					task()
@@ -44,6 +44,9 @@ func TestContextEditorsRemainLocalWithSettingsAvailable(t *testing.T) {
 				}
 				if idx == 0 && (d.nameEdit.GetText() != "Example" || d.pathEdit.GetText() != "/example" || d.HotkeyEdit.GetText() != "Q") {
 					t.Fatal("existing link fields lost")
+				}
+				if idx == 0 && (d.quickCall.State != 1 || d.quickCall.ThreeState) {
+					t.Fatalf("quick-call checkbox = state %d, threeState %t; want checked two-state checkbox", d.quickCall.State, d.quickCall.ThreeState)
 				}
 			case "bookmark":
 				d := &BookmarksDialog{Set: BookmarkSet{1: {Path: "/example"}}}
