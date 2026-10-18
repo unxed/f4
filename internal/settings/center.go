@@ -213,6 +213,7 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 				if isTerminalColorField(r.field.ID) {
 					if colorLabelWidth+r.controlWidth+1 <= available {
 						labelWidth = colorLabelWidth
+						r.label = []string{label + strings.Repeat(" ", colorLabelWidth-vtui.StringWidth(label))}
 					} else {
 						// Keep narrow settings windows usable: wrap the label above
 						// the editor rather than overlaying it with a wrapped label.
@@ -220,8 +221,9 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 						r.controlX, r.gap = 0, 1
 						break
 					}
+				} else {
+					r.label = settingsWrap(label, labelWidth)
 				}
-				r.label = settingsWrap(label, labelWidth)
 				r.controlX = labelWidth + 1
 				r.gap = 0
 			}
