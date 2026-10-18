@@ -91,6 +91,44 @@ func TestSettingsCatalogComplete(t *testing.T) {
 	}
 }
 
+func TestTerminalColorFieldsAlignLabelsAndValuesInline(t *testing.T) {
+	catalog := (coreSettingsProvider{}).Catalog()
+	draft := f4settings.NewDraft(nil, nil)
+	defer draft.Close()
+	c := newSettingsCenter([]*settingsSession{{catalog: catalog, draft: draft}})
+	c.selectCategory("terminal")
+	c.SetPosition(0, 0, 129, 34)
+
+	labelWidth, controlX, count := -1, -1, 0
+	for _, row := range c.page.rows {
+		if !isTerminalColorField(row.field.ID) {
+			continue
+		}
+		if _, ok := row.control.(*settingsEdit); !ok {
+			continue
+		}
+		count++
+		if len(row.label) != 1 {
+			t.Fatalf("%s label has %d lines; want one inline row", row.field.ID, len(row.label))
+		}
+		if labelWidth < 0 {
+			labelWidth, controlX = vtui.StringWidth(row.label[0]), row.controlX
+		}
+		if got := vtui.StringWidth(row.label[0]); got != labelWidth {
+			t.Errorf("%s label width %d; want aligned width %d", row.field.ID, got, labelWidth)
+		}
+		if row.controlX != controlX {
+			t.Errorf("%s value x=%d; want aligned x=%d", row.field.ID, row.controlX, controlX)
+		}
+		if row.controlWidth != 9 {
+			t.Errorf("%s input width=%d; want 9 for #RRGGBB", row.field.ID, row.controlWidth)
+		}
+	}
+	if count != len(config.AnsiColorKeys)+len(config.TerminalColorKeys) {
+		t.Fatalf("found %d inline color fields, want %d", count, len(config.AnsiColorKeys)+len(config.TerminalColorKeys))
+	}
+}
+
 func TestSettingsApplyPreservesUnknownKeysAndRuntimeChanges(t *testing.T) {
 	old := config.App
 	pathFunc := config.GetUserConfigIniPath

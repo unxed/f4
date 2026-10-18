@@ -132,6 +132,12 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 		box.bottom = v.total
 	}
 	group := ""
+	colorLabelWidth := 0
+	for _, row := range v.rows {
+		if isTerminalColorField(row.field.ID) {
+			colorLabelWidth = max(colorLabelWidth, vtui.StringWidth(row.field.Label.Resolve(config.App.Language, i18n.Msg)))
+		}
+	}
 	for _, r := range v.rows {
 		if len(v.boxes) == 0 || group != r.field.Group {
 			if len(v.boxes) > 0 {
@@ -204,6 +210,17 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 				r.controlWidth = min(width, max(1, available/2))
 				label := r.field.Label.Resolve(config.App.Language, i18n.Msg)
 				labelWidth := min(vtui.StringWidth(label), max(1, available-r.controlWidth-1))
+				if isTerminalColorField(r.field.ID) {
+					if colorLabelWidth+r.controlWidth+1 <= available {
+						labelWidth = colorLabelWidth
+					} else {
+						// Keep narrow settings windows usable: wrap the label above
+						// the editor rather than overlaying it with a wrapped label.
+						r.label = settingsWrap(label, available)
+						r.controlX, r.gap = 0, 1
+						break
+					}
+				}
 				r.label = settingsWrap(label, labelWidth)
 				r.controlX = labelWidth + 1
 				r.gap = 0

@@ -230,6 +230,9 @@ func coreSettingsFields() []f4settings.Field {
 		if f.ID == "ProxyPort" {
 			f.InputWidth = 6
 		}
+		if isTerminalColorField(f.ID) {
+			f.InputWidth = 9 // #RRGGBB, displayed inline with its aligned label.
+		}
 		if f.ID == "EditorColorerCatalog" || f.ID == "EditorColorerUserHrc" || f.ID == "EditorColorerUserHrd" || f.ID == "EditorColorerHrcSettings" {
 			f.Kind = f4settings.Path
 		}
