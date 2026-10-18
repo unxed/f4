@@ -47,6 +47,43 @@ func TestElevationScopeIsKeptByNestedCalls(t *testing.T) {
 	}
 }
 
+// Separate top-level size counts are separate operations: refusing elevation
+// in one must not suppress the prompt for the next one (f4#1998).
+func TestSeparateSizeCountsHaveIndependentElevationScopes(t *testing.T) {
+	old := globalSudoClient
+	globalSudoClient = &SudoClient{}
+	t.Cleanup(func() { globalSudoClient = old })
+
+	v := &scopeRecordingVFS{VFS: NewOSVFS("/")}
+	if _, err := CalculateStatsWithOptions(context.Background(), v, "/", []string{"root"}, ScanOptions{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	first := v.scopes[0]
+	before := globalSudoClient.declines.Load()
+	globalSudoClient.declines.Add(1) // the user refused the first operation's prompt
+	noteElevationRefusal(context.WithValue(context.Background(), elevationScopeKeyType{}, first), before)
+	if ElevationAllowed(context.WithValue(context.Background(), elevationScopeKeyType{}, first)) {
+		t.Fatal("the first operation should remember the refusal")
+	}
+
+	v.scopes = nil
+	if _, err := CalculateStatsWithOptions(context.Background(), v, "/", []string{"root"}, ScanOptions{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for i, scope := range v.scopes {
+		if scope == first {
+			t.Fatalf("second operation reused the first operation's elevation scope at call %d", i)
+		}
+		if !scopeAllowed(scope) {
+			t.Fatalf("second operation was silenced at call %d", i)
+		}
+	}
+}
+
+func scopeAllowed(scope *elevationScope) bool {
+	return ElevationAllowed(context.WithValue(context.Background(), elevationScopeKeyType{}, scope))
+}
+
 type scopeRecordingVFS struct {
 	VFS
 	scopes []*elevationScope
