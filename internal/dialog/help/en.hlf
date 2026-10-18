@@ -974,15 +974,9 @@ $Clipboard images
 
 @PanelModes
 $Panel modes
-  A panel mode is a set of columns. Ctrl+1..Ctrl+0 switch modes; the mode
-  list (F9, Options, File panel modes) edits them: Enter opens a mode.
-  Each mode can show or hide the focused-file status line independently;
-  an unchanged mode follows the global panel setting.
+  A panel mode is a set of columns. Ctrl+1..Ctrl+0 switch modes; the mode list (F9, Options, File panel modes) edits them: Enter opens a mode. Each mode can show or hide the focused-file status line independently; an unchanged mode follows the global panel setting.
 
-  Column types and Column widths are comma separated lists that match
-  by position. Columns... and Status line columns... edit them as a
-  list: Ins adds a column, Del removes it, Ctrl+Up/Down moves it, F4 sets
-  its width.
+  Column types and Column widths are comma separated lists that match by position. Columns... and Status line columns... edit them as a list: Ins adds a column, Del removes it, Ctrl+Up/Down moves it, F4 sets its width.
   Empty status line types keep the default status line.
 
   Types:
@@ -997,12 +991,7 @@ $Panel modes
     S, P:  C  digit group separators     E  no space before the unit
            F  fractional size, 1.25 K    T  units of 1000, not 1024
     DM, DC, DA, DE:  B  short date       M  month as a name
-  O and R after N, A after S/P and L after O are accepted for far2l
-  compatibility and change nothing.
+  O and R after N, A after S/P and L after O are accepted for far2l compatibility and change nothing.
 
-  Widths: 0 is the type's default (a name takes a share of the free
-  space), a number is that many characters, N% is a share of the free
-  space. When the columns do not fit, the last one is shortened and then
-  dropped.
-  A repeated group of types forms stripes: N,N,N is three name stripes,
-  N,S,N,S two stripes of a name and a size.
+  Widths: 0 is the type's default (a name takes a share of the free space), a number is that many characters, N% is a share of the free space. When the columns do not fit, the last one is shortened and then dropped.
+  A repeated group of types forms stripes: N,N,N is three name stripes, N,S,N,S two stripes of a name and a size.

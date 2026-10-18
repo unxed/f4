@@ -208,10 +208,16 @@ func TestHelpPanelModesTopic(t *testing.T) {
 					t.Errorf("PanelModes does not mention %q", want)
 				}
 			}
-			for i, line := range topic.Lines {
-				if width := runewidth.StringWidth(strings.ReplaceAll(line, "#", "")); width > 73 {
-					t.Errorf("PanelModes line %d is %d cells wide: %q", i+1, width, line)
-				}
+			paragraph := "A panel mode is a set of columns. Ctrl+1..Ctrl+0 switch modes; the mode list (F9, Options, File panel modes) edits them: Enter opens a mode. Each mode can show or hide the focused-file status line independently; an unchanged mode follows the global panel setting."
+			if lang == "ru" {
+				paragraph = "Режим панели — это набор колонок. Ctrl+1..Ctrl+0 переключают режимы; список режимов (F9, Настройки, Режимы файловых панелей) их правит: Enter открывает режим. Для каждого режима можно отдельно включить или скрыть строку информации о текущем файле; неизменённый режим следует общей настройке панели."
+			}
+			paragraphIsReflowable := false
+			for _, line := range topic.Lines {
+				paragraphIsReflowable = paragraphIsReflowable || line == paragraph
+			}
+			if !paragraphIsReflowable {
+				t.Errorf("PanelModes first paragraph is not kept as one reflowable source line: %q", paragraph)
 			}
 			linked := false
 			for _, link := range engine.GetTopic("Contents").Links {
