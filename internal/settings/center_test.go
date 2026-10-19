@@ -97,7 +97,7 @@ func TestTerminalColorFieldsUseTwoColumnsWhenThePageIsWide(t *testing.T) {
 	defer draft.Close()
 	c := newSettingsCenter([]*settingsSession{{catalog: catalog, draft: draft}})
 	c.selectCategory("terminal")
-	c.SetPosition(0, 0, 129, 34)
+	c.SetPosition(0, 0, 180, 34)
 
 	var colors []*settingsRow
 	for _, row := range c.page.rows {
