@@ -801,7 +801,10 @@ func TestTreeWheelAndScrollBarScrollOnlyTheView_Issue1602(t *testing.T) {
 	wheel := func(dir int) {
 		t.Helper()
 		tp.ProcessMouse(&vtinput.InputEvent{Type: vtinput.MouseEventType, WheelDirection: dir,
-			MouseX: 5, MouseY: 5})
+			// The tree is open over one panel; the pointer can be over the
+			// other panel when the wheel event arrives. It still scrolls the
+			// tree's view without moving the tree cursor.
+			MouseX: 60, MouseY: 5})
 	}
 	wheel(-1)
 	if tp.Table.TopPos <= top {

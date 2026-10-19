@@ -731,7 +731,7 @@ func (t *TreePanel) processKey(e *vtinput.InputEvent) bool {
 }
 
 func (t *TreePanel) ProcessMouse(e *vtinput.InputEvent) bool {
-	if e.Type == vtinput.MouseEventType && e.WheelDirection != 0 && t.Table.HitTest(int(e.MouseX), int(e.MouseY)) {
+	if e.Type == vtinput.MouseEventType && e.WheelDirection != 0 {
 		// The wheel only scrolls the tree (f4#1602): the cursor stays on its
 		// folder, even off screen, so the files of the opposite panel are not
 		// listed for every row the wheel passes.
