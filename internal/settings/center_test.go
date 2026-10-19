@@ -29,7 +29,7 @@ func TestSettingsDisabledInputUsesDimmedNormalPalette(t *testing.T) {
 	defer d.Close()
 	c := newSettingsCenter([]*settingsSession{{catalog: f4settings.Catalog{ID: "test", Categories: Categories, Fields: []f4settings.Field{field}}, draft: d}})
 	c.selectCategory("startup")
-	c.SetPosition(0, 0, 129, 34)
+	c.SetPosition(0, 0, 179, 34)
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(130, 35)
 	for iteration := 0; iteration < 2; iteration++ {
