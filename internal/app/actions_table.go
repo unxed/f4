@@ -2974,6 +2974,8 @@ func init() {
 		Handler: withEditor(func(ev *editor.EditorView) {
 			if ev.SelActive || ev.RectSelActive {
 				ev.CopySelection()
+			} else {
+				ev.CopyCurrentLine()
 			}
 		}),
 	})

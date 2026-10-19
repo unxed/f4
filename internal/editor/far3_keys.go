@@ -192,6 +192,17 @@ func (ev *EditorView) AppendSelectionToClipboard() {
 	terminal.SetF4Clipboard(old + part)
 }
 
+// CopyCurrentLine selects the current logical line as a persistent block and
+// copies its text to the clipboard (FAR's Ctrl+C/Ctrl+Ins with no selection).
+func (ev *EditorView) CopyCurrentLine() {
+	lineStart := ev.Li.GetLineOffset(ev.CursorLine)
+	lineEnd := lineStart + ev.GetLineLength(ev.CursorLine)
+	ev.StartSelection(lineStart)
+	ev.selFrozen = true
+	ev.selEndOffset = lineEnd
+	ev.CopySelection()
+}
+
 func (ev *EditorView) CopySelectionToCursor() {
 	ev.transferSelectionToCursor(false)
 }
