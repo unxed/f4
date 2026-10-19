@@ -8,6 +8,8 @@ Up/Down navigation stays within its active pane; content controls wrap at the en
 
 Numeric fields use compact inline inputs. Providers can set the optional InputWidth character-width hint for short text values such as ports; it does not restrict stored value length. Long-text fields, including filename masks, paths and commands, retain full-width editors beneath their captions.
 
+The terminal color controls use two aligned columns when the page is wide enough for both labels and `#RRGGBB` editors; narrower pages return to one field per row.
+
 Russian labels, descriptions, choices, group names and operation messages are provided in `cmd/f4/lang/ru.lng`. Unkeyed provider text can resolve through `f4settings.ResourceKey`; provider-owned translations take precedence. Literal user values and external identifiers bypass translation. Formatted descriptions preserve arguments such as profile paths, and provider errors retain their English diagnostics and error chains while exposing localized display text. Russian coverage tests exercise core and all bundled providers.
 
 ## Entry points and editing contract

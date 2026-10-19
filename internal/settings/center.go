@@ -24,6 +24,7 @@ type settingsRow struct {
 	session            *settingsSession
 	control            vtui.UIElement
 	label              []string
+	labelX             int
 	y, height          int
 	heading            bool
 	match              bool
@@ -138,7 +139,24 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 			colorLabelWidth = max(colorLabelWidth, vtui.StringWidth(row.field.Label.Resolve(config.App.Language, i18n.Msg)))
 		}
 	}
-	for _, r := range v.rows {
+	available := max(3, x2-x1-5)
+	colorColumnGap := 3
+	colorColumnWidth := (available - colorColumnGap) / 2
+	twoColorColumns := colorLabelWidth+10 <= colorColumnWidth
+	layoutColor := func(r *settingsRow, column, y int) {
+		label := r.field.Label.Resolve(config.App.Language, i18n.Msg)
+		labelX := column * (colorColumnWidth + colorColumnGap)
+		r.labelX = labelX
+		r.label = []string{label + strings.Repeat(" ", colorLabelWidth-vtui.StringWidth(label))}
+		r.controlX = labelX + colorLabelWidth + 1
+		r.controlY = 0
+		r.controlWidth = 9
+		r.gap = 0
+		r.y = y
+		r.height = max(1, r.controlHeight)
+	}
+	for rowIndex := 0; rowIndex < len(v.rows); rowIndex++ {
+		r := v.rows[rowIndex]
 		if len(v.boxes) == 0 || group != r.field.Group {
 			if len(v.boxes) > 0 {
 				closeBox()
@@ -159,6 +177,21 @@ func (v *settingsViewport) SetPosition(x1, y1, x2, y2 int) {
 		box.rows = append(box.rows, r)
 		if r.heading {
 			r.y, r.height = box.top, 1
+			continue
+		}
+		r.labelX = 0
+		if twoColorColumns && isTerminalColorField(r.field.ID) {
+			v.total += r.padTop
+			layoutColor(r, 0, v.total)
+			if rowIndex+1 < len(v.rows) {
+				next := v.rows[rowIndex+1]
+				if next.field.Group == r.field.Group && !next.heading && isTerminalColorField(next.field.ID) {
+					layoutColor(next, 1, v.total)
+					box.rows = append(box.rows, next)
+					rowIndex++
+				}
+			}
+			v.total += r.height
 			continue
 		}
 		r.label = settingsWrap(r.field.Label.Resolve(config.App.Language, i18n.Msg), max(1, x2-x1-5))
@@ -313,7 +346,7 @@ func (v *settingsViewport) Show(scr *vtui.ScreenBuf) {
 			attr = vtui.DimColor(attr)
 		}
 		for j, line := range r.label {
-			scr.Write(v.X1+2, y+j, vtui.StringToCharInfo(line, attr))
+			scr.Write(v.X1+2+r.labelX, y+j, vtui.StringToCharInfo(line, attr))
 		}
 		if r.control != nil {
 			r.control.Show(scr)

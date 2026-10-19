@@ -91,7 +91,7 @@ func TestSettingsCatalogComplete(t *testing.T) {
 	}
 }
 
-func TestTerminalColorFieldsAlignLabelsAndValuesInline(t *testing.T) {
+func TestTerminalColorFieldsUseTwoColumnsWhenThePageIsWide(t *testing.T) {
 	catalog := (coreSettingsProvider{}).Catalog()
 	draft := f4settings.NewDraft(nil, nil)
 	defer draft.Close()
@@ -99,7 +99,7 @@ func TestTerminalColorFieldsAlignLabelsAndValuesInline(t *testing.T) {
 	c.selectCategory("terminal")
 	c.SetPosition(0, 0, 129, 34)
 
-	labelWidth, controlX, count := -1, -1, 0
+	var colors []*settingsRow
 	for _, row := range c.page.rows {
 		if !isTerminalColorField(row.field.ID) {
 			continue
@@ -107,25 +107,40 @@ func TestTerminalColorFieldsAlignLabelsAndValuesInline(t *testing.T) {
 		if _, ok := row.control.(*settingsEdit); !ok {
 			continue
 		}
-		count++
+		colors = append(colors, row)
 		if len(row.label) != 1 {
 			t.Fatalf("%s label has %d lines; want one inline row", row.field.ID, len(row.label))
-		}
-		if labelWidth < 0 {
-			labelWidth, controlX = vtui.StringWidth(row.label[0]), row.controlX
-		}
-		if got := vtui.StringWidth(row.label[0]); got != labelWidth {
-			t.Errorf("%s label width %d; want aligned width %d", row.field.ID, got, labelWidth)
-		}
-		if row.controlX != controlX {
-			t.Errorf("%s value x=%d; want aligned x=%d", row.field.ID, row.controlX, controlX)
 		}
 		if row.controlWidth != 9 {
 			t.Errorf("%s input width=%d; want 9 for #RRGGBB", row.field.ID, row.controlWidth)
 		}
 	}
-	if count != len(config.AnsiColorKeys)+len(config.TerminalColorKeys) {
-		t.Fatalf("found %d inline color fields, want %d", count, len(config.AnsiColorKeys)+len(config.TerminalColorKeys))
+	if len(colors) != len(config.AnsiColorKeys)+len(config.TerminalColorKeys) {
+		t.Fatalf("found %d color fields, want %d", len(colors), len(config.AnsiColorKeys)+len(config.TerminalColorKeys))
+	}
+	if colors[0].y != colors[1].y {
+		t.Fatalf("first pair y positions are %d and %d; want one row", colors[0].y, colors[1].y)
+	}
+	if colors[0].controlX >= colors[1].controlX {
+		t.Fatalf("second color editor x=%d; want it right of first at x=%d", colors[1].controlX, colors[0].controlX)
+	}
+	if colors[1].labelX <= colors[0].labelX || colors[0].controlX-colors[0].labelX != colors[1].controlX-colors[1].labelX {
+		t.Fatalf("color columns are not aligned: labels x=%d/%d, editor offsets=%d/%d", colors[0].labelX, colors[1].labelX, colors[0].controlX-colors[0].labelX, colors[1].controlX-colors[1].labelX)
+	}
+	for i := 0; i+1 < len(colors); i += 2 {
+		if colors[i].y != colors[i+1].y {
+			t.Errorf("%s and %s are at y=%d and y=%d; want a shared row", colors[i].field.ID, colors[i+1].field.ID, colors[i].y, colors[i+1].y)
+		}
+		if vtui.StringWidth(colors[i].label[0]) != vtui.StringWidth(colors[i+1].label[0]) {
+			t.Errorf("%s and %s labels are not padded to the same width", colors[i].field.ID, colors[i+1].field.ID)
+		}
+	}
+
+	c.SetPosition(0, 0, 59, 34)
+	for i := 0; i < len(colors)-1; i++ {
+		if colors[i].y == colors[i+1].y {
+			t.Fatalf("narrow page kept %s and %s side by side", colors[i].field.ID, colors[i+1].field.ID)
+		}
 	}
 }
 
