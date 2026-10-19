@@ -256,7 +256,7 @@ func TestAttributesDialog_UnixSetAll(t *testing.T) {
 	})
 
 	// Change values
-	newTime := "01.02.2030 10:20:30"
+	newTime := "01.02.2030 10:20:30.123"
 	editOwner.SetText("root")
 	editGroup.SetText("wheel")
 	editOctal.SetText("0755")
@@ -274,7 +274,7 @@ func TestAttributesDialog_UnixSetAll(t *testing.T) {
 	if capturedItem.UnixMode != 0755 {
 		t.Errorf("Unix mode not set. Expected 0755, got %04o", capturedItem.UnixMode)
 	}
-	expectedTime, _ := time.ParseInLocation("02.01.2006 15:04:05", newTime, time.Local)
+	expectedTime, _ := time.ParseInLocation("02.01.2006 15:04:05.000", newTime, time.Local)
 	if !capturedItem.MTime.Equal(expectedTime) {
 		t.Errorf("MTime not set. Expected %v, got %v", expectedTime, capturedItem.MTime)
 	}
@@ -946,7 +946,7 @@ func TestAttributesDialog_SymlinkUsesLinkMetadata(t *testing.T) {
 	dlg := fm.GetTopFrame().(vtui.Container)
 
 	wantMode := fmt.Sprintf("%04o", linkInfo.Mode().Perm())
-	wantMTime := linkInfo.ModTime().Format("02.01.2006 15:04:05")
+	wantMTime := linkInfo.ModTime().Format("02.01.2006 15:04:05.000")
 	found := map[string]bool{}
 	walkUI(dlg.(vtui.UIElement), func(el vtui.UIElement) bool {
 		if control, ok := el.(*vtui.Edit); ok {
@@ -1115,13 +1115,13 @@ func TestAttributesDialog_WindowsSetTime(t *testing.T) {
 		return true
 	})
 
-	newTimeStr := "15.05.2025 10:00:00"
+	newTimeStr := "15.05.2025 10:00:00.456"
 	editTime.SetText(newTimeStr)
 	btnSet.OnClick()
 
 	runUITasksUntil(t, fm.TaskChan, dlg.(vtui.Frame).IsDone)
 
-	expected, _ := time.ParseInLocation("02.01.2006 15:04:05", newTimeStr, time.Local)
+	expected, _ := time.ParseInLocation("02.01.2006 15:04:05.000", newTimeStr, time.Local)
 	if !capturedItem.MTime.Equal(expected) {
 		t.Errorf("Windows MTime update failed. Expected %v, got %v", expected, capturedItem.MTime)
 	}
