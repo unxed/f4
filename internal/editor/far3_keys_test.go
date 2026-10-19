@@ -113,6 +113,27 @@ func TestFAR3BlockTransferAndIndent(t *testing.T) {
 	if indent.CursorPos != 2 {
 		t.Fatalf("cursor after indent = %d, want 2", indent.CursorPos)
 	}
+
+	unindent := newFAR3Editor(t, "\tone")
+	unindent.CursorPos = 2
+	unindent.ShiftCurrentOrSelectedLines(true)
+	if got, want := unindent.GetText(), "one"; got != want {
+		t.Fatalf("unindented line = %q, want %q", got, want)
+	}
+
+	selected := newFAR3Editor(t, "one\ntwo\nthree")
+	selected.SelActive = true
+	selected.SelAnchorOffset = 0
+	selected.CursorLine = 1
+	selected.CursorPos = 3
+	selected.ShiftCurrentOrSelectedLines(false)
+	if got, want := selected.GetText(), "\tone\n\ttwo\nthree"; got != want {
+		t.Fatalf("indented selected lines = %q, want %q", got, want)
+	}
+	selected.ShiftCurrentOrSelectedLines(true)
+	if got, want := selected.GetText(), "one\ntwo\nthree"; got != want {
+		t.Fatalf("unindented selected lines = %q, want %q", got, want)
+	}
 }
 
 func TestFAR3Bookmarks(t *testing.T) {
