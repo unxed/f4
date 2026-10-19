@@ -200,6 +200,11 @@ func (ev *EditorView) CopyCurrentLine() {
 	ev.StartSelection(lineStart)
 	ev.selFrozen = true
 	ev.selEndOffset = lineEnd
+	if lineEnd == lineStart {
+		GlobalLastClipboardWasRectangular = false
+		terminal.SetF4Clipboard("")
+		return
+	}
 	ev.CopySelection()
 }
 
