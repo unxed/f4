@@ -119,6 +119,67 @@ func TestArchiveVFS_SkipsExplicitRootEntryDuringScan(t *testing.T) {
 	}
 }
 
+func TestArchiveVFS_RemoveCreatedZipDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "test.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("keep.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(w, "keep"); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	archiveVFS, err := NewArchiveVFS(vfs.NewOSVFS(tmpDir), "test.zip")
+	if err != nil {
+		t.Fatalf("create ArchiveVFS: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := archiveVFS.Close(); err != nil {
+			t.Errorf("close archive VFS: %v", err)
+		}
+	})
+
+	ctx := context.Background()
+	dirPath := archiveVFS.Join(archiveVFS.GetPath(), "2del")
+	if err := archiveVFS.MkDir(ctx, dirPath); err != nil {
+		t.Fatalf("create archive directory: %v", err)
+	}
+	if err := archiveVFS.Remove(ctx, dirPath); err != nil {
+		t.Fatalf("remove archive directory: %v", err)
+	}
+
+	var items []vfs.VFSItem
+	if err := archiveVFS.ReadDir(ctx, archiveVFS.GetPath(), func(chunk []vfs.VFSItem) {
+		items = append(items, chunk...)
+	}); err != nil {
+		t.Fatalf("read archive root: %v", err)
+	}
+	keepFound := false
+	for _, item := range items {
+		if item.Name == "2del" {
+			t.Fatal("removed directory is still present in the archive")
+		}
+		if item.Name == "keep.txt" {
+			keepFound = true
+		}
+	}
+	if !keepFound {
+		t.Fatal("unrelated archive file was not preserved")
+	}
+}
+
 func TestArchiveVFS_PublicFallbackPathsUseNativeSeparators(t *testing.T) {
 	v := &ArchiveVFS{arcPath: filepath.Join("archive-root", "bundle.zip"), innerPath: "."}
 	joined := v.Join("outside", "folder", "file.txt")

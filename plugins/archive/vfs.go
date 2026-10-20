@@ -2038,6 +2038,11 @@ func (v *ArchiveVFS) Remove(ctx context.Context, path string) error {
 	if fsPath == "." {
 		return fmt.Errorf("cannot remove archive root")
 	}
+	if info, statErr := fs.Stat(v.fsys, fsPath); statErr == nil && info.IsDir() {
+		// ZIP stores explicit directory entries with a trailing slash, while
+		// the VFS path selected in the panel does not include it.
+		fsPath += "/"
+	}
 
 	upd, err := archive.NewUpdater(v.activePath(), archive.Options{})
 	if err != nil {
