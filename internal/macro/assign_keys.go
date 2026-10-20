@@ -61,10 +61,17 @@ func (m *MacroManager) FreeKeys(area string, hm *keymap.HotkeyManager) []string 
 
 	var free []string
 	for _, key := range macroKeyCandidates() {
-		if used[strings.ToLower(key)] || (m.Lua != nil && m.Lua.Find(area, key) != nil) {
+		// Alt+1..9 switch workspaces in the panels, independently of the
+		// configurable hotkey table, so offering them as free macro keys is
+		// misleading even when no command binding is present in hm.
+		if isWorkspaceShortcut(key) || used[strings.ToLower(key)] || (m.Lua != nil && m.Lua.Find(area, key) != nil) {
 			continue
 		}
 		free = append(free, key)
 	}
 	return free
+}
+
+func isWorkspaceShortcut(key string) bool {
+	return len(key) == len("Alt0") && strings.HasPrefix(key, "Alt") && key[len("Alt")] >= '1' && key[len("Alt")] <= '9'
 }

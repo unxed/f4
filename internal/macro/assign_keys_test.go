@@ -46,7 +46,7 @@ func TestFreeKeysLeaveOutKeysInUse(t *testing.T) {
 		}
 	}
 	// What another area uses, and what the user unbound, is free here.
-	for _, ok := range []string{"F1", "F4", "F8", "F9", "CtrlF4", "AltA", "Ctrl0", "Alt9", "CtrlZ"} {
+	for _, ok := range []string{"F1", "F4", "F8", "F9", "CtrlF4", "AltA", "Ctrl0", "CtrlZ"} {
 		if !slices.Contains(free, ok) {
 			t.Errorf("%s is free in Shell but is not offered", ok)
 		}
@@ -61,6 +61,19 @@ func TestFreeKeysLeaveOutKeysInUse(t *testing.T) {
 	}
 	if got := mgr.FreeKeys("Shell", nil); !slices.Contains(got, "ShiftF2") || slices.Contains(got, "F7") {
 		t.Error("without a hotkey manager only the macros count")
+	}
+}
+
+func TestFreeKeysLeaveOutWorkspaceShortcuts(t *testing.T) {
+	mgr := &MacroManager{}
+	free := mgr.FreeKeys("Shell", nil)
+	for _, key := range []string{"Alt1", "Alt4", "Alt9"} {
+		if slices.Contains(free, key) {
+			t.Errorf("workspace shortcut %q offered as a free macro key", key)
+		}
+	}
+	if !slices.Contains(free, "Alt0") {
+		t.Error("Alt0 should remain available; it is not a workspace shortcut")
 	}
 }
 
