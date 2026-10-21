@@ -1,6 +1,6 @@
 # far2l compatibility for two-panel file managers
 
-Version: **0.1-draft** (21 October 2026). Plan of work: [unxed/f4#2115](https://github.com/unxed/f4/issues/2115).
+Version: **0.2** (21 October 2026). Plan of work: [unxed/f4#2115](https://github.com/unxed/f4/issues/2115).
 
 This document is a checklist that any two-panel (orthodox) file manager can be
 measured against. It answers two questions:
@@ -25,6 +25,11 @@ but the conformance report states it as passed or failed, so that users can see
 it. A requirement that names a feature the manager does not have (an internal
 editor, a built-in terminal, plugins) is reported as **N/A** and does not count
 against the level, unless the requirement says otherwise.
+
+**Split rows.** Some rows of section 2 say "MUST for X, SHOULD for the rest".
+Such a row counts for a level by its MUST keys only: its `Result` is the result
+of the MUST keys, and every SHOULD key of the row that does not pass is named in
+the *Note* after `SHOULD:`, with its issue link (section 9).
 
 **Identifiers.** Every requirement has an identifier that never changes meaning
 once published: `K-xx` keys, `C-xx` clipboard, `P-xx` terminal protocols in the
@@ -90,7 +95,8 @@ implements the key.
 
 A manager MAY implement the Far keys as an optional mode (for example a "Far
 mode" setting); the claim then names the mode (section 9), and every check is
-done with the mode on.
+done with the mode on. The report MAY add the results with the mode off as a
+second column; that column is for information and does not count for any level.
 
 ### 2.1. Panels
 
@@ -111,7 +117,7 @@ done with the mode on.
 | K-13 | `Ctrl+F7` … `Ctrl+F11` | Unsorted, by creation time, access time, description, owner (for the orders the manager has). | SHOULD | [code][fl-ctrlf3] |
 | K-14 | `Ctrl+F12` | The sort modes menu. | MUST | [code][fl-ctrlf12] |
 | K-15 | `Ctrl+H` | Show or hide hidden files (`.hidden` appears and disappears). | SHOULD | [code][fl-ctrlh] |
-| K-16 | `Ctrl+Alt+Shift`, held ⌨ | The panels are hidden while the three keys are held and come back on release. Needs key-up events (P-03, P-04 or P-05). | SHOULD | [help][hlp-panel], [code][mg-cas] |
+| K-16 | `Ctrl+Alt+Shift`, held ⌨ | The panels are hidden while the three keys are held and come back on release. The hide starts when the three modifiers are down and no other key is; a manager that binds `Ctrl+Alt+Shift+<key>` chords of its own shows the panels again when that other key comes and handles the chord as usual. A setting that turns the hide off is allowed (far2l has one). Needs key-up events (P-03, P-04 or P-05). | SHOULD | [help][hlp-panel], [code][mg-cas] |
 | K-17 | `Alt+Left`, `Alt+Right`, `Alt+Home`, `Alt+End` | Scroll long names in the panel. | SHOULD | [help][hlp-panel] |
 
 ### 2.2. Moving around and running
@@ -124,7 +130,7 @@ done with the mode on.
 | K-23 | `Ctrl+PgDn` | Enter the folder or the archive under the cursor. | MUST | [help][hlp-func], [code][fl-ctrlpgdn] |
 | K-24 | ``Ctrl+\``, ``Ctrl+` `` | Go to the root folder, to the home folder. | SHOULD | [help][hlp-func], [code][fl-ctrlbs] |
 | K-25 | `Alt+F1`, `Alt+F2` | The location (drive) menu for the left, the right panel. | MUST | [help][hlp-func], [code][fp-altf1], [code][fp-altf2] |
-| K-26 | `Ctrl+Shift+0` … `Ctrl+Shift+9`; `RightCtrl+0` … `RightCtrl+9` ⌨ | Remember the current folder as a bookmark; go to a bookmark. | SHOULD | [help][hlp-panel], [code][fl-bookmarks] |
+| K-26 | `Ctrl+Shift+0` … `Ctrl+Shift+9` (either Ctrl); `RightCtrl+0` … `RightCtrl+9` and `Ctrl+Alt+0` … `Ctrl+Alt+9` ⌨ | Remember the current folder as a bookmark; go to a bookmark. `Ctrl+Alt` is the way for a terminal that does not tell the right Ctrl from the left one. | SHOULD | [help][hlp-panel], [code][fl-bookmarks] |
 | K-27 | `F12` | The list of screens (panels, viewers, editors, background commands). | SHOULD | [code][mg-f12] |
 
 ### 2.3. Selection
@@ -146,7 +152,7 @@ apart.
 | K-35 | `Alt+Gray +`, `Alt+Gray -` ⌨ | Select, deselect the files with the name of the current file. | SHOULD | [code][fl-altadd] |
 | K-36 | `Ctrl+Gray *` ⌨ | Invert the selection including folders. | SHOULD | [code][fl-ctrlmul] |
 | K-37 | `Ctrl+M` | Restore the previous selection. | SHOULD | [code][fl-ctrlm] |
-| K-38 | `Ctrl+Ins` with an empty command line; `Ctrl+Shift+Ins`; `Alt+Shift+Ins` | Copy the names of the selected files to the clipboard, one per line; copy the full names. | SHOULD | [help][hlp-panel], [code][fl-ctrlins] |
+| K-38 | `Ctrl+Ins` with an empty command line, `Ctrl+Shift+Ins`; `Alt+Shift+Ins`; `Ctrl+Alt+Ins` | Copy to the clipboard, one per line, for the selected files (the file under the cursor if none is selected): the names; the full names; the full names with the links resolved. | SHOULD | [help][hlp-panel], [code][fl-ctrlins] |
 
 ### 2.4. Function keys
 
@@ -191,7 +197,7 @@ section depends on P-08.
 | K-70 | printable characters while the panels are shown | Go into the command line, not into a panel action (except `Gray` keys with an empty line, K-31 to K-33). | MUST | [help][hlp-cmdline], [code][cl-key] |
 | K-71 | `Ctrl+E`, `Ctrl+X`; `Up`, `Down` while the panels are hidden | The previous and the next command from the history. | MUST | [help][hlp-cmdline], [code][cl-ctrle] |
 | K-72 | `Ctrl+Y`; `Ctrl+K`; `Ctrl+BS`, `Ctrl+Del` | Clear the line; delete to the end; delete a word left, right. | MUST for `Ctrl+Y`, SHOULD for the rest | [help][hlp-cmdline], [code][ed-ctrly], [code][ed-ctrlk] |
-| K-73 | `Ctrl+Left`, `Ctrl+Right`, `Ctrl+Home`, `Ctrl+End`, `Home`, `End` with text in the line | Move by word; to the start, to the end of the line. | MUST | [help][hlp-cmdline] |
+| K-73 | `Ctrl+Left`, `Ctrl+Right`; `Ctrl+Home`, `Ctrl+End` with text in the line | Move by word; to the start, to the end of the line (`Ctrl+End` at the end of the line is K-79). Plain `Home`, `End` move the cursor of the panel, as in far2l. | MUST | [help][hlp-cmdline], [code][fp-cmdkeys] |
 | K-74 | `Ctrl+Enter`, `Ctrl+J` | Insert the name of the file under the cursor (quoted if needed) and a space. | MUST | [help][hlp-cmdline], [code][fl-ctrlenter] |
 | K-75 | `Ctrl+Shift+Enter` | Insert the name of the file under the cursor of the passive panel. | SHOULD | [code][fl-ctrlshiftenter] |
 | K-76 | `Ctrl+F`; `Ctrl+;` | Insert the full name of the file of the active panel; of the passive panel. | SHOULD | [help][hlp-cmdline], [code][fl-ctrlf] |
@@ -208,7 +214,7 @@ way that breaks `Esc` itself.
 
 | ID | Keys | Action | Req | far2l |
 | -- | ---- | ------ | --- | ----- |
-| K-85 | in the history lists: `Enter`, `Shift+Enter`; `Del`; `Shift+Del`; `Ins`; `Ctrl+C`, `Ctrl+Ins` | Use the item; run it at once; clear the history; delete the item; lock it; copy its text. | SHOULD | [help][hlp-history] |
+| K-85 | in the history lists: `Enter`; `Ctrl+Enter`; `Del`; `Shift+Del`; `Ins`; `Ctrl+C`, `Ctrl+Ins` | Use the item: run the command again (the command history), go to the folder (the folder history), open the file (the view and edit history); put the command into the command line; clear the history; delete the item; lock it; copy its text without closing the list. | SHOULD | [help][hlp-history], [help][hlp-historycmd] |
 | K-86 | in dialogs: `Tab`, `Shift+Tab`; `Enter`; `Esc`; `Space` | Next, previous control; the default button; cancel; toggle a check box. | MUST | [help][hlp-misc] |
 | K-87 | in dialog edit lines: `Ctrl+Up`, `Ctrl+Down` | The history of this edit line. | SHOULD | [help][hlp-misc] |
 | K-88 | in dialogs: `Ctrl+Enter`; `Shift+Enter`, `Ctrl+Shift+Enter` in an edit line | Press the default button from any control; insert the name of the file under the cursor of the active, of the passive panel. | SHOULD | [help][hlp-misc] |
@@ -247,7 +253,7 @@ the user's machine, not of the server. The text used below is
 | C-05 | **Text survives.** Non-ASCII letters, emoji, tabs and line breaks are copied and pasted unchanged; line breaks become those of the platform (LF on Unix, CRLF on Windows). | MUST | The test text through C-01, C-02, C-03: byte-identical (`xclip -o \| od -c`, `pbpaste \| od -c`). | [VTExts 5.7.6][vtx-5-7-6] |
 | C-06 | **Large data.** Copying 1 MiB of text does not freeze the user interface for more than one second (the far2l client sets the clipboard in the background). | SHOULD | E1: `seq 1 150000 > /tmp/fc/big.txt`, open in the viewer or editor, select all, copy: the interface keeps responding; the paste in far2l gives the whole text. | [VTExts 5.7.3][vtx-5-7-3] |
 | C-07 | **Files on the clipboard.** Copying files in a panel (far2l: `Ctrl+C`) puts them on the system clipboard as files (`text/uri-list` on Unix, `CF_HDROP` on Windows) as well as their names as text; pasting files copied in another file manager copies them into the active panel. | SHOULD | Local GUI or E2 local: copy `a.txt` in the manager, paste in the desktop file manager: the file is copied; the reverse. | [far2l help][hlp-panel] |
-| C-08 | **Copy and paste always work inside the manager.** With no route to the system clipboard (E4 without OSC 52), text copied in the manager can still be pasted in the manager. | MUST | E4: copy the test text in the command line, clear it with `Ctrl+Y`, paste with `Shift+Ins`: identical. | [far2l help][hlp-paste] |
+| C-08 | **Copy and paste always work inside the manager.** With no route to the system clipboard (E4 without OSC 52), text copied in the manager can still be pasted in the manager. | MUST | E4: copy the test text in the command line, clear the line with `Esc`, paste with `Shift+Ins`: identical. | [far2l help][hlp-paste] |
 
 ## 4. Terminal protocols, the manager as the client (`P`)
 
@@ -279,7 +285,7 @@ On macOS and BSD: `script -q /tmp/fc/out.log <manager>`. In `cat -v` output
 | P-08 | **Alt as an ESC prefix.** In legacy input `ESC <character>` is `Alt+<character>`, and a lone `ESC` is the `Esc` key once no other byte follows within a short time (SHOULD be at most 100 ms). | MUST | E4: K-60 (`Alt+b` puts the cursor on `b.txt`); `Esc` closes an open dialog at once, without a visible pause. | [far2l parser][f2-parse-esc] |
 | P-09 | **Mouse.** The manager asks for button and drag reports in the SGR form (`CSI ? 1000 h`, `CSI ? 1002 h`, `CSI ? 1006 h`) and decodes `CSI < b ; x ; y M/m`: click selects, double click opens, the wheel scrolls. | SHOULD | E2: click a file, double-click a folder, scroll a long folder. | [far2l][f2-ttyout-mouse] |
 | P-10 | **Focus reports.** The manager asks for `CSI ? 1004 h` and uses `CSI I` / `CSI O` (for example to show desktop notifications only when it is not focused, as far2l does). | SHOULD | Recording: `^[[?1004h`. | [VTExts 8.2][vtx-8-2] |
-| P-11 | **One key, one event.** When several of P-03, P-04, P-05 are on at the same time, each key press is delivered to the manager once. | MUST | E1, E2, E3: type `abc` and press `Ctrl+Y` in the command line: `abc` appears exactly once, and is cleared. | [far2l parser][f2-parse-order] |
+| P-11 | **One key, one event.** When several of P-03, P-04, P-05 are on at the same time, each key press is delivered to the manager once. | MUST | E1, E2, E3: type `abc` in the command line and press `BS` once: `abc` appeared exactly once and `ab` is left. | [far2l parser][f2-parse-order] |
 | P-12 | **Behind a multiplexer.** In E5 the manager starts, every MUST key without ⌨ works, and no reply text of a probe (P-03, P-05) appears on the screen or in the command line. | MUST | E5 (tmux in kitty): repeat K-01, K-20, K-60, K-74; look at the screen and the command line after start. | — |
 
 ## 5. Bracketed paste fast path (`B`)
@@ -395,7 +401,9 @@ requirement of this version, in the order of this document:
 ```
 
 `Result` is one of `pass`, `fail`, `partial`, `N/A`; `partial` counts as
-`fail` for the level. A failing MUST below the claimed level makes the claim
+`fail` for the level. A split row (section 0) takes the result of its MUST keys
+and names its failing SHOULD keys in the *Note* after `SHOULD:`; a manager with a
+Far mode reports with the mode on and MAY add an `off` column (section 2). A failing MUST below the claimed level makes the claim
 invalid until it is fixed, and the report links the issue for every `fail` and
 `partial`. The claim stays valid for the version of the manager it names; a new
 claim is made for a new version of this document.
@@ -422,6 +430,23 @@ this document are the reference.
 
 ## 12. Changes
 
+* 0.2 (21 October 2026), after the key audits of f4 and unxed/dn
+  ([unxed/f4#2115](https://github.com/unxed/f4/issues/2115)):
+  * split rows ("MUST for X, SHOULD for the rest") count by their MUST keys,
+    the failing SHOULD keys go into the *Note* (sections 0 and 9);
+  * a manager with a Far mode reports with the mode on and may add the results
+    with the mode off for information (sections 2 and 9);
+  * K-16: the hide starts only while no other key is pressed, chords of
+    `Ctrl+Alt+Shift+<key>` keep working, a setting to turn it off is allowed;
+  * K-26: `Ctrl+Alt+0` … `Ctrl+Alt+9` go to a bookmark too, either Ctrl stores it;
+  * K-38: the keys written one by one, `Ctrl+Alt+Ins` added (resolved names);
+  * K-73: plain `Home` and `End` removed — in far2l they move the cursor of
+    the panel even with text in the command line;
+  * K-85: `Enter` runs the item again, `Ctrl+Enter` puts it into the command
+    line; `Shift+Enter` (a new window) removed;
+  * C-08 and P-11: the procedures no longer depend on `Ctrl+Y` (K-72).
+  The level or MUST/SHOULD of no requirement changed; `-draft` is removed.
+
 * 0.1-draft (21 October 2026): first version: keys, clipboard, protocols as the
   client and the host, bracketed paste fast path, drag and drop, levels and the
   form of a claim.
@@ -438,7 +463,9 @@ this document are the reference.
 [hlp-menu]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L420
 [hlp-terminal]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L1571
 [hlp-backends]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L1656
-[hlp-history]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L2089
+[hlp-history]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L2109
+[hlp-historycmd]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L2089
+[fp-cmdkeys]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/filepanels.cpp#L493
 [fp-f1]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/filepanels.cpp#L501
 [fp-tab]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/filepanels.cpp#L510
 [fp-ctrlf1]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/filepanels.cpp#L516

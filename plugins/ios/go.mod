@@ -47,12 +47,12 @@ require (
 	github.com/soniakeys/quant v1.0.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/tadglines/go-pkgs v0.0.0-20210623144937-b983b20f54f9 // indirect
-	github.com/unxed/goclip v0.1.2 // indirect
+	github.com/unxed/goclip v0.1.3-0.20261020202204-ff732bd92518 // indirect
 	github.com/unxed/keytrans v0.1.35 // indirect
 	github.com/unxed/kiwi-go v0.1.0 // indirect
 	github.com/unxed/libwinescape v0.2.1 // indirect
 	github.com/unxed/localecp v0.1.7 // indirect
-	github.com/unxed/vtui v0.1.413-0.20261018150540-704075b8667d // indirect
+	github.com/unxed/vtui v0.1.417-0.20261021153038-34e1d23b5d91 // indirect
 	github.com/unxed/winkeys v0.1.1 // indirect
 	github.com/unxed/xkb-go v0.1.9 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
@@ -95,5 +95,8 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.21
 replace github.com/ebitengine/hideconsole => ../../internal/hideconsole
 
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
+
+// gogpu with the drag callbacks vtui calls (#2049, see ../../go.mod).
+replace github.com/gogpu/gogpu => github.com/sogonov/gogpu v0.53.1-drag.1
 
 replace github.com/neurlang/wayland => github.com/unxed/wayland v0.4.5-0.20260924170549-04f3e691fadc

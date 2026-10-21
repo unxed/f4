@@ -37,7 +37,7 @@ require (
 	github.com/unxed/sevenzip v0.1.8
 	github.com/unxed/tar v0.1.141
 	github.com/unxed/vtinput v0.1.11
-	github.com/unxed/vtui v0.1.415
+	github.com/unxed/vtui v0.1.418
 	github.com/unxed/zip v0.1.146
 	github.com/unxed/zipper v0.1.178
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -220,6 +220,12 @@ replace github.com/ebitengine/purego => github.com/unxed/pureffi v0.1.21
 replace github.com/ebitengine/hideconsole => ./internal/hideconsole
 
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
+
+// #2049: gogpu v0.53.0 with App.OnDragEnter / OnDragMove / OnDragLeave,
+// which vtui calls, until gogpu/gogpu#506 is released. vtui's go.mod has the
+// same line, but a replace applies only in the main module; the plugin
+// modules that build f4 (plugins/android, ios, cloudfox) carry it too.
+replace github.com/gogpu/gogpu => github.com/sogonov/gogpu v0.53.1-drag.1
 
 replace github.com/unxed/f4/plugins/android => ./plugins/android
 

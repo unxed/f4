@@ -22,12 +22,14 @@ progress and questions.
 Where the files go depends on whether the backend followed the drag while
 it moved (`vtui.DragEvent.Tracked`, #2049):
 
-- **Tracked** -- Windows (OLE), X11 (XDND), and gogpu on macOS and Wayland
-  once gogpu reports a drag in progress (`OnDragEnter` / `OnDragMove` /
-  `OnDragLeave`). The target is highlighted as the pointer moves: a folder
-  row under the pointer in the cursor's colours, otherwise the frame of the
-  panel, meaning the folder it shows. The drop goes where the highlight is.
-- **Not tracked** -- gogpu without those callbacks, gogpu on Windows,
+- **Tracked** -- Windows (OLE), X11 (XDND), and gogpu on macOS, X11 and
+  Wayland, which reports a drag in progress through `OnDragEnter` /
+  `OnDragMove` / `OnDragLeave` (gogpu/gogpu#506; until a gogpu release has
+  them, `go.mod` takes gogpu from sogonov/gogpu, see below). The target is
+  highlighted as the pointer moves: a folder row under the pointer in the
+  cursor's colours, otherwise the frame of the panel, meaning the folder it
+  shows. The drop goes where the highlight is.
+- **Not tracked** -- gogpu on Windows (it has only WM_DROPFILES there),
   32-bit Windows (WM_DROPFILES), ebiten, a drop from far2l. Nothing could be
   highlighted, so the user aimed blind, and a drop over a folder row follows
   `DropOnFolder` in `[Panel]` (f4:config): `current` (the default) drops into
@@ -78,10 +80,20 @@ after the button still starts the drag, and with it a drag of the current file s
 
 Under the gogpu backend a drop works as well, with two differences gogpu's
 own API imposes: it always copies, because gogpu tells us neither what the
-source allows nor which modifiers are held, and nothing happens before the
-drop, because gogpu reports nothing before it. The destination comes from
-the pointer rather than from the position gogpu reports, which is always
-0,0; see vtui's DRAGDROP.md. It needs gogpu v0.50.0 or later.
+source allows nor which modifiers are held, and on Windows nothing happens
+before the drop, because gogpu reports nothing before it there. The
+destination comes from the pointer rather than from the position gogpu
+reports, which is always 0,0; see vtui's DRAGDROP.md. It needs gogpu v0.50.0
+or later.
+
+The drag in progress needs `App.OnDragEnter` / `OnDragMove` / `OnDragLeave`,
+gogpu/gogpu#506, which no gogpu release has yet. Until one does, `go.mod`
+replaces gogpu with `github.com/sogonov/gogpu v0.53.1-drag.1`: gogpu v0.53.0
+with that one commit. vtui's `go.mod` has the same line, but a replace
+applies only in the module being built, so f4 and each plugin module that
+builds f4 (`plugins/android`, `plugins/ios`, `plugins/cloudfox`) carry it
+too. Without it vtui does not compile (`app.OnDragEnter undefined`). Once
+gogpu releases the callbacks: drop the replace everywhere and bump gogpu.
 
 Both directions under gogpu need gogpu 0.50.1 or later. Before it, a drag
 out reached no target and every drop landed in the first cell of the
@@ -121,9 +133,10 @@ missing one means.
 6. Offering move as well as copy. Everything is in place except the trust:
    the source deletes the originals on the receiver's word, so this wants
    testing against real desktops before it is switched on.
-7. Highlighting the drop target while the pointer is over it. It needs the
-   panel to paint a hover state, and under gogpu there would be nothing to
-   hover with: no event arrives before the drop itself.
+7. done: highlighting the drop target while the pointer is over it (#2049):
+   OLE, XDND, and gogpu on macOS, X11 and Wayland. gogpu on Windows, 32-bit
+   Windows and ebiten report only the drop, so there is nothing to hover
+   with.
 8. Wayland under vtui's own backend (`wl_data_device`), for people running
    the native backend rather than gogpu.
 9. A protocol for terminals. None exists; if we invent one, far2l's
