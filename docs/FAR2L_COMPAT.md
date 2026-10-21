@@ -65,6 +65,7 @@ list is joined with "or".
 | E4 | xterm or any terminal with none of the above, `TERM=xterm-256color`. | Legacy input: the fallback paths. |
 | E5 | tmux 3.x inside E2. | A multiplexer that strips protocol negotiation. |
 | E6 | The manager's own built-in terminal, running a probe shell, far2l `--tty`, and a second copy of the manager. | The host role (section 6). |
+| E7 | The manager in the built-in terminal of f4 (its GUI window, or f4 in a desktop terminal under X11), and a desktop file manager to drag files from. | Drag and drop (section 7); f4 is the only terminal side of the proposal so far. |
 
 Every test of section 2 uses the same fixture, created by:
 
@@ -81,9 +82,8 @@ cursor is on `a.txt` and nothing is selected, unless a test says otherwise.
 
 ## 2. Keys (`K`)
 
-A key requirement passes when the key, pressed in the named environment, does
-what the *Action* column says. Every key requirement is checked in **E1 and E2**;
-a key that cannot be encoded by a legacy terminal (marked ⌨ below) is not checked
+A key requirement passes when the key, pressed in the environments that
+section 8 names for the claimed level, does what the *Action* column says; a key that cannot be encoded by a legacy terminal (marked ⌨ below) is not checked
 in E4, but then the manager MUST still offer the action in another way (menu or
 command palette). The *far2l* column links the help topic and the code that
 implements the key.
@@ -231,6 +231,24 @@ way that breaks `Esc` itself.
 | K-96 | `Ctrl+<letter>` and `Alt+<letter>` keys work in a non-Latin keyboard layout as in the Latin one (with P-04 or P-05, which report the key; with P-03, which reports the base layout key). | SHOULD | [code][pn-kbdlayout] |
 | K-97 | Every MUST key of this section that the terminal cannot encode (marked ⌨) has another way to the same action: a menu, a command palette or a remapping file. | MUST | — |
 
+## 3. Clipboard (`C`)
+
+"System clipboard" is the clipboard of the desktop the user sits at: X11 or
+Wayland, macOS, Windows. When the manager runs over SSH it is the clipboard of
+the user's machine, not of the server. The text used below is
+`far2l-clip ✓ тест` plus a tab and a second line `line 2`.
+
+| ID | Requirement | Req | Check | Sources |
+| -- | ----------- | --- | ----- | ------- |
+| C-01 | **Copy reaches the system clipboard** when the manager runs on the user's machine (its own GUI window, or a terminal of the desktop): selecting text in the command line and pressing `Ctrl+Ins`, copying in the viewer or the editor, and K-38 put the text on the system clipboard, directly or through C-03 or P-07. | MUST | E2 local: copy the test text from the command line; paste it in another desktop program: identical. | [far2l help][hlp-paste] |
+| C-02 | **Paste takes the system clipboard.** `Shift+Ins` and `Ctrl+V` in the command line, dialogs and the editor paste what another desktop program copied, when the manager can read the system clipboard (directly or through C-03). Where it cannot (a plain terminal over SSH), the terminal's own paste key works through P-01 and section 5, and the help of the manager names that key. | MUST | E2 local and E1: copy the test text in another program, paste in the command line with `Shift+Ins`: identical. E4 over SSH: the terminal's paste key gives the same. | [far2l help][hlp-paste] |
+| C-03 | **The far2l clipboard.** While the far2l extensions are on (P-05), the manager uses their clipboard: `CLIP_OPEN` with a client ID of 32 to 256 characters of `0-9 a-z - _` that is generated once and kept per installation (so that far2l's "Share clipboard always" is asked once), `CLIP_SETDATA` with `CF_TEXT` (1, UTF-8) for a copy, `CLIP_GETDATA` right after the user's paste key (the host answers reads only within 5 seconds of it) for a paste, `CLIP_CLOSE` after each operation. An answer `-1` to `CLIP_OPEN` switches the manager to its own clipboard for the session; `0` is retried at the next use. It SHOULD send data longer than 16 KiB with `CLIP_SETDATACHUNK` when the host reports `FARTTY_FEATCLIP_CHUNKED_SET`. | MUST | E1: copy the test text in the manager, quit it with `F10`, `Shift+Ins` in far2l's command line: identical; copy a text in far2l, start the manager again, `Shift+Ins` in its command line: identical. Quit and start the manager twice: with "Share clipboard always" chosen, far2l does not ask again. | [VTExts 5.7][vtx-5-7], [VTExts 5.7.1][vtx-5-7-1], [VTExts 5.7.2][vtx-5-7-2], [far2l client][f2-clip-client] |
+| C-04 | **Over SSH.** The manager on a remote host, reached by `ssh` from far2l's built-in terminal (E1) or from putty4far2l or KiTTY, copies to and pastes from the user's clipboard through C-03; reached from E2, it copies through P-07. | MUST | E1: `ssh localhost`, start the manager there, repeat the C-03 check. E2: `ssh localhost`, repeat C-01. | [far2l help][hlp-remote], [VTExts 3][vtx-3] |
+| C-05 | **Text survives.** Non-ASCII letters, emoji, tabs and line breaks are copied and pasted unchanged; line breaks become those of the platform (LF on Unix, CRLF on Windows). | MUST | The test text through C-01, C-02, C-03: byte-identical (`xclip -o \| od -c`, `pbpaste \| od -c`). | [VTExts 5.7.6][vtx-5-7-6] |
+| C-06 | **Large data.** Copying 1 MiB of text does not freeze the user interface for more than one second (the far2l client sets the clipboard in the background). | SHOULD | E1: `seq 1 150000 > /tmp/fc/big.txt`, open in the viewer or editor, select all, copy: the interface keeps responding; the paste in far2l gives the whole text. | [VTExts 5.7.3][vtx-5-7-3] |
+| C-07 | **Files on the clipboard.** Copying files in a panel (far2l: `Ctrl+C`) puts them on the system clipboard as files (`text/uri-list` on Unix, `CF_HDROP` on Windows) as well as their names as text; pasting files copied in another file manager copies them into the active panel. | SHOULD | Local GUI or E2 local: copy `a.txt` in the manager, paste in the desktop file manager: the file is copied; the reverse. | [far2l help][hlp-panel] |
+| C-08 | **Copy and paste always work inside the manager.** With no route to the system clipboard (E4 without OSC 52), text copied in the manager can still be pasted in the manager. | MUST | E4: copy the test text in the command line, clear it with `Ctrl+Y`, paste with `Shift+Ins`: identical. | [far2l help][hlp-paste] |
+
 ## 4. Terminal protocols, the manager as the client (`P`)
 
 The manager runs inside a terminal. The keys of section 2 and the clipboard of
@@ -264,6 +282,31 @@ On macOS and BSD: `script -q /tmp/fc/out.log <manager>`. In `cat -v` output
 | P-11 | **One key, one event.** When several of P-03, P-04, P-05 are on at the same time, each key press is delivered to the manager once. | MUST | E1, E2, E3: type `abc` and press `Ctrl+Y` in the command line: `abc` appears exactly once, and is cleared. | [far2l parser][f2-parse-order] |
 | P-12 | **Behind a multiplexer.** In E5 the manager starts, every MUST key without ⌨ works, and no reply text of a probe (P-03, P-05) appears on the screen or in the command line. | MUST | E5 (tmux in kitty): repeat K-01, K-20, K-60, K-74; look at the screen and the command line after start. | — |
 
+## 5. Bracketed paste fast path (`B`)
+
+A paste is a block of text, not typing. far2l collects everything between the
+paste markers into one text and hands it to the command line, the edit line or
+the editor as one operation ([far2l][f2-kb-paste]). The same is required here
+for a paste that arrives through P-01, and for `Shift+Ins` / `Ctrl+V` from the
+manager's own clipboard.
+
+The text for the checks is made with `seq 1 2000` (2000 lines) and put on the
+clipboard with the desktop's tool (`xclip -selection clipboard`, `wl-copy`,
+`pbcopy`, `clip`), unless the check says otherwise. "The terminal's paste key"
+is the paste of the terminal emulator (kitty: `Ctrl+Shift+V`), which sends the
+text through P-01.
+
+| ID | Requirement | Req | Check | Sources |
+| -- | ----------- | --- | ----- | ------- |
+| B-01 | **One paste, one edit.** A paste into the editor, a dialog edit line or the command line is inserted as a single change: one undo step removes it whole, and no per-character work is done for it (autocompletion lists, history search, syntax re-colouring per character, a redraw per character). | MUST | E2: `F4` on `text.txt`, the terminal's paste key with the 2000 lines, then one undo (`Ctrl+Z`): the file has its two lines again. | [far2l editor][f2-ed-paste], [far2l edit line][f2-edit-paste] |
+| B-02 | **No auto-indent on paste.** The editor does not apply auto-indent or other typing aids to pasted lines. | MUST | E2: auto-indent on, paste the three lines `a`, `␣␣b`, `␣␣␣␣c` (spaces), save: the file holds exactly those lines. | [far2l][f2-ed-autoindent] |
+| B-03 | **No line of a multi-line paste runs by itself.** A multi-line paste into the command line is either inserted as text or shown whole with a question before it runs as one script (far2l asks: run, cancel, never ask again); nothing runs before the user confirms, and a line break in the pasted text never acts as `Enter`. | MUST | E2: put `touch /tmp/fc/B03a` and `touch /tmp/fc/B03b` (two lines) on the clipboard; paste with the terminal's paste key into the empty command line; before answering anything, in another terminal `ls /tmp/fc/B03*`: no such files. | [far2l][f2-cl-multiline] |
+| B-04 | **Pasted bytes are text.** Escape sequences, control characters, `+`, `-`, `*`, `F`-key sequences inside a paste are inserted as text or dropped, never acted on as keys (no panel selection dialog, no cursor movement, no closed dialog). | MUST | E2: put `+-*` and a line with a literal ESC character and `[A` (`printf '+-*\n\033[A\n'`) on the clipboard; paste into the empty command line and into the editor: no selection dialog opens, the cursor does not jump, the text (with the ESC dropped or shown) is inserted. | [far2l][f2-kb-append] |
+| B-05 | **Paste in the panels.** With the panels active, a paste goes into the command line, or into fast find while it is open (K-64). | MUST | E2: panels active, empty command line, the terminal's paste key with `echo pasted`: the command line holds `echo pasted`. | [far2l][pn-paste], [far2l][f2-cl-multiline] |
+| B-06 | **Line breaks.** `CR`, `LF` and `CRLF` in a paste all become one line break of the target (some terminals send `LF` inside bracketed paste, others `CR`). | SHOULD | E2 and E3: paste the 2000 lines into the editor: 2000 lines, no empty lines in between, no `^M`. | [far2l][f2-parse-lf] |
+| B-07 | **Speed.** Pasting 1 MiB (`seq 1 150000`) into the editor takes at most two seconds, and a 100 KiB single line into the command line at most one second, in E2 on the local machine. | SHOULD | E2: time from the paste key to the last line shown. | [f4 README][f4-readme-paste] |
+| B-08 | **The own clipboard takes the same path.** `Shift+Ins` and `Ctrl+V` from the manager's clipboard follow B-01 to B-05 like a terminal paste. | MUST | E2: copy the 2000 lines inside the manager (viewer, select all, copy), paste in the editor and in the command line: as in B-01 and B-03. | [far2l][f2-cl-multiline] |
+
 ## 6. The built-in terminal, the manager as the host (`T`)
 
 These requirements apply only to a manager that has a built-in terminal (a PTY
@@ -289,6 +332,99 @@ by itself, because some modes also encode `Ctrl+C`.
 | T-11 | **Mouse and focus.** The host follows `CSI ? 1000/1002/1003/1006 h/l` and `CSI ? 1004 h/l` and sends the reports in the requested form. | SHOULD | `printf '\e[?1000h\e[?1006h'; timeout 5 cat -v; printf '\e[?1000l\e[?1006l'`, click: `^[[<0;x;yM^[[<0;x;ym`. | [far2l][f2-vt-mouse] |
 | T-12 | **Keys reach the program.** While a program runs, every key goes to it, except the documented terminal keys of the manager (K-91, K-92 and the like), which the help lists; key remapping of the manager is not applied to it. | SHOULD | Run `timeout 5 cat -v` and press `F3`, `F10`, `Alt+F7`, `Ctrl+O`: each arrives as its sequence or is one of the documented exceptions. | [far2l help][hlp-terminal] |
 | T-13 | **The manager inside itself.** A second copy of the manager started in the built-in terminal passes P-01 to P-05 (the first copy is the terminal). | SHOULD | E6: run P-01 to P-05 checks in the inner copy. | — |
+
+## 7. Drag and drop (`D`)
+
+Dropping files from the desktop on a terminal window is carried to the program
+inside by the far2l extensions as proposed in [FAR2L_DND.md](FAR2L_DND.md)
+(version 1, proposed upstream as elfmz/far2l#3647); the proposed letters are
+not allocated in far2l yet, so this section follows that document and changes
+with it. At the time of writing the terminal side exists in f4 only, so the
+checks use **E7**: the manager running in the built-in terminal of f4 (f4's GUI
+window, or f4 in a desktop terminal under X11), with a desktop file manager to
+drag from. Dragging inside the manager between its own panels is in
+[DRAGDROP.md](DRAGDROP.md) and is D-07.
+
+| ID | Requirement | Req | Check | Sources |
+| -- | ----------- | --- | ----- | ------- |
+| D-01 | **Bind.** After P-05, the manager sends `BIND` (version 1, enable) when it can take drops, checks the whole reply, and disables its binding on exit (`far2l0` also revokes it). An empty reply means "no DnD" and nothing else changes. | MUST | E7: the drop of D-02 works; E1 (far2l, no DnD yet): the manager starts and works as without DnD. | [FAR2L_DND.md 4](FAR2L_DND.md#4-bind) |
+| D-02 | **Drop on a panel.** On `INPUT_DND` the manager takes the offer with `LIST` and copies the items with `READ` into the folder of the panel under the drop position, through its own copy operation (its dialog, conflict questions and progress, as `F5`). The action is copy; with an unknown position the manager uses the active panel or asks. | MUST | E7: drag `a.txt` from the desktop file manager onto the right panel showing `/tmp/fc/right`: the copy dialog of the manager appears; after it, `cmp` of both files reports no difference. | [FAR2L_DND.md 5–7](FAR2L_DND.md#5-input_dnd-notification-only) |
+| D-03 | **Close.** After the copy, a cancel or an error, the manager sends `CLOSE` with the reason, and no `READ` after it. | MUST | E7: drop a large file and cancel the copy dialog: the drop of another file afterwards works (the old offer did not stay open). | [FAR2L_DND.md 8](FAR2L_DND.md#8-close) |
+| D-04 | **Limits.** The manager never asks for more than the negotiated chunk, accepts short reads and EOF, and keeps the request ID of a cancelled read until its reply has arrived. | MUST | Review of the code, or the self-check kit (section 10). | [FAR2L_DND.md 9](FAR2L_DND.md#9-limits-cancellation-nesting) |
+| D-05 | **The built-in terminal is a drop target.** If the manager has a built-in terminal, a drop on it while a program inside has bound DnD is offered to that program (the manager is the terminal side of D-01 to D-04); otherwise the dropped paths are pasted as text through T-02. | MUST | E7 with the manager's own built-in terminal: start a second copy of the manager in it and drop a file on it: the inner copy receives it (D-02). | [FAR2L_DND.md](FAR2L_DND.md) |
+| D-06 | **Nesting.** The manager inside a terminal with DnD, and a program inside the manager's built-in terminal: a drop on the outer window reaches the inner program through the manager acting as a proxy. | SHOULD | E7 with two levels: f4, the manager inside it, a second copy inside the manager; drop on the inner one. | [FAR2L_DND.md 9](FAR2L_DND.md#9-limits-cancellation-nesting) |
+| D-07 | **Between the panels.** Dragging files with the mouse from one panel to the other copies them; the right button during the drag, or `Shift`, makes it a move. | SHOULD | E2: drag `a.txt` from the left panel to the right one. | [far2l help][hlp-dnd], [DRAGDROP.md](DRAGDROP.md) |
+
+## 8. Levels
+
+A level is claimed for the whole manager, in the environments the level names.
+Every MUST listed for the level passes; SHOULD results are reported but never
+block the level. Requirements about a feature the manager does not have are
+N/A (section 0), except that a manager without a built-in terminal still has to
+pass every `K`, `C`, `P` and `B` requirement of the level.
+
+| Area | Basic | Full | Advanced |
+| ---- | ----- | ---- | -------- |
+| Keys | Every MUST of section 2, checked in one of E1, E2, E3 (the one whose input protocol the manager uses), and every MUST without ⌨ also in E4. | Every MUST of section 2 in E1, E2 and E3. | As Full. |
+| Input | P-02, P-08, P-11, P-12 and at least one of P-03, P-04, P-05. | Every MUST of section 4. | As Full. |
+| Clipboard | C-01, C-02, C-05, C-08 and at least one of C-03, P-07. | Every MUST of section 3. | As Full. |
+| Paste | P-01 and every MUST of section 5. | As Basic. | As Basic. |
+| Built-in terminal | T-01, T-02, T-07, T-10 and at least one of T-03, T-04, T-05. | Every MUST of section 6. | As Full. |
+| Drag and drop | — | — | Every MUST of section 7 (D-05 only with a built-in terminal). |
+
+An environment that cannot run the manager at all (for example E3 for a manager
+that has no Windows build and no SSH use) is N/A for that manager, and the
+report says why.
+
+## 9. Claiming conformance
+
+A claim is one line, in the manager's README or documentation:
+
+```text
+far2l compatibility: <Basic|Full|Advanced>, spec <version>, checked <YYYY-MM-DD> with <manager> <version> on <OS> (<mode, if any>), report: <link>
+```
+
+The report is a public page or a comment in an issue tracker with one row per
+requirement of this version, in the order of this document:
+
+```text
+| ID | Result | Env | Note |
+| K-01 | pass | E1, E2 | |
+| K-10 | partial | E2 | Ctrl+1 works, Ctrl+3 opens the wrong mode: <issue link> |
+| T-08 | N/A | — | no built-in terminal |
+```
+
+`Result` is one of `pass`, `fail`, `partial`, `N/A`; `partial` counts as
+`fail` for the level. A failing MUST below the claimed level makes the claim
+invalid until it is fixed, and the report links the issue for every `fail` and
+`partial`. The claim stays valid for the version of the manager it names; a new
+claim is made for a new version of this document.
+
+The README of f4 lists the managers that published such a claim with a report:
+name, level, version of this document, date, and the link.
+
+## 10. Self-check kit
+
+Planned (step 8 of [unxed/f4#2115](https://github.com/unxed/f4/issues/2115)):
+a script that runs the automatic part of the checklist against any manager
+(the probes of section 6, the recordings of section 4, and the paste checks
+that can be driven through a PTY). Until it exists, the manual procedures of
+this document are the reference.
+
+## 11. Implementations to compare with
+
+| Program | Client (section 4) | Host (section 6) | Notes |
+| ------- | ------------------ | ---------------- | ----- |
+| far2l | [`WinPort/src/Backend/TTY/`][f2-tty-dir] | [`far2l/src/vt/`][f2-vt-dir] | The reference for every protocol here, except DnD. |
+| f4 | the `vtinput` and `vtui` libraries | `internal/terminal` | Implements both roles and the DnD proposal of section 7. |
+| putty4far2l, KiTTY, Putty-Zeroes-Mod, putty-nd | — | far2l extensions | SSH clients on Windows that are hosts of the far2l extensions ([far2l help][hlp-terminals], [VTExts 9][vtx-9]). |
+| kitty, Ghostty, Alacritty, WezTerm, Windows Terminal | — | kitty keyboard protocol or win32-input-mode, OSC 52 | Hosts for E2 and E3 ([far2l help][hlp-terminals]). |
+
+## 12. Changes
+
+* 0.1-draft (21 October 2026): first version: keys, clipboard, protocols as the
+  client and the host, bracketed paste fast path, drag and drop, levels and the
+  form of a claim.
 
 [far2l-commit]: https://github.com/elfmz/far2l/commit/5ec2011794fa0c781e6dde92c84c77b5ae02b25b
 [vtx-commit]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md
@@ -421,3 +557,22 @@ by itself, because some modes also encode `Ctrl+C`.
 [xt-osc]: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands
 [kitty-kb]: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
 [w32-spec]: https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md
+[hlp-paste]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L188
+[hlp-remote]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L200
+[hlp-terminals]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L221
+[hlp-dnd]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L1327
+[f2-clip-client]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYFar2lClipboardBackend.cpp#L124
+[f2-parse-lf]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYInputSequenceParser.cpp#L480
+[f2-kb-append]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/console/keyboard.cpp#L86
+[f2-kb-paste]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/console/keyboard.cpp#L835
+[f2-ed-paste]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/editor.cpp#L3249
+[f2-ed-autoindent]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/editor.cpp#L4552
+[f2-edit-paste]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/edit.cpp#L1272
+[f2-cl-multiline]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/cmdline.cpp#L1359
+[f2-tty-dir]: https://github.com/elfmz/far2l/tree/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY
+[f2-vt-dir]: https://github.com/elfmz/far2l/tree/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt
+[f4-readme-paste]: ../README.md#performance-notes
+[vtx-5-7-1]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#571-authorization
+[vtx-5-7-3]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#573-writing
+[vtx-5-7-6]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#576-formats
+[vtx-9]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#9-links-to-implementations
