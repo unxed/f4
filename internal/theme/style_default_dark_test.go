@@ -102,3 +102,33 @@ func TestDefaultDarkStyle_ViewerScrollbarAndAddressesShareTheTextBackground(t *t
 		}
 	}
 }
+
+func TestDefaultDarkStyle_EditorAndViewerUsePanelBackground(t *testing.T) {
+	oldCfg := config.App
+	config.App.EnforceColorCorrection = false
+	defer func() { config.App = oldCfg }()
+
+	if err := ApplyColorStyle("Default Dark"); err != nil {
+		t.Fatalf("Failed to apply Default Dark style: %v", err)
+	}
+	_, panelBg := GetColorRGBBoth(vtui.Palette[ColPanelText])
+	cases := map[string]int{
+		"Viewer.Text":             ColViewerText,
+		"Editor.Text":             ColEditorText,
+		"Editor.Scrollbar":        ColEditorScrollbar,
+		"Editor.WrapMark":          ColEditorWrapMark,
+		"Editor.Syntax.Comment":   ColEditorSyntaxComment,
+		"Editor.Syntax.Keyword":   ColEditorSyntaxKeyword,
+		"Editor.Syntax.String":    ColEditorSyntaxString,
+		"Editor.Syntax.Number":    ColEditorSyntaxNumber,
+		"Editor.Syntax.Operator":  ColEditorSyntaxOperator,
+		"Editor.Syntax.Function": ColEditorSyntaxFunction,
+		"Editor.Syntax.Variable":  ColEditorSyntaxVariable,
+		"Editor.Syntax.Heading":   ColEditorSyntaxHeading,
+	}
+	for name, index := range cases {
+		if _, bg := GetColorRGBBoth(vtui.Palette[index]); bg != panelBg {
+			t.Errorf("%s background = #%06x, want panel background #%06x", name, bg, panelBg)
+		}
+	}
+}
