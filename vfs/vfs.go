@@ -453,6 +453,30 @@ type TransferContentProvider interface {
 	TransferContent(ctx context.Context, srcPath string, dst VFS) (content []byte, ok bool, err error)
 }
 
+// DirectoryViewProvider lets a VFS provide a read-only file-like view of a
+// directory (e.g., a registry key exported as .reg for F3). The returned
+// ReadAtCloser is used by the viewer. Return nil, false to fall back to
+// default directory handling (size calculation).
+type DirectoryViewProvider interface {
+	OpenDirectoryView(ctx context.Context, path string) (ReadAtCloser, bool, error)
+}
+
+// DirectoryEditProvider lets a VFS provide an editable file-like view of a
+// directory (e.g., a registry key as .reg for F4). The returned
+// ReadWriteCloser provides the initial content for display and receives the
+// full edited content on Close for saving. Return nil, false to fall back
+// to default directory handling (file attributes dialog).
+type DirectoryEditProvider interface {
+	OpenDirectoryEdit(ctx context.Context, path string) (ReadWriteCloser, bool, error)
+}
+
+// ReadWriteCloser combines ReadAtCloser and WriteCloser for a directory
+// that can be viewed and edited as a file.
+type ReadWriteCloser interface {
+	ReadAtCloser
+	io.WriteCloser
+}
+
 // ShareRole is the effective access granted by a share link. Providers expose
 // only the roles they can implement for a particular object; callers must not
 // assume that every remote file system supports every role.

@@ -149,6 +149,9 @@ type EditorView struct {
 	// that route: the piece table's original buffer is then a window onto it
 	// rather than a copy assembled from chunks. Nil for everything else.
 	Mapped *MappedFile
+	// dirWriter is the writer for directory-as-file edits (f4#242).
+	// When set, Save writes to this instead of the VFS.
+	dirWriter vfs.ReadWriteCloser
 	// mapFaulted records that reading through the mapping has already failed
 	// once, so the report goes out once rather than on every repaint.
 	mapFaulted bool
@@ -686,6 +689,12 @@ func (ev *EditorView) ClearCaches() {
 	if ch, ok := ev.Highlighter.(*ColorerHighlighter); ok {
 		ch.DropFrom(0)
 	}
+}
+
+// SetWriter sets the writer for directory-as-file edits (f4#242).
+// When set, Save writes to this instead of the VFS.
+func (ev *EditorView) SetWriter(w vfs.ReadWriteCloser) {
+	ev.dirWriter = w
 }
 
 // clearCachesAfterReplace is ClearCaches for Undo and Redo, which change the
@@ -5770,6 +5779,12 @@ func (ev *EditorView) saveToFile(afterSave func(), fullWrite bool) {
 	if ev.FilePath == "" || ev.Vfs == nil || ev.Saving {
 		return
 	}
+
+	// Directory-as-file edit (f4#242): save to dirWriter instead of VFS
+	if ev.dirWriter != nil {
+		ev.saveToDirWriter(afterSave)
+		return
+	}
 	if ev.textLost {
 		vtui.ShowMessage(" Error ", fmt.Sprintf("Cannot save:\n%v", errTextUnavailable), []string{"&Ok"})
 		return
@@ -7164,6 +7179,126 @@ func showSearchProgressDialog(pattern string) (dlg *vtui.Window, btnCancel *vtui
 
 	vtui.FrameManager.AddScreenHeadless(dlg)
 	return dlg, btnCancel
+}
+
+// saveToDirWriter saves the editor content to the directory writer (f4#242).
+func (ev *EditorView) saveToDirWriter(afterSave func()) {
+	if ev.dirWriter == nil {
+		return
+	}
+	ev.Saving = true
+	ev.edited = true
+	vtui.DebugLog("EDITOR: Saving to directory writer %s...", ev.FilePath)
+
+	// Stop indexing to prevent async reads on closed buffers
+	ev.CancelIndexing()
+	if ev.indexResume != nil {
+		ev.indexResume.Stop()
+		ev.indexResume = nil
+	}
+
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		ev.WaitForIndexing()
+
+		// Get the full text content
+		data, err := ev.Pt.Bytes()
+		if err != nil {
+			ctx.RunOnUI(func() {
+				ev.Saving = false
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save:\n%v", err), []string{"&Ok"})
+			})
+			return
+		}
+
+		// Write to the directory writer
+		if _, err := ev.dirWriter.Write(data); err != nil {
+			ctx.RunOnUI(func() {
+				ev.Saving = false
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save:\n%v", err), []string{"&Ok"})
+			})
+			return
+		}
+
+		// Close the writer to commit changes
+		if err := ev.dirWriter.Close(); err != nil {
+			ctx.RunOnUI(func() {
+				ev.Saving = false
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to save:\n%v", err), []string{"&Ok"})
+			})
+			return
+		}
+
+		ctx.RunOnUI(func() {
+			ev.Saving = false
+			ev.Modified = false
+			ev.cleanState = ev.Pt.GetState()
+			if afterSave != nil {
+				afterSave()
+			}
+		})
+	})
+}
+
+// NewEditorViewFromReader creates an EditorView from a pre-opened reader.
+// Used for synthetic views like registry key as .reg file (f4#242).
+func NewEditorViewFromReader(ctx context.Context, v vfs.VFS, path string, f vfs.ReadAtCloser) (*EditorView, error) {
+	// Read the content to detect encoding and binary
+	size := f.Size()
+	detectLen := 16 * 1024
+	if int64(detectLen) > size {
+		detectLen = int(size)
+	}
+	header := make([]byte, detectLen)
+	n, _ := f.ReadAt(ctx, header, 0)
+	header = header[:n]
+
+	cpID := vfs.DetectEncoding(header, config.App.EditorAutodetectCodePage, config.App.EditorDefaultCodePage)
+	if remembered, ok := fileops.RememberedCodepage(v, path); ok {
+		cpID = remembered
+	}
+
+	// Use viewer's binary detection
+	binary := viewer.LooksBinary(header)
+	if binary {
+		cpID = 65001
+	}
+	dataOffset := int64(0)
+	if cpID == 65001 && !binary && vfs.HasUTF8BOM(header) {
+		dataOffset = vfs.UTF8BOMSize
+	}
+
+	var pt *piecetable.PieceTable
+	var buf *AsyncBuffer
+	var mapped *MappedFile
+
+	if cpID == 65001 {
+		if config.App.EditorMemoryMap && CanMemoryMapFile(ctx, v, path) {
+			var mapErr error
+			mapped, mapErr = MapEditorFileWithOffset(v, f, dataOffset)
+			if mapErr != nil && mapErr != ErrNotMappable {
+				vtui.DebugLog("EDITOR: memory mapping %s failed, reading lazily instead: %v", path, mapErr)
+			}
+		}
+		if mapped != nil {
+			pt = piecetable.New(mapped.Bytes())
+		} else {
+			buf = NewAsyncBufferWithOffset(ctx, f, dataOffset)
+			buf.Prewarm()
+			pt = piecetable.NewWithBuffer(buf)
+		}
+	} else {
+		fullData := make([]byte, size)
+		_, err := f.ReadAt(ctx, fullData, 0)
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+		if cpID != 65001 {
+			fullData, _ = vfs.DecodeBytes(fullData, cpID)
+		}
+		pt = piecetable.New(fullData)
+	}
+
+	return NewEditorViewWith(pt, v, path, true, true), nil
 }
 
 // RunSearchWithProgress shows the progress popup and runs worker in the

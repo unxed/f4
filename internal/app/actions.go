@@ -1045,6 +1045,59 @@ func actionOpenEditor(pf *panel.PanelsFrame, v vfs.VFS, path string) {
 	openEditorInternal(pf, v, path)
 }
 
+// actionOpenDirectoryEditor opens an editor for a directory view (e.g., registry key as .reg).
+// The writer receives the full edited content on Close.
+func actionOpenDirectoryEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, rwc vfs.ReadWriteCloser) {
+	rememberViewerEditorHistory(v, path, historyModeEdit)
+	existingEditor, screenIdx := findOpenedEditor(v, path)
+	if existingEditor != nil {
+		var buttons []string
+		if existingEditor.Modified {
+			buttons = []string{i18n.Msg("FileOp.BtnCurrent"), i18n.Msg("FileOp.BtnNewInstance"), i18n.Msg("vtui.Cancel")}
+		} else {
+			buttons = []string{i18n.Msg("FileOp.BtnCurrent"), i18n.Msg("FileOp.BtnReload"), i18n.Msg("FileOp.BtnNewInstance"), i18n.Msg("vtui.Cancel")}
+		}
+
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.ShowMessageEx(i18n.Msg("FileOp.AlreadyOpenedTitle"), fmt.Sprintf(i18n.Msg("FileOp.AlreadyOpened"), vtui.TruncateMiddle(v.Base(path), 40)), buttons, vtui.MessageInfo)
+			dlg.OnResult = func(res int) {
+				if res == 0 {
+					vtui.FrameManager.SwitchScreen(screenIdx)
+				} else if res == 1 && len(buttons) == 4 { // Reload
+					existingEditor.Close()
+					openDirectoryEditorInternal(pf, v, path, rwc)
+				} else if (res == 1 && len(buttons) == 3) || (res == 2 && len(buttons) == 4) { // New instance
+					openDirectoryEditorInternal(pf, v, path, rwc)
+				}
+			}
+		})
+		return
+	}
+	openDirectoryEditorInternal(pf, v, path, rwc)
+}
+
+func openDirectoryEditorInternal(pf *panel.PanelsFrame, v vfs.VFS, path string, rwc vfs.ReadWriteCloser) {
+	// Open editor with the pre-created reader/writer
+	var ev *editor.EditorView
+	pf.RunProgressTaskAfter(openingProgressDelay, " Opening... ", "Preparing to open editor...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		update("Opening editor...", -1)
+		ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(update))
+		var err error
+		ev, err = editor.NewEditorViewFromReader(ctx, v, path, rwc)
+		return err
+	}, func(err error) {
+		if err != nil {
+			if err != context.Canceled {
+				vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open editor:\n%v", err), []string{"&Ok"})
+			}
+			return
+		}
+		// Set the writer for saving
+		ev.SetWriter(rwc)
+		showEditorMode(pf, ev, path)
+	})
+}
+
 func openEditorInternal(pf *panel.PanelsFrame, v vfs.VFS, path string) {
 	if config.App.EditorHighlighter == "Colorer" && !editor.SchemasExist() {
 		// Read on the goroutine that starts this work, not inside it: the
@@ -1218,6 +1271,20 @@ func showViewerMode(pf *panel.PanelsFrame, vv *viewer.ViewerView, path string, f
 	}
 	vv.ResizeConsole(pf.LastW, pf.LastH)
 	vtui.FrameManager.AddScreen(vv)
+}
+
+func showEditorMode(pf *panel.PanelsFrame, ev *editor.EditorView, path string) {
+	if fileops.GlobalFileState != nil && path != "" {
+		if state := fileops.GlobalFileState.GetState(fileops.FileStateKey(ev.Vfs, path)); state != nil {
+			ev.TargetLine = state.EditorLine
+			ev.TargetPos = state.EditorPos
+			ev.TargetTopRow = state.EditorTopRow
+			ev.TargetLeft = state.EditorLeft
+			ev.WordWrap = state.EditorWrap
+		}
+	}
+	ev.ResizeConsole(pf.LastW, pf.LastH)
+	vtui.FrameManager.AddScreen(ev)
 }
 
 func actionOpenViewer(pf *panel.PanelsFrame, v vfs.VFS, path string) {
@@ -1834,6 +1901,85 @@ func openPlainViewer(pf *panel.PanelsFrame, v vfs.VFS, path string, forceHex boo
 	})
 }
 
+// actionOpenViewerFromReader opens a viewer from a pre-opened reader.
+// Used for synthetic views like registry key as .reg file (f4#242).
+func actionOpenViewerFromReader(pf *panel.PanelsFrame, v vfs.VFS, path string, reader vfs.ReadAtCloser, forceHex bool) {
+	rememberViewerEditorHistory(v, path, historyModeView)
+	existingViewer, screenIdx := findOpenedViewer(v, path)
+	if existingViewer != nil {
+		vtui.FrameManager.PostTask(func() {
+			dlg := vtui.ShowMessageEx(i18n.Msg("FileOp.AlreadyViewedTitle"), fmt.Sprintf(i18n.Msg("FileOp.AlreadyViewed"), vtui.TruncateMiddle(v.Base(path), 40)), []string{i18n.Msg("FileOp.BtnCurrent"), i18n.Msg("FileOp.BtnReload"), i18n.Msg("FileOp.BtnNewInstance"), i18n.Msg("vtui.Cancel")}, vtui.MessageInfo)
+			dlg.OnResult = func(res int) {
+				switch res {
+				case 0:
+					if forceHex {
+						existingViewer.HexMode = true
+						existingViewer.HexAuto = false
+					}
+					vtui.FrameManager.SwitchScreen(screenIdx)
+				case 1: // Reload
+					existingViewer.Close()
+					openViewerFromReaderInternal(pf, v, path, reader, forceHex)
+				case 2: // New instance
+					openViewerFromReaderInternal(pf, v, path, reader, forceHex)
+				}
+			}
+		})
+		return
+	}
+	openViewerFromReaderInternal(pf, v, path, reader, forceHex)
+}
+
+func openViewerFromReaderInternal(pf *panel.PanelsFrame, v vfs.VFS, path string, reader vfs.ReadAtCloser, forceHex bool) {
+	if fileops.IsLocalOSVFS(v) {
+		var vv *viewer.ViewerView
+		pf.RunProgressTaskAfter(openingProgressDelay, " Opening... ", "Preparing to open file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+			update("Opening file...", -1)
+			ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(update))
+			var err error
+			vv, err = viewer.NewViewerViewFromReader(ctx, v, path, reader, forceHex)
+			return err
+		}, func(err error) {
+			if err != nil {
+				switch err {
+				case context.Canceled:
+				case errCannotViewDirectory:
+					vtui.ShowMessage(" Error ", "Cannot view a directory.", []string{"&Ok"})
+				case os.ErrInvalid:
+					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
+				default:
+					vtui.DebugLog("PANELS: Failed to open vv for %s: %v", path, err)
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				}
+				return
+			}
+			showViewerMode(pf, vv, path, forceHex)
+		})
+		return
+	}
+
+	var vv *viewer.ViewerView
+	pf.RunProgressTaskAfter(openingProgressDelay, " Opening... ", "Preparing to open file...", false, func(ctx context.Context, update func(msg string, percent int)) error {
+		update("Opening file...", -1)
+		ctx = context.WithValue(ctx, vfs.ProgressKey, vfs.ProgressCallback(update))
+		var err error
+		vv, err = viewer.NewViewerViewFromReader(ctx, v, path, reader, forceHex)
+		return err
+	}, func(err error) {
+		if err != nil {
+			if err != context.Canceled {
+				if err == os.ErrInvalid {
+					vtui.ShowMessage(" Error ", "Cannot open special files (Named Pipes, Sockets).", []string{"&Ok"})
+				} else {
+					vtui.ShowMessage(" Error ", fmt.Sprintf("Failed to open file:\n%v", err), []string{"&Ok"})
+				}
+			}
+			return
+		}
+		showViewerMode(pf, vv, path, forceHex)
+	})
+}
+
 func actionViewerSearch(vv *viewer.ViewerView) {
 	actionViewerSearchDirection(vv, false)
 }
@@ -2246,6 +2392,19 @@ func actionViewFileMode(pf *panel.PanelsFrame, forceHex bool) {
 			return
 		}
 		if fsp.Entries[idx].IsDir {
+			// Check if VFS supports viewing directory as a file (e.g., registry key as .reg)
+			if dvp, ok := fsp.Vfs.(vfs.DirectoryViewProvider); ok {
+				name := fsp.GetSelectedName()
+				path := fsp.Vfs.Join(fsp.Vfs.GetPath(), name)
+				reader, handled, viewErr := dvp.OpenDirectoryView(context.Background(), path)
+				if handled && viewErr == nil && reader != nil {
+					actionOpenViewerFromReader(pf, fsp.Vfs, path, reader, forceHex)
+					return
+				}
+				if viewErr != nil {
+					// Log error but fall through to default behavior
+				}
+			}
 			// With folders marked, F3 sizes the marked ones and leaves the one
 			// under the cursor alone unless it is marked too, as Far does
 			// (f4#1795).
@@ -2499,6 +2658,19 @@ func actionEditFile(pf *panel.PanelsFrame) {
 			return
 		}
 		if fsp.Entries[idx].IsDir {
+			// Check if VFS supports editing directory as a file (e.g., registry key as .reg)
+			if dep, ok := fsp.Vfs.(vfs.DirectoryEditProvider); ok {
+				name := fsp.GetSelectedName()
+				path := fsp.Vfs.Join(fsp.Vfs.GetPath(), name)
+				rwc, handled, editErr := dep.OpenDirectoryEdit(context.Background(), path)
+				if handled && editErr == nil && rwc != nil {
+					actionOpenDirectoryEditor(pf, fsp.Vfs, path, rwc)
+					return
+				}
+				if editErr != nil {
+					// Log error but fall through to default behavior
+				}
+			}
 			actionFileAttributes(pf)
 			return
 		}

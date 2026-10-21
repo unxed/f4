@@ -225,6 +225,121 @@ func NewViewerView(ctx context.Context, v vfs.VFS, path string) (*ViewerView, er
 	return vv, nil
 }
 
+// NewViewerViewFromReader creates a ViewerView from a pre-opened reader.
+// Used for synthetic views like registry key as .reg file (f4#242).
+func NewViewerViewFromReader(ctx context.Context, v vfs.VFS, path string, f vfs.ReadAtCloser, forceHex bool) (*ViewerView, error) {
+	header, err := viewerDetectionHeader(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+
+	cpID := vfs.DetectEncoding(header, config.App.ViewerAutodetectCodePage, config.App.ViewerDefaultCodePage)
+	if remembered, ok := fileops.RememberedCodepage(v, path); ok {
+		cpID = remembered
+	}
+	binary := forceHex || viewerHeaderLooksBinary(header, cpID)
+	if binary {
+		cpID = 65001
+	}
+	DataOffset := int64(0)
+	if cpID == 65001 && !binary && vfs.HasUTF8BOM(header) {
+		DataOffset = vfs.UTF8BOMSize
+	}
+
+	backend, err := newViewerBackend(ctx, v, path, f, cpID, DataOffset)
+	if err != nil {
+		return nil, err
+	}
+
+	vv := &ViewerView{
+		Backend:  backend,
+		VFS:      v,
+		Path:     path,
+		HexMode:  binary,
+		HexAuto:  binary,
+		WrapMode: true,
+		DisasmMode: DetectX86Mode(header),
+		Codepage:   cpID,
+		AnsiMode: ansiViewMode(path, v),
+	}
+	vv.ScrollBar = vtui.NewScrollBar(0, 0, 0)
+	vv.ScrollBar.ColorIdx = theme.ColViewerScrollbar
+	vv.ScrollBar.Attr = func() uint64 {
+		return theme.OnTextBackground(theme.ColViewerScrollbar, theme.ColViewerText, vv.textAttr())
+	}
+	vv.ScrollBar.SetOwner(vv)
+	vv.ScrollBar.OnScroll = func(v int) {
+		newOff := int64(v)
+		if vv.HexMode {
+			newOff &= ^int64(0xF)
+		} else {
+			newOff = vv.Backend.FindLineStart(newOff)
+		}
+		if newOff != vv.TopOffset {
+			vv.TopOffset = newOff
+			vtui.FrameManager.Redraw()
+		}
+	}
+	vv.ScrollBar.OnStep = func(step int) {
+		switch step {
+		case -1:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_UP})
+		case 1:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+		case -2:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+		case 2:
+			vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_NEXT})
+		}
+		vtui.FrameManager.Redraw()
+	}
+	vv.menuBar = vtui.NewMenuBar(nil)
+	vv.TopBar = NewTopBar(
+		func() string {
+			base := DisplayFileTitle(v, path)
+			return " " + base
+		},
+		func() string {
+			percent := 0
+			size := vv.Backend.Size()
+			if size > 0 {
+				viewHeightBytes := int64(vv.Y2 - vv.Y1)
+				if vv.HexMode {
+					viewHeightBytes *= 16
+				} else {
+					viewHeightBytes *= 80
+				}
+				if size <= viewHeightBytes {
+					percent = 100
+				} else {
+					denominator := size - viewHeightBytes
+					percent = int((vv.TopOffset * 100) / denominator)
+				}
+				if percent < 0 {
+					percent = 0
+				}
+				if percent > 100 {
+					percent = 100
+				}
+			}
+			mode := i18n.Msg("Viewer.ModeText")
+			if vv.DecodeMode {
+				mode = DisasmModeLabel(vv.disasmMode())
+			} else if vv.HexMode {
+				mode = i18n.Msg("Viewer.ModeHex")
+			}
+			cpName := vfs.DisplayCodepageName(vv.Codepage)
+			return fmt.Sprintf(" %s │ %s │ %d%%     ", cpName, mode, percent)
+		},
+	)
+	vv.TopBar.SetVisible(true)
+	vv.SetCanFocus(true)
+	vv.SetFocus(true)
+	vv.MacroID = int(lastViewerID.Add(1))
+	vv.notify(EventRead)
+	return vv, nil
+}
+
 // viewerTailPollInterval is how often an open viewer looks at the file it is
 // showing to see whether it changed. tail -f sleeps a second between looks;
 // half of that keeps a log on screen feeling live without the poll itself
