@@ -61,12 +61,10 @@ func compareDigitRun(a, b string) int {
 }
 
 // naturalCompare orders a and b the way a "numeric" panel sort should: each
-// run of ASCII digits is compared as a number, everything else is handed to
-// textCompare unchanged. textCompare is a parameter rather than a hardcoded
-// strings.Compare so the caller can reuse whatever collation/case-sensitivity
-// the plain name comparator already applies — numeric sort is meant to change
-// how digits compare, not introduce a second, independent case-sensitivity
-// rule. Returns <0, 0 or >0 the way strings.Compare does.
+// run of ASCII digits is compared as a number, and text runs use the primary
+// name collation together with the next digit so leading numbers retain the
+// same punctuation-before-digits order as plain name sorting. Returns <0, 0
+// or >0 the way strings.Compare does.
 func naturalCompare(a, b string, textCompare func(x, y string) int) int {
 	runsA := splitDigitRuns(a)
 	runsB := splitDigitRuns(b)
@@ -82,7 +80,7 @@ func naturalCompare(a, b string, textCompare func(x, y string) int) int {
 			continue
 		}
 		if cmp := textCompare(runsA[i], runsB[i]); cmp != 0 {
-			return cmp
+			return textCompare(runsA[i]+head(runsA, i+1), runsB[i]+head(runsB, i+1))
 		}
 	}
 	switch {
@@ -93,4 +91,11 @@ func naturalCompare(a, b string, textCompare func(x, y string) int) int {
 	default:
 		return 0
 	}
+}
+
+func head(runs []string, i int) string {
+	if i >= len(runs) || runs[i] == "" {
+		return ""
+	}
+	return runs[i][:1]
 }

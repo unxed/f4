@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,10 @@ func TestNaturalCompare(t *testing.T) {
 		{"file007", "file7", 0},
 		{"file007", "file8", -1},
 		{"file07", "file7x", -1}, // equal numeric prefix, "" < "x" for the rest
+		{"!Backup", "1", -1},
+		{"#1", "1", -1},
+		{"a!", "a1", -1},
+		{"1", "Downloads", -1},
 		// Non-digit-only names fall back to plain text comparison.
 		{"banana", "apple", 1},
 		{"apple", "banana", -1},
@@ -115,6 +120,32 @@ func TestNaturalCompare(t *testing.T) {
 		if swapped := naturalCompare(tc.b, tc.a, caseInsensitiveTextCompare); sign(swapped) != -sign(got) {
 			t.Errorf("naturalCompare(%q, %q) = %d is not antisymmetric with (%q, %q) = %d",
 				tc.a, tc.b, got, tc.b, tc.a, swapped)
+		}
+	}
+}
+
+func TestNaturalCompareNameCollation(t *testing.T) {
+	compare := newNamePrimaryComparer()
+	names := []string{"1", "2", "_1", "!Backup", "!tmp", "#1", "$RECYCLE.BIN", "Downloads", "Test", "VirtualBox"}
+	want := []string{"_1", "!Backup", "!tmp", "#1", "$RECYCLE.BIN", "1", "2", "Downloads", "Test", "VirtualBox"}
+	for i := 0; i < len(names); i++ {
+		for j := 0; j < len(names)-1-i; j++ {
+			if naturalCompare(names[j], names[j+1], compare) > 0 {
+				names[j], names[j+1] = names[j+1], names[j]
+			}
+		}
+	}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("sorted = %v, want %v", names, want)
+	}
+	if got := naturalCompare("Track_2", "track_10", compare); got >= 0 {
+		t.Errorf("naturalCompare(Track_2, track_10) = %d, want < 0", got)
+	}
+	for _, pair := range [][2]string{{"Track_2", "track_10"}, {"!Backup", "1"}, {"_1", "!Backup"}} {
+		got := naturalCompare(pair[0], pair[1], compare)
+		swapped := naturalCompare(pair[1], pair[0], compare)
+		if sign(swapped) != -sign(got) {
+			t.Errorf("naturalCompare(%q, %q) = %d is not antisymmetric with swapped comparison %d", pair[0], pair[1], got, swapped)
 		}
 	}
 }

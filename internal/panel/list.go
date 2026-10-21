@@ -1055,9 +1055,13 @@ func (fp *FileSystemPanel) sortEntriesAt(now time.Time) {
 	// Keep the comparator local because the collator reuses iterator state and
 	// is not safe for concurrent use.
 	nameCompare := newNameComparer()
+	primaryNameCompare := newNamePrimaryComparer()
 	compareName := func(left, right string) int {
 		if fp.SortNumeric {
-			return naturalCompare(left, right, nameCompare)
+			if cmp := naturalCompare(left, right, primaryNameCompare); cmp != 0 {
+				return cmp
+			}
+			return nameCompare(left, right)
 		}
 		return nameCompare(left, right)
 	}

@@ -57,6 +57,23 @@ func newNameComparer() func(a, b string) int {
 	}
 }
 
+func newNamePrimaryComparer() func(a, b string) int {
+	return func(a, b string) int {
+		ra, rb := []rune(a), []rune(b)
+		for i := 0; i < len(ra) && i < len(rb); i++ {
+			ca, ka := nameRank(ra[i])
+			cb, kb := nameRank(rb[i])
+			if ca != cb {
+				return cmpInt(ca, cb)
+			}
+			if ka != kb {
+				return cmpInt(int(ka), int(kb))
+			}
+		}
+		return cmpInt(len(ra), len(rb))
+	}
+}
+
 func cmpInt(a, b int) int {
 	switch {
 	case a < b:

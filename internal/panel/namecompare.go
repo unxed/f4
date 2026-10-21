@@ -15,3 +15,11 @@ func newNameComparer() func(a, b string) int {
 	c := collate.New(language.Und, collate.IgnoreCase, collate.Force)
 	return c.CompareString
 }
+
+// newNamePrimaryComparer returns the name collation without its exact-string
+// tie-break. Numeric sorting uses it to compare text and number runs first,
+// then falls back to newNameComparer for a stable total order.
+func newNamePrimaryComparer() func(a, b string) int {
+	c := collate.New(language.Und, collate.IgnoreCase)
+	return c.CompareString
+}

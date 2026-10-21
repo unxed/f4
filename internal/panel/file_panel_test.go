@@ -3484,9 +3484,18 @@ func TestFileSystemPanel_SortNumeric(t *testing.T) {
 		t.Fatalf("plain name sort = %v already numeric; test no longer reproduces the bug", gotPlain)
 	}
 
+	fp.Entries = append(fp.Entries,
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "1"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "!Backup"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "_1"}},
+	)
 	fp.SortNumeric = true
 	fp.SortEntries()
-	gotNumeric := []string{fp.Entries[1].Name, fp.Entries[2].Name, fp.Entries[3].Name}
+	gotNumeric := make([]string, len(fp.Entries)-1)
+	for i, entry := range fp.Entries[1:] {
+		gotNumeric[i] = entry.Name
+	}
+	wantNumeric = []string{"_1", "!Backup", "1", "1.Track_1", "2.Track_2", "10.Track_10"}
 	if !reflect.DeepEqual(gotNumeric, wantNumeric) {
 		t.Fatalf("numeric name sort = %v, want %v", gotNumeric, wantNumeric)
 	}
