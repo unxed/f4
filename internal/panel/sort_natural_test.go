@@ -130,6 +130,8 @@ func TestNaturalCompareNameCollation(t *testing.T) {
 	want := []string{"_1", "!Backup", "!tmp", "#1", "$RECYCLE.BIN", "1", "2", "Downloads", "Test", "VirtualBox"}
 	for i := 0; i < len(names); i++ {
 		for j := 0; j < len(names)-1-i; j++ {
+			// #nosec G602 -- j < len(names)-1-i guarantees j+1 < len(names); a
+			// standard bubble-sort bound gosec's taint analysis can't verify.
 			if naturalCompare(names[j], names[j+1], compare) > 0 {
 				names[j], names[j+1] = names[j+1], names[j]
 			}
