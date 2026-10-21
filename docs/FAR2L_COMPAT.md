@@ -130,8 +130,11 @@ done with the mode on.
 ### 2.3. Selection
 
 "Gray" keys are the keys of the numeric keypad. A legacy terminal sends them as
-the same characters as the main keyboard unless the application keypad mode is
-on (P-09).
+the same characters as the main keyboard; far2l therefore treats `+`, `-` and
+`*` of either keyboard as `Gray +`, `Gray -`, `Gray *` while the command line is
+empty ([code][fl-plainplus]), and so does K-31 to K-33. With a modifier
+(K-34 to K-36) only a terminal that reports the keypad separately can tell them
+apart.
 
 | ID | Keys | Action | Req | far2l |
 | -- | ---- | ------ | --- | ----- |
@@ -228,6 +231,65 @@ way that breaks `Esc` itself.
 | K-96 | `Ctrl+<letter>` and `Alt+<letter>` keys work in a non-Latin keyboard layout as in the Latin one (with P-04 or P-05, which report the key; with P-03, which reports the base layout key). | SHOULD | [code][pn-kbdlayout] |
 | K-97 | Every MUST key of this section that the terminal cannot encode (marked ⌨) has another way to the same action: a menu, a command palette or a remapping file. | MUST | — |
 
+## 4. Terminal protocols, the manager as the client (`P`)
+
+The manager runs inside a terminal. The keys of section 2 and the clipboard of
+section 3 reach it only through these protocols, so they are requirements of
+their own. Each one is negotiated: the manager switches it on, and a terminal
+that does not know it ignores the request.
+
+**Recording what the manager sends.** Several checks below read the bytes the
+manager writes to the terminal. Record them with `script` (util-linux):
+
+```sh
+script -q -f -c '<manager>' /tmp/fc/out.log   # do the action, quit with F10
+cat -v /tmp/fc/out.log | head -c 3000; echo; cat -v /tmp/fc/out.log | tail -c 600
+```
+
+On macOS and BSD: `script -q /tmp/fc/out.log <manager>`. In `cat -v` output
+`ESC` is shown as `^[`, `BEL` as `^G`.
+
+| ID | Requirement | Req | Check | Sources |
+| -- | ----------- | --- | ----- | ------- |
+| P-01 | **Bracketed paste.** The manager sends `CSI ? 2004 h` when it starts and `CSI ? 2004 l` when it exits, and takes everything between `CSI 200 ~` and `CSI 201 ~` as one paste (section 5), never as key presses. | MUST | Recording in E2: `^[[?2004h` near the start, `^[[?2004l` near the end. B-01 passes in E2. | [xterm][xt-bp], [far2l][f2-ttyout-init] |
+| P-02 | **Modes are given back.** Every mode the manager switches on (P-01, P-03, P-04, P-05, P-09, P-10, the alternate screen) is switched off, and the kitty flags are restored, (a) when it exits, (b) when it is suspended (`Ctrl+Z`, `SIGTSTP`) and again on when it resumes, (c) while an external program runs in the same terminal without a PTY of the manager's own, and again on after it. | MUST | E2: start the manager, quit with `F10`; run `timeout 5 cat -v` and press `a`, `Ctrl+Shift+A`, then paste `x`: expected `a^Ax`, no `^[[` sequences. The same after (b) `Ctrl+Z` in the manager and after (c) a command run from its command line, if the manager runs commands directly in its terminal. | [far2l][f2-ttyout-fini], [VTExts 8.2][vtx-8-2] |
+| P-03 | **kitty keyboard protocol.** The manager asks for at least flag 1 (disambiguate) and SHOULD ask for 15 (also event types, alternate keys, all keys as escape codes, which K-16 and K-96 need), by `CSI > flags u` (push) or `CSI = flags ; 1 u`, and restores the previous flags on exit (`CSI < u`, or `CSI = 0 ; 1 u`). It decodes `CSI code ; modifiers[:event] u` and the legacy-shaped forms kitty keeps (`CSI 1 ; modifiers A`…, `CSI number ; modifiers ~`). It MAY detect the protocol with `CSI ? u`, answered by `CSI ? flags u`, followed by `CSI c` whose answer ends the wait. | MUST | E2: K-10 (`Ctrl+1`), K-77 (`Ctrl+[`) and K-34 (`Ctrl+Gray +`) work. Recording: `^[[>` or `^[[=` near the start and `^[[<u` or `^[[=0;1u` near the end. | [kitty spec][kitty-kb], [far2l enable][f2-ttyout-kitty], [far2l decode][f2-parse-kitty] |
+| P-04 | **win32-input-mode.** The manager sends `CSI ? 9001 h` at start and `CSI ? 9001 l` at exit and decodes `CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _` key records, both key-down (`Kd` = 1) and key-up (`Kd` = 0). It SHOULD unwrap mouse and other sequences that a ConPTY delivers encoded as key records (far2l does). | MUST | E3: K-10 (`Ctrl+1`), K-26 (`RightCtrl+0`) and K-16 (`Ctrl+Alt+Shift` held) work. Recording: `^[[?9001h`, `^[[?9001l`. | [Microsoft spec][w32-spec], [far2l decode][f2-parse-w32], [far2l unwrap][f2-parse-w32double] |
+| P-05 | **far2l terminal extensions: activation and input.** The manager writes `ESC _ far2l1 ESC \` followed by `ESC [ 5 n` and reads until the answer to the DSR (`ESC [ 0 n`); the extensions are on if `ESC _ far2lok` (ended by `BEL` or `ST`) came first. While they are on it takes keys and mouse from the events `ESC _ f2l<base64> BEL` (`K`/`k` key down and up, `M` mouse; the compact forms only if it asked for them with `x`), and sends `ESC _ far2l0 ESC \` on exit and on suspend, and probes again on resume. A terminal that does not answer causes no visible text and no delay beyond the DSR answer. | MUST | E1: K-16 (`Ctrl+Alt+Shift` held), K-26 (`RightCtrl+0` differs from `Ctrl+0`) and K-10 work. E4: the recording shows `^[_far2l1^[\` and `^[[5n`, the manager is ready as fast as without the probe, and nothing of the probe stays on the screen. | [VTExts 4.5][vtx-4-5], [VTExts 6][vtx-6], [VTExts 8.4][vtx-8-4], [far2l probe][f2-caps-probe], [far2l exit][f2-caps-fini] |
+| P-06 | **far2l terminal extensions: no hang.** A request with a non-zero ID that is never answered does not freeze the manager: the manager has a timeout on replies and then goes on as if the terminal had no such feature. | SHOULD | Review of the code, or a test terminal that acknowledges `far2l1` and answers nothing else (the self-check kit, section 10). | [VTExts 8.4][vtx-8-4] |
+| P-07 | **OSC 52 for copying.** When neither the system clipboard of the local machine nor the clipboard of the far2l extensions (C-03) is available, a copy in the manager is sent to the terminal as `OSC 52 ; c ; <base64> ST` (or `BEL`). The manager does not depend on the OSC 52 read form (`?`) for pasting: most terminals refuse it, and paste comes by P-01. | MUST | E2 over `ssh localhost` (kitty: `clipboard_control write-clipboard`; other terminals: their OSC 52 setting): C-01 passes. Recording: `^[]52;` followed by Base64 of the copied text. | [xterm][xt-osc], [far2l][f2-ttyout-osc52], [far2l help][hlp-osc52] |
+| P-08 | **Alt as an ESC prefix.** In legacy input `ESC <character>` is `Alt+<character>`, and a lone `ESC` is the `Esc` key once no other byte follows within a short time (SHOULD be at most 100 ms). | MUST | E4: K-60 (`Alt+b` puts the cursor on `b.txt`); `Esc` closes an open dialog at once, without a visible pause. | [far2l parser][f2-parse-esc] |
+| P-09 | **Mouse.** The manager asks for button and drag reports in the SGR form (`CSI ? 1000 h`, `CSI ? 1002 h`, `CSI ? 1006 h`) and decodes `CSI < b ; x ; y M/m`: click selects, double click opens, the wheel scrolls. | SHOULD | E2: click a file, double-click a folder, scroll a long folder. | [far2l][f2-ttyout-mouse] |
+| P-10 | **Focus reports.** The manager asks for `CSI ? 1004 h` and uses `CSI I` / `CSI O` (for example to show desktop notifications only when it is not focused, as far2l does). | SHOULD | Recording: `^[[?1004h`. | [VTExts 8.2][vtx-8-2] |
+| P-11 | **One key, one event.** When several of P-03, P-04, P-05 are on at the same time, each key press is delivered to the manager once. | MUST | E1, E2, E3: type `abc` and press `Ctrl+Y` in the command line: `abc` appears exactly once, and is cleared. | [far2l parser][f2-parse-order] |
+| P-12 | **Behind a multiplexer.** In E5 the manager starts, every MUST key without ⌨ works, and no reply text of a probe (P-03, P-05) appears on the screen or in the command line. | MUST | E5 (tmux in kitty): repeat K-01, K-20, K-60, K-74; look at the screen and the command line after start. | — |
+
+## 6. The built-in terminal, the manager as the host (`T`)
+
+These requirements apply only to a manager that has a built-in terminal (a PTY
+in which it runs the shell and the commands). The manager is then the terminal
+for the programs inside, and has to give them what section 4 asks from a
+terminal. All checks are made in E6, typed at the shell prompt of the built-in
+terminal (with the panels hidden by `Ctrl+O` where the manager needs it). The
+probes use `bash`; `timeout 5 cat -v` shows what the program receives and ends
+by itself, because some modes also encode `Ctrl+C`.
+
+| ID | Requirement | Req | Check | Sources |
+| -- | ----------- | --- | ----- | ------- |
+| T-01 | **Status reports.** `CSI 5 n` is answered by `CSI 0 n`, `CSI 6 n` by `CSI <row> ; <col> R`, `CSI c` by a primary device attributes reply `CSI ? … c`. The far2l probe and the kitty probe end on these answers. | MUST | `printf '\e[5n'; IFS= read -rs -t1 -dn r; printf '%q\n' "$r"` prints `$'\E[0'`; with `\e[6n` and `-dR`: `$'\E[<row>;<col>'`; with `\e[c` and `-dc`: `$'\E[?…'`. | [far2l DSR][f2-vt-dsr], [far2l DA][f2-vt-da] |
+| T-02 | **Bracketed paste.** The host follows `CSI ? 2004 h/l` of the program. While it is on, a paste into the terminal (the paste key of the manager, `Shift+Ins`, a dropped text) is sent wrapped in `CSI 200 ~` … `CSI 201 ~`, with line breaks sent as `CR`; while it is off, the plain text is sent. | MUST | `printf '\e[?2004h'; timeout 5 cat -v`, paste the two lines `x`, `y`: `^[[200~x^My^[[201~`. Then `printf '\e[?2004l'; timeout 5 cat -v`, paste again: `x`, `y` without markers. | [far2l mode][f2-vt-2004], [far2l paste][f2-vt-paste] |
+| T-03 | **kitty keyboard protocol.** The host keeps the flags of the program: `CSI = flags ; mode u` (mode 1 set, 2 or, 3 and-not), `CSI > flags u` push and `CSI < n u` pop (a stack of at least 8 entries), `CSI ? u` answered by `CSI ? flags u`, and encodes keys by those flags, including key releases with flag 2. | MUST | `printf '\e[>1u\e[?u'; IFS= read -rs -t1 -du r; printf '%q\n' "$r"` prints `$'\E[?1'`. `printf '\e[>1u'; timeout 5 cat -v; printf '\e[<u'`, press `Ctrl+Shift+A`: `^[[97;6u`. | [kitty spec][kitty-kb], [far2l flags][f2-vt-kitty], [far2l encode][f2-vt-kittyenc] |
+| T-04 | **win32-input-mode.** The host follows `CSI ? 9001 h/l` and, while it is on, sends every key down and up as `CSI Vk ; Sc ; Uc ; Kd ; Cs ; Rc _`. It SHOULD answer the mode query `CSI ? 9001 $ p` (and the same for 2004) with `CSI ? 9001 ; 1 $ y` or `; 2 $ y`. | MUST | `printf '\e[?9001h'; timeout 5 cat -v; printf '\e[?9001l'`, press `a`: `^[[65;30;97;1;0;1_^[[65;30;97;0;0;1_`. | [Microsoft spec][w32-spec], [far2l mode][f2-vt-9001], [far2l encode][f2-vt-w32enc], [far2l DECRQM][f2-vt-decrqm] |
+| T-05 | **far2l terminal extensions.** (a) `ESC _ far2l1` is answered by `ESC _ far2lok BEL` before the answer to a following DSR; (b) every request with a non-zero ID gets a reply, the ID alone for what the host does not implement; (c) while the extensions are on, keys and mouse go to the program as events `ESC _ f2l<base64> BEL`, with key-up, the compact forms only if the program asked for them; (d) the clipboard requests either work with the protections of far2l (the user allows a client once or always; a read is answered only within 5 seconds of the user's paste key or middle click) or `CLIP_OPEN` is answered `-1` ("use your own clipboard"); (e) `ESC _ far2l0` and the end of the program switch the extensions off. | MUST | `printf '\e_far2l1\e\\\e[5n'; IFS= read -rs -t2 -dn r; printf '%q\n' "$r"` prints `$'\E_far2lok\a\E[0'`. The rest is checked by T-08 and by the self-check kit (section 10). | [VTExts 4.4][vtx-4-4], [VTExts 5.7][vtx-5-7], [VTExts 8.3][vtx-8-3], [VTExts 8.4][vtx-8-4], [far2l host][f2-vt-apc], [far2l events][f2-ext-key] |
+| T-06 | **far2l extensions, the rest.** The host answers `w` (maximum window size), `p` (colour depth), `f` (F-key titles: shows them in its key bar or answers `false`), `n` (shows a desktop notification), and MAY send `S` terminal size events after `x` asked for them, with the argument order of VTExts. | SHOULD | Self-check kit (section 10); far2l `--tty` inside: its F-key titles appear in the host's key bar, if the host shows them. | [VTExts 5][vtx-5], [far2l][f2-ext-interact] |
+| T-07 | **Modes end with the program.** When the program that set them exits, the host drops bracketed paste, the kitty flags, win32-input-mode, the mouse modes, focus reports, the far2l extensions and an OSC 52 permission given "for this command". | MUST | Run the command `printf '\e[?2004h\e[?9001h\e[>1u\e[?1000h'` and let it end; then `timeout 5 cat -v`, press `a`, `Ctrl+Shift+A`, paste `x`: `a^Ax`. | [far2l][f2-vt-reset] |
+| T-08 | **far2l inside the manager.** `far2l --tty` started in the built-in terminal gets every key: `RightCtrl+0` and `Ctrl+0` differ, holding `Ctrl+Alt+Shift` hides its panels, `Ctrl+1` changes its view mode. Copying text in that far2l (select in its command line, `Ctrl+Ins`) puts the text on the clipboard of the manager's side, and `Shift+Ins` in that far2l pastes the manager's clipboard (after the clipboard question if the host asks). | MUST | E6 with far2l 2.6 or later installed: the steps of the requirement. | [far2l help][hlp-terminal], [VTExts 3][vtx-3] |
+| T-09 | **OSC 52 writing.** `OSC 52 ; <selection> ; <base64>` from the program sets the manager's clipboard. The host SHOULD ask the user first (allow once, allow for this command, block), as far2l does. | MUST | `printf '\e]52;c;%s\a' "$(printf hello | base64)"`, allow if asked; paste in the manager's command line: `hello`. | [far2l][f2-vt-osc52] |
+| T-10 | **No clipboard reading behind the user's back.** `OSC 52 ; c ; ?` is not answered with the clipboard contents unless the user allowed it for this request or by an explicit setting; the far2l `CLIP_GETDATA` follows T-05 (d). | MUST | Put a secret on the clipboard; `printf '\e]52;c;?\a'; IFS= read -rs -t2 -d $'\a' r; printf '%q\n' "$r"`: empty, or the host asked first and the answer was "deny". | [far2l][f2-vt-osc52], [VTExts 5.7.2][vtx-5-7-2] |
+| T-11 | **Mouse and focus.** The host follows `CSI ? 1000/1002/1003/1006 h/l` and `CSI ? 1004 h/l` and sends the reports in the requested form. | SHOULD | `printf '\e[?1000h\e[?1006h'; timeout 5 cat -v; printf '\e[?1000l\e[?1006l'`, click: `^[[<0;x;yM^[[<0;x;ym`. | [far2l][f2-vt-mouse] |
+| T-12 | **Keys reach the program.** While a program runs, every key goes to it, except the documented terminal keys of the manager (K-91, K-92 and the like), which the help lists; key remapping of the manager is not applied to it. | SHOULD | Run `timeout 5 cat -v` and press `F3`, `F10`, `Alt+F7`, `Ctrl+O`: each arrives as its sequence or is one of the documented exceptions. | [far2l help][hlp-terminal] |
+| T-13 | **The manager inside itself.** A second copy of the manager started in the built-in terminal passes P-01 to P-05 (the first copy is the terminal). | SHOULD | E6: run P-01 to P-05 checks in the inner copy. | — |
+
 [far2l-commit]: https://github.com/elfmz/far2l/commit/5ec2011794fa0c781e6dde92c84c77b5ae02b25b
 [vtx-commit]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md
 [vtx-4-1]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#41-roles
@@ -296,6 +358,7 @@ way that breaks `Esc` itself.
 [fl-ctrlf12]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/filelist.cpp#L1988
 [fl-ctrlpgup]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/filelist.cpp#L2005
 [fl-ctrlpgdn]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/filelist.cpp#L2031
+[fl-plainplus]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/filelist.cpp#L2038
 [fl-fastfind]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/filelist.cpp#L2077
 [pn-fastfind]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/panel.cpp#L985
 [pn-kbdlayout]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/panels/panel.cpp#L962
@@ -316,3 +379,45 @@ way that breaks `Esc` itself.
 [mg-altf9]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/manager.cpp#L977
 [mg-f12]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/manager.cpp#L1011
 [mg-cas]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/manager.cpp#L1023
+[f2-ttyout-init]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYOutput.cpp#L163
+[f2-ttyout-kitty]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYOutput.cpp#L171
+[f2-ttyout-fini]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYOutput.cpp#L192
+[f2-ttyout-mouse]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYOutput.cpp#L550
+[f2-ttyout-osc52]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYOutput.cpp#L576
+[f2-parse-esc]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYInputSequenceParser.cpp#L330
+[f2-parse-order]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYInputSequenceParser.cpp#L426
+[f2-parse-kitty]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYInputSequenceParserExts.cpp#L114
+[f2-parse-w32]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYInputSequenceParserExts.cpp#L425
+[f2-parse-w32double]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYInputSequenceParserExts.cpp#L484
+[f2-caps-probe]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYCaps.cpp#L195
+[f2-caps-fini]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/WinPort/src/Backend/TTY/TTYCaps.cpp#L317
+[f2-vt-decrqm]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L726
+[f2-vt-mouse]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L739
+[f2-vt-2004]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L764
+[f2-vt-9001]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L768
+[f2-vt-kitty]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L801
+[f2-vt-dsr]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L1151
+[f2-vt-da]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtansi.cpp#L1219
+[f2-vt-apc]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtshell.cpp#L759
+[f2-vt-osc52]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtshell.cpp#L848
+[f2-vt-paste]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtshell.cpp#L956
+[f2-vt-kittyenc]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtshell.cpp#L1005
+[f2-vt-w32enc]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtshell.cpp#L1012
+[f2-vt-reset]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/vtshell.cpp#L1328
+[f2-ext-key]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/VTFar2lExtensios.cpp#L195
+[f2-ext-interact]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/src/vt/VTFar2lExtensios.cpp#L651
+[hlp-osc52]: https://github.com/elfmz/far2l/blob/5ec2011794fa0c781e6dde92c84c77b5ae02b25b/far2l/bootstrap/scripts/FarEng.hlf.m4#L205
+[vtx-3]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#3-implementations
+[vtx-4-4]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#44-requests-request-ids-and-replies
+[vtx-4-5]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#45-activation-and-detection
+[vtx-5]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#5-requests-client-to-server
+[vtx-5-7]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#57-fartty_interact_clipboard-c
+[vtx-5-7-2]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#572-safe-reading
+[vtx-6]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#6-events-server-to-client
+[vtx-8-2]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#82-client-tty-backend
+[vtx-8-3]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#83-server-far2l-built-in-terminal
+[vtx-8-4]: https://github.com/unxed/far2l/blob/8030902caf42498e1612e5a393ab7fc489048f51/VTExts.md#84-advice-to-implementers
+[xt-bp]: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Bracketed-Paste-Mode
+[xt-osc]: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands
+[kitty-kb]: https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+[w32-spec]: https://github.com/microsoft/terminal/blob/main/doc/specs/%234999%20-%20Improved%20keyboard%20handling%20in%20Conpty.md
