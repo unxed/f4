@@ -316,6 +316,10 @@ func TestPanelsFrame_SudoOnlyFolderSyncIsSentOnce(t *testing.T) {
 	vfs.InitSudoClient("f4", "")
 	t.Cleanup(func() { vfs.SetSudoClientForTest(prevSudo) })
 
+	withTestHistoryProvider(t)
+	// pf.Close may cancel a directory read after it has started. Join any
+	// remaining reads before the test history provider and sudo client restore.
+	t.Cleanup(func() { paneltest.WaitForDirectoryLoads(t) })
 	pf := paneltest.SetupMockPanelsFrame(t)
 	defer pf.Close()
 	pty := pf.Pty.(*paneltest.MockPty)
@@ -357,4 +361,7 @@ func TestPanelsFrame_SudoOnlyFolderSyncIsSentOnce(t *testing.T) {
 	if !strings.Contains(written, "if "+wantCd+"; then") {
 		t.Fatalf("command lost its own cd guard for %q: %q", locked, written)
 	}
+	// Show may start an asynchronous directory read after the VFS is replaced.
+	// Finish it before this test's isolated history provider is restored.
+	paneltest.WaitForLoad(t, fsp)
 }
