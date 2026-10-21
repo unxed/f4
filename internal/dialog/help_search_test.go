@@ -496,3 +496,42 @@ func TestHelpDecorationsKeepTheirColourWhenDraggedOffScreen(t *testing.T) {
 			after, before)
 	}
 }
+
+// The Help window draws its own zoom and close buttons over its top border;
+// they follow the title-button style of vtui like every other window: brackets
+// in the classic style, blank cells in the rounded one on a graphical backend
+// (f4#285).
+func TestHelpTitleButtonsFollowTheButtonStyle(t *testing.T) {
+	oldStyle, oldBackend := vtui.CurrentGlyphStyle(), vtui.ActiveBackend()
+	t.Cleanup(func() {
+		vtui.SetGlyphStyle(oldStyle)
+		vtui.SetActiveBackend(oldBackend)
+	})
+	for _, tc := range []struct {
+		name    string
+		style   vtui.GlyphStyle
+		backend string
+		left    rune
+	}{
+		{"classic", vtui.GlyphStyleClassic, "", vtui.UIStrings.CloseBrackets[0]},
+		{"rounded", vtui.GlyphStyleRounded, "test-gui", ' '},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vtui.SetGlyphStyle(tc.style)
+			vtui.SetActiveBackend(tc.backend)
+			view, scr := newSearchableHelpForTestAtSize(t, 80, 40, []string{"Help text"})
+			view.Show(scr)
+			RenderHelpFrame(scr, view)
+			_, y1, x2, _ := view.GetPosition()
+			if got := testutil.Rune(scr.GetCell(x2-6, y1).Char); got != vtui.UIStrings.ZoomSymbol {
+				t.Fatalf("zoom button symbol = %q, want %q", got, vtui.UIStrings.ZoomSymbol)
+			}
+			if got := testutil.Rune(scr.GetCell(x2-7, y1).Char); got != tc.left {
+				t.Errorf("left cell of the zoom button = %q, want %q", got, tc.left)
+			}
+			if got := testutil.Rune(scr.GetCell(x2-4, y1).Char); got != tc.left {
+				t.Errorf("left cell of the close button = %q, want %q", got, tc.left)
+			}
+		})
+	}
+}
