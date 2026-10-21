@@ -14,23 +14,44 @@ func TestParseProcStatExtractsNameAndTicksDespiteParensInComm(t *testing.T) {
 	// example: the kernel's "(sd-pam)" helper reports comm "(sd-pam)", which
 	// /proc/[pid]/stat then wraps in one more pair: "((sd-pam))".
 	line := "1234 (my (weird) process) S 1 1234 1234 0 -1 4194560 100 0 0 0 55 66"
-	name, utime, stime, ok := parseProcStat(line)
+	raw, ok := parseProcStat(line)
 	if !ok {
 		t.Fatal("parseProcStat: not ok")
 	}
-	if name != "my (weird) process" {
-		t.Fatalf("name = %q, want %q", name, "my (weird) process")
+	if raw.name != "my (weird) process" {
+		t.Fatalf("name = %q, want %q", raw.name, "my (weird) process")
 	}
-	if utime != 55 || stime != 66 {
-		t.Fatalf("utime/stime = %d/%d, want 55/66", utime, stime)
+	if raw.utime != 55 || raw.stime != 66 {
+		t.Fatalf("utime/stime = %d/%d, want 55/66", raw.utime, raw.stime)
+	}
+	// The line stops at stime, before starttime: still a process, with no
+	// start to tell a reused pid by.
+	if raw.start != 0 {
+		t.Fatalf("start = %d for a line without starttime, want 0", raw.start)
+	}
+}
+
+// TestParseProcStatReadsStartTime covers field 22, what procKey tells a
+// reused pid by: a full line from a real kernel, comm with a space in it.
+func TestParseProcStatReadsStartTime(t *testing.T) {
+	line := "4242 (Web Content) S 4100 4100 4100 0 -1 4194560 9133 0 0 0 812 140 0 0 20 0 31 0 987654 2913849344 51200 18446744073709551615"
+	raw, ok := parseProcStat(line)
+	if !ok {
+		t.Fatal("parseProcStat: not ok")
+	}
+	if raw.name != "Web Content" || raw.utime != 812 || raw.stime != 140 {
+		t.Fatalf("parseProcStat = %+v, want Web Content, 812/140", raw)
+	}
+	if raw.start != 987654 {
+		t.Fatalf("start = %d, want 987654", raw.start)
 	}
 }
 
 func TestParseProcStatRejectsTruncatedLine(t *testing.T) {
-	if _, _, _, ok := parseProcStat("1234 (short) S 1"); ok {
+	if _, ok := parseProcStat("1234 (short) S 1"); ok {
 		t.Fatal("expected ok=false for a line missing the utime/stime fields")
 	}
-	if _, _, _, ok := parseProcStat("no parens here at all"); ok {
+	if _, ok := parseProcStat("no parens here at all"); ok {
 		t.Fatal("expected ok=false for a line without a comm in parens")
 	}
 }
@@ -62,6 +83,11 @@ func TestCollectFindsTheCurrentProcess(t *testing.T) {
 		if s.pid == pid {
 			if s.name == "" {
 				t.Fatalf("sample for the current process has an empty name: %#v", s)
+			}
+			// /proc/self/stat always carries starttime: procKey relies on
+			// it to tell a reused pid apart.
+			if s.start == 0 {
+				t.Fatalf("sample for the current process has no start time: %#v", s)
 			}
 			return
 		}

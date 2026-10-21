@@ -60,7 +60,7 @@ func (c *collector) collect() ([]sample, error) {
 			}
 			c.prev[pid] = tickSample{ticks: nanos, at: now}
 		}
-		samples = append(samples, sample{pid: pid, name: name, rssKiB: rssKiB, cpuPercent: cpuPercent})
+		samples = append(samples, sample{pid: pid, name: name, rssKiB: rssKiB, cpuPercent: cpuPercent, start: startStamp(kp.Proc.P_starttime)})
 	}
 
 	// Bound memory: forget the running total for processes that no longer exist.
@@ -70,6 +70,17 @@ func (c *collector) collect() ([]sample, error) {
 		}
 	}
 	return samples, nil
+}
+
+// startStamp folds kinfo_proc's p_starttime into sample.start's single
+// number: microseconds since the epoch. A time before the epoch is no real
+// process's and reads as unknown (zero).
+func startStamp(tv unix.Timeval) uint64 {
+	if tv.Sec < 0 || tv.Usec < 0 {
+		return 0
+	}
+	// #nosec G115 -- both fields were just checked non-negative, and seconds since the epoch times 1e6 stays far below 2^63.
+	return uint64(tv.Sec)*1_000_000 + uint64(tv.Usec)
 }
 
 // commString trims a null-terminated comm buffer (kinfo_proc's P_comm) to a

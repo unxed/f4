@@ -256,7 +256,7 @@ var commandPaletteProcessKeyAudit = map[string]commandPaletteSurfaceAudit{
 		class: paletteAuditTransportHook, rationale: "RPC panel input is forwarded to the remote plugin, whose .vui document owns its semantic commands",
 	},
 	"proclist.(*procListPanel).ProcessKey": {
-		class: paletteAuditPanelProvider, rationale: "ProcList forwards raw input to its own vtui.Table; sorting, quick-search and cursor movement are local table primitives, and the panel itself is reached through the plugin-owned PluginPanelInstance surface (f4#312 part 1 of 4)",
+		class: paletteAuditPanelProvider, rationale: "ProcList forwards raw input to its own vtui.Table; sorting, quick-search and cursor movement are local table primitives, and Ins/Shift-navigation selection plus the file panels' own group-selection actions (which stand down under a panel plugin) are answered locally on the process list (f4#2130); the panel itself is reached through the plugin-owned PluginPanelInstance surface (f4#312 part 1 of 4)",
 	},
 	"netbrowse.(*netPanel).ProcessKey": {
 		class: paletteAuditPanelProvider, rationale: "the Windows network browser forwards raw input to its own vtui.Table; Enter goes into a container or up on the .. row and F5 reloads, and quick-search and cursor movement are local table primitives; the panel is reached through the plugin-owned PluginPanelInstance surface (f4#1702 part 1)",
@@ -359,6 +359,9 @@ var commandPaletteNewVMenuAudit = map[string]commandPaletteSurfaceAudit{
 	},
 	"dialog.showConfigEditor#1": {
 		class: paletteAuditDynamicAction, rationale: "the registered App.ConfigEditor action, also reached as f4:config, opens this runtime list of settings.ini keys",
+	},
+	"proclist.(*procListPanel).showSortMenu#1": {
+		class: paletteAuditPluginLocal, rationale: "ProcList's own sort menu, opened with Ctrl+F12 on the process list; its rows are the panel's declared Ctrl+F3..Ctrl+F7 sort keys (f4#2130)",
 	},
 }
 

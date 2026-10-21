@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestCommStringTrimsAtNUL(t *testing.T) {
@@ -22,6 +24,15 @@ func TestCommStringWithNoNUL(t *testing.T) {
 	}
 }
 
+func TestStartStampCombinesSecondsAndMicroseconds(t *testing.T) {
+	if got, want := startStamp(unix.Timeval{Sec: 1_700_000_000, Usec: 250}), uint64(1_700_000_000_000_250); got != want {
+		t.Fatalf("startStamp = %d, want %d", got, want)
+	}
+	if got := startStamp(unix.Timeval{Sec: -1}); got != 0 {
+		t.Fatalf("startStamp(before the epoch) = %d, want 0 (unknown)", got)
+	}
+}
+
 func TestCollectFindsTheCurrentProcess(t *testing.T) {
 	c := newCollector()
 	samples, err := c.collect()
@@ -33,6 +44,11 @@ func TestCollectFindsTheCurrentProcess(t *testing.T) {
 		if s.pid == pid {
 			if s.name == "" {
 				t.Fatalf("sample for the current process has an empty name: %#v", s)
+			}
+			// kinfo_proc reports every process's start, this one's
+			// included: procKey relies on it to tell a reused pid apart.
+			if s.start == 0 {
+				t.Fatalf("sample for the current process has no start time: %#v", s)
 			}
 			return
 		}

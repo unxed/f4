@@ -63,6 +63,7 @@ func (c *collector) collect() ([]sample, error) {
 			name:       raw.name,
 			rssKiB:     raw.rssKiB,
 			cpuPercent: cpuPercent,
+			start:      raw.start,
 		})
 	}
 
@@ -81,6 +82,7 @@ type rawProcess struct {
 	name   string
 	utime  uint64
 	stime  uint64
+	start  uint64
 	rssKiB uint64
 }
 
@@ -89,44 +91,49 @@ func readProcess(pid int) (rawProcess, bool) {
 	if err != nil {
 		return rawProcess{}, false
 	}
-	name, utime, stime, ok := parseProcStat(string(statData))
+	raw, ok := parseProcStat(string(statData))
 	if !ok {
 		return rawProcess{}, false
 	}
-	raw := rawProcess{name: name, utime: utime, stime: stime}
 	if statusData, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid)); err == nil {
 		raw.rssKiB, _ = parseVmRSSKiB(string(statusData))
 	}
 	return raw, true
 }
 
-// parseProcStat extracts the comm (process name) and the utime/stime fields
-// (14 and 15) from the content of /proc/[pid]/stat. The name is delimited by
-// the first '(' and the last ')' in the line rather than split on spaces,
-// because comm itself can contain spaces or parentheses (for example the
-// kernel's own "(sd-pam)" helper, whose comm is literally "sd-pam" wrapped
-// in one more pair of parens by the kernel).
-func parseProcStat(line string) (name string, utime, stime uint64, ok bool) {
+// parseProcStat extracts the comm (process name), the utime/stime fields
+// (14 and 15) and starttime (22) from the content of /proc/[pid]/stat. The
+// name is delimited by the first '(' and the last ')' in the line rather
+// than split on spaces, because comm itself can contain spaces or
+// parentheses (for example the kernel's own "(sd-pam)" helper, whose comm is
+// literally "sd-pam" wrapped in one more pair of parens by the kernel).
+// utime and stime are required; starttime only tells a reused pid apart
+// (procKey), so a line that stops before it still parses, with start zero.
+func parseProcStat(line string) (rawProcess, bool) {
 	open := strings.IndexByte(line, '(')
 	closeParen := strings.LastIndexByte(line, ')')
 	if open < 0 || closeParen < open {
-		return "", 0, 0, false
+		return rawProcess{}, false
 	}
-	name = line[open+1 : closeParen]
+	raw := rawProcess{name: line[open+1 : closeParen]}
 
 	fields := strings.Fields(line[closeParen+1:])
 	// fields[0] is stat field 3 (state); stat field N is fields[N-3].
-	const utimeField, stimeField = 14, 15
-	utimeIdx, stimeIdx := utimeField-3, stimeField-3
+	const utimeField, stimeField, startField = 14, 15, 22
+	utimeIdx, stimeIdx, startIdx := utimeField-3, stimeField-3, startField-3
 	if len(fields) <= stimeIdx {
-		return name, 0, 0, false
+		return raw, false
 	}
 	u, err1 := strconv.ParseUint(fields[utimeIdx], 10, 64)
 	s, err2 := strconv.ParseUint(fields[stimeIdx], 10, 64)
 	if err1 != nil || err2 != nil {
-		return name, 0, 0, false
+		return raw, false
 	}
-	return name, u, s, true
+	raw.utime, raw.stime = u, s
+	if len(fields) > startIdx {
+		raw.start, _ = strconv.ParseUint(fields[startIdx], 10, 64)
+	}
+	return raw, true
 }
 
 // parseVmRSSKiB extracts VmRSS from the content of /proc/[pid]/status, e.g.

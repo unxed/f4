@@ -50,17 +50,17 @@ func (c *collector) collect() ([]sample, error) {
 		name := windows.UTF16ToString(entry.ExeFile[:])
 		seen[pid] = true
 
-		ticks, rssKiB, ok := readWindowsProcess(pid)
+		info, ok := readWindowsProcess(pid)
 		cpuPercent := 0.0
 		if ok {
-			if prev, hasPrev := c.prev[pid]; hasPrev && ticks >= prev.ticks {
+			if prev, hasPrev := c.prev[pid]; hasPrev && info.ticks >= prev.ticks {
 				if dt := now.Sub(prev.at).Seconds(); dt > 0 {
-					cpuPercent = float64(ticks-prev.ticks) / windowsTicksPerSec / dt * 100
+					cpuPercent = float64(info.ticks-prev.ticks) / windowsTicksPerSec / dt * 100
 				}
 			}
-			c.prev[pid] = tickSample{ticks: ticks, at: now}
+			c.prev[pid] = tickSample{ticks: info.ticks, at: now}
 		}
-		samples = append(samples, sample{pid: pid, name: name, rssKiB: rssKiB, cpuPercent: cpuPercent})
+		samples = append(samples, sample{pid: pid, name: name, rssKiB: info.rssKiB, cpuPercent: cpuPercent, start: info.start})
 
 		if err := windows.Process32Next(snapshot, &entry); err != nil {
 			break
@@ -76,31 +76,40 @@ func (c *collector) collect() ([]sample, error) {
 	return samples, nil
 }
 
-// readWindowsProcess opens pid just long enough to read its cumulative
-// kernel+user time (in FILETIME's 100ns units) and working-set size. ok is
-// false only when the process could not even be opened -- which the caller
-// treats as "no times available yet", not as a reason to drop the process
-// from the list.
-func readWindowsProcess(pid int) (ticks uint64, rssKiB uint64, ok bool) {
+// windowsProcessInfo is what readWindowsProcess reads from an opened
+// process: cumulative kernel+user time and the creation time, both in
+// FILETIME's 100ns units, and the working-set size.
+type windowsProcessInfo struct {
+	ticks  uint64
+	start  uint64
+	rssKiB uint64
+}
+
+// readWindowsProcess opens pid just long enough to read its times and
+// working-set size. ok is false only when the process could not even be
+// opened -- which the caller treats as "no times available yet", not as a
+// reason to drop the process from the list.
+func readWindowsProcess(pid int) (info windowsProcessInfo, ok bool) {
 	// #nosec G115 -- pid comes from Toolhelp32's own ProcessID (uint32) and is converted back to it here.
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ, false, uint32(pid))
 	if err != nil {
-		return 0, 0, false
+		return windowsProcessInfo{}, false
 	}
 	defer func() { _ = windows.CloseHandle(handle) }()
 
 	var creation, exit, kernel, user windows.Filetime
 	if err := windows.GetProcessTimes(handle, &creation, &exit, &kernel, &user); err == nil {
-		ticks = filetimeTicks(kernel) + filetimeTicks(user)
+		info.ticks = filetimeTicks(kernel) + filetimeTicks(user)
+		info.start = filetimeTicks(creation)
 	}
 
 	var counters processMemoryCounters
 	counters.Cb = uint32(unsafe.Sizeof(counters))
 	r, _, _ := procGetProcessMemoryInfo.Call(uintptr(handle), uintptr(unsafe.Pointer(&counters)), uintptr(counters.Cb))
 	if r != 0 {
-		rssKiB = uint64(counters.WorkingSetSize) / 1024
+		info.rssKiB = uint64(counters.WorkingSetSize) / 1024
 	}
-	return ticks, rssKiB, true
+	return info, true
 }
 
 func filetimeTicks(ft windows.Filetime) uint64 {

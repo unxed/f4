@@ -163,16 +163,16 @@ func TestToggleSuspendTogglesSuspendedMap(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}()
-	pid := cmd.Process.Pid
-	p.applySamples([]sample{{pid: pid, name: "sleep"}})
+	s := sample{pid: cmd.Process.Pid, name: "sleep"}
+	p.applySamples([]sample{s})
 
 	p.toggleSuspend()
-	if !p.suspended[pid] {
+	if !p.suspended[s.key()] {
 		t.Fatal("toggleSuspend did not mark the process suspended")
 	}
 
 	p.toggleSuspend()
-	if p.suspended[pid] {
+	if p.suspended[s.key()] {
 		t.Fatal("toggleSuspend (second call) did not clear the suspended mark")
 	}
 }

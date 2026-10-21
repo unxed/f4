@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/theme"
@@ -113,10 +115,13 @@ func procListColumns(specs []columnSpec) []vtui.TableColumn {
 // index, resolved through specs rather than the fixed colPID..colCPU
 // constants directly -- those still identify a column's meaning
 // (compareSamples, columnSpecsForKeys), just not its position once some
-// columns are hidden.
+// columns are hidden. marks is the panel's own selection (marks.go), which
+// makes the row a vtui.SelectableRow: Table paints a selected row in the
+// file panels' selected-file colours.
 type procRow struct {
 	s     sample
 	specs []columnSpec
+	marks markSet
 }
 
 func (r procRow) GetCellText(col int) string {
@@ -125,6 +130,8 @@ func (r procRow) GetCellText(col int) string {
 	}
 	return r.specs[col].cellText(r.s)
 }
+
+func (r procRow) IsSelected() bool { return r.marks.has(r.s.key()) }
 
 func formatRSSKiB(kb uint64) string {
 	switch {
@@ -147,27 +154,48 @@ func formatCPUPercent(p float64) string {
 // compareSamples orders two samples by one column's underlying numeric (or,
 // for Name, string) value. It backs vtui.Table.SortCompare: without it,
 // Table would fall back to comparing the columns' formatted display text,
-// which sorts "10.0" before "9.0".
+// which sorts "10.0" before "9.0". Names compare as the file panels compare
+// file names, ignoring case. A tie goes to the lower PID, so processes with
+// equal values -- the dozens idling at 0.0% CPU, a browser's helpers all
+// named alike -- keep one order from refresh to refresh instead of whatever
+// order the system enumerated them in this time.
 func compareSamples(a, b sample, col int) int {
+	c := 0
 	switch col {
 	case colPID:
 		return a.pid - b.pid
 	case colName:
-		switch {
-		case a.name < b.name:
-			return -1
-		case a.name > b.name:
-			return 1
-		default:
-			return 0
-		}
+		c = compareNames(a.name, b.name)
 	case colMem:
-		return compareUint64(a.rssKiB, b.rssKiB)
+		c = compareUint64(a.rssKiB, b.rssKiB)
 	case colCPU:
-		return compareFloat64(a.cpuPercent, b.cpuPercent)
+		c = compareFloat64(a.cpuPercent, b.cpuPercent)
 	default:
 		return 0
 	}
+	if c != 0 {
+		return c
+	}
+	return a.pid - b.pid
+}
+
+// compareNames orders names ignoring case, the way the file panels sort
+// file names; "Chrome" and "chrome" are a tie, for compareSamples' PID to
+// settle. It folds rune by rune instead of lowering whole strings, so the
+// sort that runs on every refresh allocates nothing.
+func compareNames(a, b string) int {
+	for len(a) > 0 && len(b) > 0 {
+		ca, wa := utf8.DecodeRuneInString(a)
+		cb, wb := utf8.DecodeRuneInString(b)
+		if la, lb := unicode.ToLower(ca), unicode.ToLower(cb); la != lb {
+			if la < lb {
+				return -1
+			}
+			return 1
+		}
+		a, b = a[wa:], b[wb:]
+	}
+	return len(a) - len(b)
 }
 
 func compareUint64(a, b uint64) int {
@@ -212,7 +240,7 @@ type procListPanel struct {
 	done      chan struct{}
 	stopOnce  sync.Once
 
-	// suspended tracks which pids this panel itself has SIGSTOPped, so
+	// suspended tracks which processes this panel itself has SIGSTOPped, so
 	// Ctrl+F8 (toggleSuspend, actions.go) knows whether to suspend or
 	// resume next. It is not a read of the process's real state: a process
 	// another tool stopped independently is not reflected here, and
@@ -220,7 +248,20 @@ type procListPanel struct {
 	// currently stopped" back from the OS either (unlike priority, which
 	// changePriority in actions_unix.go/actions_windows.go does read back
 	// before every change) -- see actions.go's own note on the same gap.
-	suspended map[int]bool
+	suspended map[procKey]bool
+
+	// marks is the selection (marks.go) and prevMarks the one before the
+	// last group change, which Ctrl+M brings back. shiftSession and
+	// shiftMark are a Shift+arrow run in progress and whether it selects;
+	// rightDrag, rightDragPos and rightMark the same for a drag with the
+	// right mouse button.
+	marks        markSet
+	prevMarks    markSet
+	shiftSession bool
+	shiftMark    bool
+	rightDrag    bool
+	rightDragPos int
+	rightMark    bool
 }
 
 // newProcListPanel builds one panel instance. store is ProcList.Config's
@@ -268,7 +309,9 @@ func newProcListPanel(ctx vfs.PanelContext, store *settingsStore) (vfs.PanelCont
 		store:     store,
 		stop:      make(chan struct{}),
 		done:      make(chan struct{}),
-		suspended: make(map[int]bool),
+		suspended: make(map[procKey]bool),
+		marks:     make(markSet),
+		prevMarks: make(markSet),
 	}
 	p.SetFocus(false)
 	p.SetPosition(ctx.Bounds[0], ctx.Bounds[1], ctx.Bounds[2], ctx.Bounds[3])
@@ -326,23 +369,40 @@ func (p *procListPanel) runOnUI(fn func()) {
 // already requires the host to call Open there), and loop only ever reaches
 // it through a task posted to RunOnUI, never directly from the background
 // goroutine.
+//
+// The cursor stays on its process, wherever the new snapshot sorts it, the
+// way a file panel keeps the cursor on its file across a re-read: under a
+// CPU% sort the rows move on every refresh, and a cursor left at its row
+// would land F3, F8 or the next Ins on whichever process moved in. Only when
+// the process is gone does the cursor keep its row.
 func (p *procListPanel) applySamples(samples []sample) {
 	p.syncColumns()
+	cursor, hadCursor := p.selectedSample()
 	rows := make([]vtui.TableRow, len(samples))
-	seen := make(map[int]bool, len(samples))
+	listed := make(map[procKey]bool, len(samples))
 	for i, s := range samples {
-		rows[i] = procRow{s: s, specs: p.specs}
-		seen[s.pid] = true
+		rows[i] = procRow{s: s, specs: p.specs, marks: p.marks}
+		listed[s.key()] = true
 	}
 	p.table.SetRows(rows)
-	// Forget a suspended pid once it is gone (exited, or simply not seen in
-	// this snapshot): a reused pid must not inherit a stale "resume" toggle
-	// meant for the process that used to have it.
-	for pid := range p.suspended {
-		if !seen[pid] {
-			delete(p.suspended, pid)
+	if hadCursor {
+		p.moveCursorTo(cursor.key())
+	}
+	// Forget a process once it is gone (exited, or simply not seen in this
+	// snapshot): a reused pid must not inherit a selection or a stale
+	// "resume" toggle meant for the process that used to have it.
+	for k := range p.suspended {
+		if !listed[k] {
+			delete(p.suspended, k)
 		}
 	}
+	p.marks.prune(listed)
+	p.prevMarks.prune(listed)
+	p.redraw()
+}
+
+// redraw asks for a repaint, where there is a screen to repaint.
+func (p *procListPanel) redraw() {
 	if vtui.FrameManager != nil {
 		vtui.FrameManager.Redraw()
 	}
@@ -404,7 +464,7 @@ func (p *procListPanel) syncColumns() bool {
 	rows := make([]vtui.TableRow, 0, len(p.table.Rows))
 	for _, r := range p.table.Rows {
 		if pr, ok := r.(procRow); ok {
-			rows = append(rows, procRow{s: pr.s, specs: specs})
+			rows = append(rows, procRow{s: pr.s, specs: specs, marks: p.marks})
 		}
 	}
 	p.table.SortColumn = sortCol
@@ -412,19 +472,55 @@ func (p *procListPanel) syncColumns() bool {
 	p.table.SetRows(rows)
 
 	if hadSelection {
-		for pos := 0; pos < p.table.ItemCount; pos++ {
-			idx := p.table.RowAt(pos)
-			if idx < 0 || idx >= len(p.table.Rows) {
-				continue
-			}
-			if pr, ok := p.table.Rows[idx].(procRow); ok && pr.s.pid == selected.pid {
-				p.table.SelectPos = pos
-				p.table.EnsureVisible()
-				break
-			}
-		}
+		p.moveCursorTo(selected.key())
 	}
 	return true
+}
+
+// eachShown calls fn for every row the table shows, top to bottom, with its
+// display position: every process, or only the QuickSearch matches while a
+// search is typed.
+func (p *procListPanel) eachShown(fn func(pos int, s sample)) {
+	for pos := 0; pos < p.table.ItemCount; pos++ {
+		if s, ok := p.sampleAt(pos); ok {
+			fn(pos, s)
+		}
+	}
+}
+
+// sampleAt is the process shown at display position pos.
+func (p *procListPanel) sampleAt(pos int) (sample, bool) {
+	if pos < 0 || pos >= p.table.ItemCount {
+		return sample{}, false
+	}
+	idx := p.table.RowAt(pos)
+	if idx < 0 || idx >= len(p.table.Rows) {
+		return sample{}, false
+	}
+	row, ok := p.table.Rows[idx].(procRow)
+	if !ok {
+		return sample{}, false
+	}
+	return row.s, true
+}
+
+// positionOf is the display position of the first shown process match
+// accepts, or -1.
+func (p *procListPanel) positionOf(match func(sample) bool) int {
+	for pos := 0; pos < p.table.ItemCount; pos++ {
+		if s, ok := p.sampleAt(pos); ok && match(s) {
+			return pos
+		}
+	}
+	return -1
+}
+
+// moveCursorTo puts the cursor on process k and scrolls it into view. It
+// leaves the cursor where it is when k is not shown.
+func (p *procListPanel) moveCursorTo(k procKey) {
+	if pos := p.positionOf(func(s sample) bool { return s.key() == k }); pos >= 0 {
+		p.table.SetSelectPos(pos)
+	}
 }
 
 func (p *procListPanel) SetPosition(x1, y1, x2, y2 int) {
@@ -463,12 +559,15 @@ var _ vfs.PanelKeyProvider = (*procListPanel)(nil)
 // panel-plugin key primitive (vfs.PanelKeyProvider, f4#312): F3 details (a
 // read-only snapshot, FAR3's own F3 gesture; showDetails, details.go), F8
 // kill (with confirmation, confirmKill in actions.go), Shift+F1/F2
-// lower/raise priority (FAR3's own bindings for the same thing), and Ctrl+F8
+// lower/raise priority (FAR3's own bindings for the same thing), Ctrl+F8
 // suspend/resume toggle -- new in f4, not in FAR3, and declared only where
 // suspendResumeSupported is true (linux/darwin; not Windows, which has no
-// supported API for it). Declaring them, rather than switching on them in
-// ProcessKey, is what makes the host run them ahead of the file panel's own
-// F3/F8/Shift+F1/F2 bindings and put their captions on the keybar.
+// supported API for it) -- and the sort keys Ctrl+F3..Ctrl+F7 and Ctrl+F12
+// (sort.go). Declaring them, rather than switching on them in ProcessKey, is
+// what makes the host run them ahead of the file panel's own bindings for
+// the same keys and put their captions on the keybar. The selection keys
+// are not declared: the file panels' own bindings for them stand down and
+// hand them to ProcessKey (marks.go).
 func (p *procListPanel) PanelKeys() []vfs.PanelKey {
 	keys := []vfs.PanelKey{
 		vfs.PanelHelpKey(i18n.Msg("KeyBar.F1"), func() string { return i18n.Msg("ProcList.HelpTitle") }, func() string { return i18n.Msg("ProcList.Help") }),
@@ -480,37 +579,64 @@ func (p *procListPanel) PanelKeys() []vfs.PanelKey {
 	if suspendResumeSupported {
 		keys = append(keys, vfs.PanelKey{VK: vtinput.VK_F8, Mods: vtinput.LeftCtrlPressed, Label: i18n.Msg("ProcList.KeyBar.Suspend"), Run: p.toggleSuspend})
 	}
+	keys = append(keys, p.sortPanelKeys()...)
+	// A declared key ends a Shift+arrow selecting run, as every other key
+	// does in ProcessKey: the host runs these without ProcessKey seeing them.
+	for i := range keys {
+		run := keys[i].Run
+		keys[i].Run = func() {
+			p.shiftSession = false
+			run()
+		}
+	}
 	return keys
 }
 
 // ProcessKey routes the declared PanelKeys first -- the host normally
 // dispatches them before the key ever gets here, but a host without the
 // PanelKeyProvider hook (and this package's tests) still reaches them --
-// and hands everything else to the table's own navigation/sort/quick-search
-// handling.
+// then the selection keys (marks.go), and hands everything else to the
+// table's own navigation/quick-search handling. Any key but the next step
+// of a Shift+arrow run ends the run.
 func (p *procListPanel) ProcessKey(e *vtinput.InputEvent) bool {
+	if e == nil {
+		return false
+	}
+	if e.KeyDown && !isShiftMarkKey(e) {
+		p.shiftSession = false
+	}
 	if vfs.DispatchPanelKey(p.PanelKeys(), e) {
+		return true
+	}
+	if p.processMarkKey(e) {
 		return true
 	}
 	return p.table.ProcessKey(e)
 }
 
-func (p *procListPanel) ProcessMouse(e *vtinput.InputEvent) bool { return p.table.ProcessMouse(e) }
+// ProcessMouse gives the right button to selection (marks.go) and the rest
+// to the table. A header click that changed the sort is followed up the way
+// the sort keys are (sortedByHeader).
+func (p *procListPanel) ProcessMouse(e *vtinput.InputEvent) bool {
+	if p.processMarkMouse(e) {
+		return true
+	}
+	sortCol, ascending := p.table.SortColumn, p.table.SortAscending
+	cursor, hadCursor := p.selectedSample()
+	handled := p.table.ProcessMouse(e)
+	if p.table.SortColumn != sortCol || p.table.SortAscending != ascending {
+		p.sortedByHeader(sortCol, cursor, hadCursor)
+	}
+	return handled
+}
 
 // selectedSample returns the sample under the cursor. It backs
 // GetSelectedName below and, from actions.go, every F8/Shift+F1/Shift+F2/
-// Ctrl+F8 handler: all of them act on "the process under the cursor" and
-// none can do anything useful with an empty table.
+// Ctrl+F8 handler with nothing selected: all of them then act on "the
+// process under the cursor" and none can do anything useful with an empty
+// table.
 func (p *procListPanel) selectedSample() (sample, bool) {
-	idx := p.table.RowAt(p.table.SelectPos)
-	if idx < 0 || idx >= len(p.table.Rows) {
-		return sample{}, false
-	}
-	row, ok := p.table.Rows[idx].(procRow)
-	if !ok {
-		return sample{}, false
-	}
-	return row.s, true
+	return p.sampleAt(p.table.SelectPos)
 }
 
 // GetSelectedName reports the name of the process under the cursor, the
@@ -535,16 +661,8 @@ func (p *procListPanel) RestorePanelState(state string) {
 	if state == "" {
 		return
 	}
-	for pos := 0; pos < p.table.ItemCount; pos++ {
-		idx := p.table.RowAt(pos)
-		if idx < 0 || idx >= len(p.table.Rows) {
-			continue
-		}
-		if pr, ok := p.table.Rows[idx].(procRow); ok && pr.s.name == state {
-			p.table.SelectPos = pos
-			p.table.EnsureVisible()
-			return
-		}
+	if pos := p.positionOf(func(s sample) bool { return s.name == state }); pos >= 0 {
+		p.table.SetSelectPos(pos)
 	}
 }
 
@@ -553,6 +671,7 @@ func (p *procListPanel) Show(scr *vtui.ScreenBuf) {
 	p.frame.SetTitle(fmt.Sprintf(i18n.Msg("ProcList.PanelTitle"), p.table.ItemCount))
 	p.frame.Show(scr)
 	p.table.Show(scr)
+	p.drawSelectionSummary(scr)
 }
 
 func (p *procListPanel) Close() error {

@@ -14,7 +14,9 @@
 // Windows has no supported API for it. FAR3's ProcList also offers rich
 // metrics/handles/remote view built on WMI and undocumented NT APIs that
 // have no portable equivalent; the owner confirmed (f4#312) this plugin
-// should not attempt those at all.
+// should not attempt those at all. f4#2130 added the file panels' selection
+// gestures (marks.go), so F8, Shift+F1/F2 and Ctrl+F8 act on several
+// processes at once, and their Ctrl+F3..Ctrl+F7/Ctrl+F12 sorting (sort.go).
 //
 // It is also f4's first consumer of vfs.PanelProvider/PanelController
 // (vfs/contributions.go, internal/plughost/panel_providers.go): a plugin

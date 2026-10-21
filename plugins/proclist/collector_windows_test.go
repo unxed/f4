@@ -31,6 +31,11 @@ func TestCollectFindsTheCurrentProcess(t *testing.T) {
 			if s.name == "" {
 				t.Fatalf("sample for the current process has an empty name: %#v", s)
 			}
+			// This process can always open itself, so GetProcessTimes gives
+			// its creation time: procKey relies on it to tell a reused pid apart.
+			if s.start == 0 {
+				t.Fatalf("sample for the current process has no start time: %#v", s)
+			}
 			return
 		}
 	}
