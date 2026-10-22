@@ -215,9 +215,11 @@ if scenario('B08'):
 if scenario('P2000'):
     r = Run(edit='x.txt')
     t0 = time.time()
-    r.send(b'\x1b[200~' + lines2000 + b'\x1b[201~', wait=1)
+    nl = int(os.environ.get('P_LINES', '2000'))
+    body = ''.join('%d\n' % i for i in range(1, nl + 1)).encode()
+    r.send(b'\x1b[200~' + body + b'\x1b[201~', wait=1)
     r.send(F2, 0.1)
-    print('P2000 paste and F2 sent in %.1f s' % (time.time() - t0))
+    print('P2000 lines', nl, 'paste and F2 sent in %.1f s' % (time.time() - t0))
     p = r.work + '/x.txt'
     t_file = None
     def cpu(tag):
@@ -245,7 +247,7 @@ if scenario('P2000'):
                 for b in keep[:14]:
                     print('----'); print(b[:1500])
                 break
-        if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= 2000:
+        if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= nl:
             t_file = time.time() - t0
             break
     cpu('the file is ready')
@@ -272,3 +274,18 @@ if scenario('P2000'):
                 print('DUMP', f, len(txt))
                 keep = [b for b in txt.split('\n\n') if 'goroutine' in b and ('vtui' in b or 'vtinput' in b or 'f4/internal' in b) and 'IO wait' not in b[:80]]
                 print('\n\n'.join(keep)[:6000])
+
+if scenario('PCMD'):
+    r = Run()
+    t0 = time.time()
+    line = b'x' * 102400 + b'END'
+    r.send(b'\x1b[200~' + line + b'\x1b[201~', wait=1)
+    print('PCMD 100 KiB line sent in %.1f s' % (time.time() - t0))
+    seen = None
+    while time.time() - t0 < 120:
+        r.pump(1)
+        if r.has('END'):
+            seen = time.time() - t0
+            break
+    print('PCMD the end of the line is on screen after', ('%.1f s' % seen) if seen else 'never (120 s)')
+    r.kill()
