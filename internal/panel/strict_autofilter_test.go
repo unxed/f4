@@ -117,3 +117,27 @@ func TestFastFindRejectsCharacterWithoutMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestFastFindWildcardsMatchFilenamePrefixes(t *testing.T) {
+	fp := &FileSystemPanel{FastFindMode: true}
+	tests := []struct {
+		query string
+		name  string
+		want  bool
+	}{
+		{query: "*lo", name: "c.log", want: true},
+		{query: "te*t", name: "test.txt", want: true},
+		{query: "ab*cd", name: "abcd.txt", want: true},
+		{query: "ab*cd", name: "abXYZcd.txt", want: true},
+		{query: "te?t", name: "test.txt", want: true},
+		{query: "te?t", name: "teast.txt", want: false},
+		{query: "?айл", name: "файл", want: true},
+		{query: "[a]*", name: "[a]file", want: true},
+	}
+	for _, tt := range tests {
+		fp.FastFindStr = tt.query
+		if _, _, ok := fp.fastFindMatch(tt.name); ok != tt.want {
+			t.Errorf("query %q against %q matched=%t, want %t", tt.query, tt.name, ok, tt.want)
+		}
+	}
+}

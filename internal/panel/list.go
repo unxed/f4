@@ -3687,6 +3687,13 @@ func (fp *FileSystemPanel) fastFindScoredMatch(name string) (startRunes, matched
 		return 0, 0, 0, false
 	}
 	queryText := fp.FastFindStr
+	if strings.ContainsAny(queryText, "*?") {
+		matchedRunes, ok := fastFindWildcardPrefixMatch(queryText, name)
+		if !ok {
+			return 0, 0, 0, false
+		}
+		return 0, matchedRunes, 0, true
+	}
 	anywhere := strings.HasPrefix(queryText, "*")
 	if anywhere {
 		queryText = strings.TrimPrefix(queryText, "*")
@@ -3733,6 +3740,41 @@ func (fp *FileSystemPanel) fastFindScoredMatch(name string) (startRunes, matched
 		return 0, 0, 0, false
 	}
 	return bestStart, bestEnd - bestStart + 1, bestScore, true
+}
+
+// fastFindWildcardPrefixMatch applies quick-find's * and ? wildcards to a
+// filename prefix. The implicit trailing wildcard lets a partial pattern find
+// a name such as c.log from *lo; only '*' and '?' are special characters.
+func fastFindWildcardPrefixMatch(pattern, name string) (int, bool) {
+	patternRunes := []rune(strings.ToLower(pattern))
+	nameRunes := []rune(strings.ToLower(name))
+	patternIndex, nameIndex := 0, 0
+	starIndex, starNameIndex := -1, 0
+	for nameIndex < len(nameRunes) {
+		if patternIndex == len(patternRunes) {
+			return nameIndex, true
+		}
+		switch {
+		case patternIndex < len(patternRunes) &&
+			(patternRunes[patternIndex] == '?' || patternRunes[patternIndex] == nameRunes[nameIndex]):
+			patternIndex++
+			nameIndex++
+		case patternIndex < len(patternRunes) && patternRunes[patternIndex] == '*':
+			starIndex = patternIndex
+			starNameIndex = nameIndex
+			patternIndex++
+		case starIndex >= 0:
+			patternIndex = starIndex + 1
+			starNameIndex++
+			nameIndex = starNameIndex
+		default:
+			return 0, false
+		}
+	}
+	for patternIndex < len(patternRunes) && patternRunes[patternIndex] == '*' {
+		patternIndex++
+	}
+	return nameIndex, patternIndex == len(patternRunes)
 }
 
 func (fp *FileSystemPanel) fastFindHasMatches() bool {
