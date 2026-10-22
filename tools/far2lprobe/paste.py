@@ -191,7 +191,7 @@ if scenario('B04'):
 if scenario('B05'):
     cmd_paste('B05 echo pasted with the panels active', b'echo pasted')
 if scenario('B07c'):
-    line = b'x' * 102400 + b'END'
+    line = b'x' * (1024 * int(os.environ.get('PCMD_KB', '100'))) + b'END'
     r = Run()
     dt = r.paste(line, 3)
     print('B07 100 KiB single line into the command line: paste+settle %.1f s, tail visible: %s' % (dt, r.has('END')))
@@ -286,7 +286,7 @@ if scenario('P2000'):
 if scenario('PCMD'):
     r = Run()
     t0 = time.time()
-    line = b'x' * 102400 + b'END'
+    line = b'x' * (1024 * int(os.environ.get('PCMD_KB', '100'))) + b'END'
     r.send(b'\x1b[200~' + line + b'\x1b[201~', wait=1)
     print('PCMD 100 KiB line sent in %.1f s' % (time.time() - t0))
     seen = None
@@ -302,4 +302,16 @@ if scenario('PCMD'):
         blocks = [b for b in txt.split('\n\n') if 'goroutine' in b and ('vtui' in b or 'f4/internal' in b) and 'IO wait' not in b[:80]]
         print('\n\n'.join(blocks)[:5000])
         print('PCMD WATCHDOG HEAD', txt[:1500])
+    if os.environ.get('PCMD_EXIT'):
+        for i in range(30):
+            r.send(F10, 1)
+            r.send(b'y', 1)
+            r.send(b'\r', 1)
+            try:
+                pid_, st = os.waitpid(r.pid, os.WNOHANG)
+            except OSError:
+                pid_ = r.pid
+            if pid_:
+                print('PCMD the program ended')
+                break
     r.kill()
