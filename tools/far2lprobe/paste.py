@@ -232,7 +232,7 @@ if scenario('P2000'):
         r.pump(1)
         if dumped < 2 and time.time() - t0 > 8 + 12 * dumped:
             cpu('%.0f s' % (time.time() - t0)); dumped += 1
-            if dumped == 2:
+            if False:
                 os.kill(r.pid, signal.SIGQUIT)
                 r.pump(3)
                 txt = bytes(r.raw).decode('utf-8', 'replace')
