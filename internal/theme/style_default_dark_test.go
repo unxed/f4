@@ -113,18 +113,18 @@ func TestDefaultDarkStyle_EditorAndViewerUsePanelBackground(t *testing.T) {
 	}
 	_, panelBg := GetColorRGBBoth(vtui.Palette[ColPanelText])
 	cases := map[string]int{
-		"Viewer.Text":             ColViewerText,
-		"Editor.Text":             ColEditorText,
-		"Editor.Scrollbar":        ColEditorScrollbar,
-		"Editor.WrapMark":          ColEditorWrapMark,
-		"Editor.Syntax.Comment":   ColEditorSyntaxComment,
-		"Editor.Syntax.Keyword":   ColEditorSyntaxKeyword,
-		"Editor.Syntax.String":    ColEditorSyntaxString,
-		"Editor.Syntax.Number":    ColEditorSyntaxNumber,
-		"Editor.Syntax.Operator":  ColEditorSyntaxOperator,
+		"Viewer.Text":            ColViewerText,
+		"Editor.Text":            ColEditorText,
+		"Editor.Scrollbar":       ColEditorScrollbar,
+		"Editor.WrapMark":        ColEditorWrapMark,
+		"Editor.Syntax.Comment":  ColEditorSyntaxComment,
+		"Editor.Syntax.Keyword":  ColEditorSyntaxKeyword,
+		"Editor.Syntax.String":   ColEditorSyntaxString,
+		"Editor.Syntax.Number":   ColEditorSyntaxNumber,
+		"Editor.Syntax.Operator": ColEditorSyntaxOperator,
 		"Editor.Syntax.Function": ColEditorSyntaxFunction,
-		"Editor.Syntax.Variable":  ColEditorSyntaxVariable,
-		"Editor.Syntax.Heading":   ColEditorSyntaxHeading,
+		"Editor.Syntax.Variable": ColEditorSyntaxVariable,
+		"Editor.Syntax.Heading":  ColEditorSyntaxHeading,
 	}
 	for name, index := range cases {
 		if _, bg := GetColorRGBBoth(vtui.Palette[index]); bg != panelBg {
