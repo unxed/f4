@@ -216,18 +216,26 @@ if scenario('P2000'):
     r = Run(edit='x.txt')
     t0 = time.time()
     r.send(b'\x1b[200~' + lines2000 + b'\x1b[201~', wait=1)
-    r.send(F2, 0.1); r.send(F10, 0.1); r.send(F10, 0.1); r.send(b'n', 0.1)
-    print('P2000 paste and the keys after it sent in %.1f s' % (time.time() - t0))
-    done = None
-    while time.time() - t0 < 300:
-        r.pump(2)
+    r.send(F2, 0.1)
+    print('P2000 paste and F2 sent in %.1f s' % (time.time() - t0))
+    p = r.work + '/x.txt'
+    t_file = None
+    while time.time() - t0 < 280:
+        r.pump(1)
+        if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= 2000:
+            t_file = time.time() - t0
+            break
+    print('P2000 the file has 2000 lines after', ('%.1f s' % t_file) if t_file else 'never (280 s)')
+    for i in range(30):
+        r.send(F10, 1)
+        r.send(b'n', 1)
+        r.send(ESC, 1)
         try:
             pid_, st = os.waitpid(r.pid, os.WNOHANG)
         except OSError:
             pid_ = r.pid
         if pid_:
-            done = time.time() - t0
+            print('P2000 the program ended %.1f s after the start' % (time.time() - t0))
             break
-    print('P2000 the program ended after %s s' % ('%.1f' % done if done else 'more than 300'))
-    p = r.work + '/x.txt'
-    print('P2000 file lines:', open(p, 'rb').read().count(b'\n') if os.path.exists(p) else 'no file')
+    else:
+        print('P2000 the program did not end')
