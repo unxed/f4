@@ -296,4 +296,10 @@ if scenario('PCMD'):
             seen = time.time() - t0
             break
     print('PCMD the end of the line is on screen after', ('%.1f s' % seen) if seen else 'never (120 s)')
+    for f in sorted(glob.glob(r.home + '/**/stall-watchdog*', recursive=True)):
+        txt = open(f, errors='replace').read()
+        print('PCMD WATCHDOG', f, len(txt))
+        blocks = [b for b in txt.split('\n\n') if 'goroutine' in b and ('vtui' in b or 'f4/internal' in b) and 'IO wait' not in b[:80]]
+        print('\n\n'.join(blocks)[:5000])
+        print('PCMD WATCHDOG HEAD', txt[:1500])
     r.kill()
