@@ -30,6 +30,7 @@ class Run:
         self.stream = pyte.ByteStream(self.screen)
         self.seen = 0
         self.raw = bytearray()
+        self.st = dict(read=0, feed=0.0, wait=0.0, wrote=0)
         self.pump(4)
 
     def pump(self, t, quiet=None):
@@ -64,18 +65,24 @@ class Run:
         i = 0
         t_end = time.time() + 120
         while i < len(b) and time.time() < t_end:
+            tw = time.time()
             r, w, _ = select.select([self.fd], [self.fd], [], 0.05)
+            self.st['wait'] += time.time() - tw
             if self.fd in r:
                 try:
                     d = os.read(self.fd, 262144)
                 except OSError:
                     return
                 self.raw.extend(d)
+                tf = time.time()
                 self.stream.feed(d)
+                self.st['feed'] += time.time() - tf
+                self.st['read'] += len(d)
                 self.answer()
             if self.fd in w:
                 try:
                     i += os.write(self.fd, b[i:i + 4096])
+                    self.st['wrote'] = i
                 except BlockingIOError:
                     pass
         self.pump(wait, quiet=wait)
@@ -220,6 +227,7 @@ if scenario('P2000'):
     r.send(b'\x1b[200~' + body + b'\x1b[201~', wait=1)
     r.send(F2, 0.1)
     print('P2000 lines', nl, 'paste and F2 sent in %.1f s' % (time.time() - t0))
+    print('P2000 probe: f4 wrote %d bytes, feed into pyte took %.1f s, select wait %.1f s, probe wrote %d bytes' % (r.st['read'], r.st['feed'], r.st['wait'], r.st['wrote']))
     p = r.work + '/x.txt'
     t_file = None
     def cpu(tag):
