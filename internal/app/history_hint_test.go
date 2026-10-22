@@ -152,11 +152,15 @@ func TestActionFoldersHistoryInsertPersistsLock(t *testing.T) {
 	// Ins now also claims a folder bookmark slot (#407), so the bookmark
 	// table has to resolve inside a temp profile, not the developer's own.
 	setupPortableIni(t, "0")
-	hp := withTestHistoryProvider(t)
-	hp.SaveHistory("folders", []string{"C:\\newest", "C:\\older"})
 	pf := paneltest.SetupMockPanelsFrame(t)
 	defer pf.Close()
 	pf.ResizeConsole(120, 40)
+	// Finish panel reads before installing the provider: a prior test's
+	// asynchronous read must not append its current directory to this history.
+	paneltest.WaitForDirectoryLoads(t)
+	hp := withTestHistoryProvider(t)
+	t.Cleanup(func() { paneltest.WaitForDirectoryLoads(t) })
+	hp.SaveHistory("folders", []string{"C:\\newest", "C:\\older"})
 
 	actionFoldersHistory(pf)
 	menu := vtui.FrameManager.GetTopFrame().(*vtui.VMenu)
