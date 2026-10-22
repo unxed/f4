@@ -243,8 +243,9 @@ if scenario('P2000'):
     else:
         print('P2000 the program did not end')
     import glob
+    print('FILES', [x for x in glob.glob(r.home + '/**/*', recursive=True) if os.path.isfile(x)][:40])
     for f in sorted(glob.glob(r.home + '/**/*', recursive=True)):
-        if os.path.isfile(f) and 'crash' in f.lower():
+        if os.path.isfile(f):
             txt = open(f, errors='replace').read()
             if 'goroutine' in txt:
                 print('DUMP', f, len(txt))
