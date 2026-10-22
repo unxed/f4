@@ -220,8 +220,11 @@ if scenario('P2000'):
     print('P2000 paste and F2 sent in %.1f s' % (time.time() - t0))
     p = r.work + '/x.txt'
     t_file = None
+    dumped = 0
     while time.time() - t0 < 280:
         r.pump(1)
+        if dumped < 2 and time.time() - t0 > 8 + 12 * dumped:
+            os.kill(r.pid, signal.SIGUSR1); dumped += 1
         if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= 2000:
             t_file = time.time() - t0
             break
@@ -239,3 +242,11 @@ if scenario('P2000'):
             break
     else:
         print('P2000 the program did not end')
+    import glob
+    for f in sorted(glob.glob(r.home + '/**/*', recursive=True)):
+        if os.path.isfile(f) and 'crash' in f.lower():
+            txt = open(f, errors='replace').read()
+            if 'goroutine' in txt:
+                print('DUMP', f, len(txt))
+                keep = [b for b in txt.split('\n\n') if 'goroutine' in b and ('vtui' in b or 'vtinput' in b or 'f4/internal' in b) and 'IO wait' not in b[:80]]
+                print('\n\n'.join(keep)[:6000])
