@@ -219,6 +219,28 @@ func TestActionCalcDirSize_IgnoresParentRow(t *testing.T) {
 	actionCalcDirSize(nil, fsp, 0)
 }
 
+func TestCalculateDirSizeStats_DoesNotFollowDirectorySymlinks(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "dir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "data.bin"), []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(root, filepath.Join(dir, "cycle")); err != nil {
+		t.Skipf("cannot create directory symlink: %v", err)
+	}
+
+	got, err := calculateDirSizeStats(context.Background(), vfs.NewOSVFS(root), root, []string{"dir"}, nil)
+	if err != nil {
+		t.Fatalf("calculate directory size: %v", err)
+	}
+	if got.Files != 2 || got.Dirs != 1 {
+		t.Errorf("stats = files %d, dirs %d; want symlink leaf + data file, and one real directory", got.Files, got.Dirs)
+	}
+}
+
 type mockDeletionFailingVFS struct {
 	vfs.VFS
 	failedFiles  []string

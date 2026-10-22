@@ -36,6 +36,8 @@ To support features like word wrapping and fast navigation in the Editor, `f4` p
 
 `FindProgress.DirectoryTotalKnown`, `TotalDirs` and `CompletedDirs` estimate progress using the root's immediate traversable subdirectories. Each child contributes an equal share after its entire subtree has been visited; inaccessible children count as visited. Exclusions and symlink directories are omitted. Root files are searched before descending, without enumerating the whole tree ahead of time. A successful empty-root search reaches 100%; cancellation and errors do not. Remote finders that cannot supply a reliable total leave it unknown.
 
+Directory-size scans used by F3 also treat symlink directories as leaves, so a junction or other directory link is counted without walking its target. Copy/move pre-scans retain their separate behavior of following directory links.
+
 ## Why this matters for FISH+
 This architecture was specifically chosen to support the **FISH+** protocol (see [FISH+.md](FISH+.md)). By allowing operations to be partial, cancellable, and asynchronous, we can offload heavy computations (like searching or indexing) to the remote server while keeping the local `f4` instance lightweight and fast.
 
