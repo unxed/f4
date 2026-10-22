@@ -232,6 +232,19 @@ if scenario('P2000'):
         r.pump(1)
         if dumped < 2 and time.time() - t0 > 8 + 12 * dumped:
             cpu('%.0f s' % (time.time() - t0)); dumped += 1
+            if dumped == 2:
+                os.kill(r.pid, signal.SIGQUIT)
+                r.pump(3)
+                txt = bytes(r.raw).decode('utf-8', 'replace')
+                i = txt.find('SIGQUIT')
+                dump = txt[i:] if i >= 0 else ''
+                print('P2000 SIGQUIT dump found:', i >= 0, len(dump))
+                blocks = [b for b in dump.split('\n\n') if 'goroutine ' in b]
+                keep = [b for b in blocks if ('vtui' in b or 'vtinput' in b or 'f4/internal' in b or 'Sleep' in b or 'sleep' in b or 'semacquire' in b) and 'GOROOT/src/os/signal' not in b]
+                print('P2000 goroutines', len(blocks), 'kept', len(keep))
+                for b in keep[:14]:
+                    print('----'); print(b[:1500])
+                break
         if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= 2000:
             t_file = time.time() - t0
             break
