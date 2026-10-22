@@ -164,15 +164,15 @@ func TestKillSkipsATargetTheSnapshotNoLongerLists(t *testing.T) {
 	defer stopHelper(cmd)
 	original := helperSample(cmd, "sleep")
 	original.start = 1
-	p.applySamples([]sample{original, ghost(0)})
-	selectAll(p, original, ghost(0))
+	p.applySamples([]sample{original})
+	selectAll(p, original)
 
 	p.confirmKill()
 	btnKill, _ := killDialogButtons(t, killDialog(t))
 	// Meanwhile the pid turns out to belong to a process started later.
 	reused := original
 	reused.start = 2
-	p.applySamples([]sample{reused, ghost(0)})
+	p.applySamples([]sample{reused})
 	btnKill.OnClick()
 
 	exited := make(chan struct{})
