@@ -220,19 +220,22 @@ if scenario('P2000'):
     print('P2000 paste and F2 sent in %.1f s' % (time.time() - t0))
     p = r.work + '/x.txt'
     t_file = None
+    def cpu(tag):
+        try:
+            f = open('/proc/%d/stat' % r.pid).read().split(') ')[1].split()
+            print('P2000 CPU of f4 at %s: utime=%d stime=%d ticks (100/s)' % (tag, int(f[11]), int(f[12])))
+        except Exception as e:
+            print('P2000 no stat', e)
     dumped = 0
+    cpu('start')
     while time.time() - t0 < 280:
         r.pump(1)
         if dumped < 2 and time.time() - t0 > 8 + 12 * dumped:
-            os.kill(r.pid, signal.SIGUSR1); dumped += 1
+            cpu('%.0f s' % (time.time() - t0)); dumped += 1
         if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= 2000:
             t_file = time.time() - t0
             break
-    try:
-        f = open('/proc/%d/stat' % r.pid).read().split(') ')[1].split()
-        print('P2000 CPU of f4: utime=%d stime=%d ticks (100/s), threads=%s' % (int(f[11]), int(f[12]), f[17]))
-    except Exception as e:
-        print('P2000 no stat', e)
+    cpu('the file is ready')
     print('P2000 the file has 2000 lines after', ('%.1f s' % t_file) if t_file else 'never (280 s)')
     for i in range(30):
         r.send(F10, 1)
