@@ -216,11 +216,18 @@ if scenario('P2000'):
     r = Run(edit='x.txt')
     t0 = time.time()
     r.send(b'\x1b[200~' + lines2000 + b'\x1b[201~', wait=1)
-    print('P2000 paste of 2000 lines sent in %.1f s' % (time.time() - t0))
-    r.pump(150, quiet=8)
-    print('P2000 output idle after %.1f s' % (time.time() - t0))
-    r.show('P2000 after paste', 4, top=True)
-    r.send(F2, 5); r.send(F10, 3); r.send(F10, 2)
+    r.send(F2, 0.1); r.send(F10, 0.1); r.send(F10, 0.1); r.send(b'n', 0.1)
+    print('P2000 paste and the keys after it sent in %.1f s' % (time.time() - t0))
+    done = None
+    while time.time() - t0 < 300:
+        r.pump(2)
+        try:
+            pid_, st = os.waitpid(r.pid, os.WNOHANG)
+        except OSError:
+            pid_ = r.pid
+        if pid_:
+            done = time.time() - t0
+            break
+    print('P2000 the program ended after %s s' % ('%.1f' % done if done else 'more than 300'))
     p = r.work + '/x.txt'
     print('P2000 file lines:', open(p, 'rb').read().count(b'\n') if os.path.exists(p) else 'no file')
-    r.kill()
