@@ -228,6 +228,11 @@ if scenario('P2000'):
         if os.path.exists(p) and open(p, 'rb').read().count(b'\n') >= 2000:
             t_file = time.time() - t0
             break
+    try:
+        f = open('/proc/%d/stat' % r.pid).read().split(') ')[1].split()
+        print('P2000 CPU of f4: utime=%d stime=%d ticks (100/s), threads=%s' % (int(f[11]), int(f[12]), f[17]))
+    except Exception as e:
+        print('P2000 no stat', e)
     print('P2000 the file has 2000 lines after', ('%.1f s' % t_file) if t_file else 'never (280 s)')
     for i in range(30):
         r.send(F10, 1)
