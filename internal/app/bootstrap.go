@@ -1099,6 +1099,7 @@ func InitCore() *vtui.ScreenBuf {
 	scr.AllocBuf(width, height)
 
 	vtui.FrameManager.Init(scr)
+	vfs.EnableElevationPrompt()
 
 	// Only this console path may pick the first-start style from the console:
 	// the GUI window draws in true colour whatever the process's console is.

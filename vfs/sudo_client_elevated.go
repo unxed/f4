@@ -19,10 +19,21 @@ var launchElevated = LaunchElevatedDispatcher
 // listen once UAC was asked: the user has to read and answer the prompt.
 var elevatedConnectTimeout = 2 * time.Minute
 
+// declineElevation is the safe default until the application explicitly
+// enables prompts after initializing its UI.
+func declineElevation() (agree, remember bool) { return false, false }
+
 // confirmElevation asks the user whether to retry an operation as
 // administrator before UAC is asked, and whether to keep the rights until f4
-// exits; a variable so a test can answer it.
-var confirmElevation = askElevationOnUI
+// exits; a variable so a test can answer it. Processes without a UI must not
+// enqueue a dialog that nobody can handle and wait for the timeout.
+var confirmElevation = declineElevation
+
+// EnableElevationPrompt switches UAC confirmation to the UI dialog. The app
+// calls this only after FrameManager.Init has started the UI task pump.
+func EnableElevationPrompt() {
+	confirmElevation = askElevationOnUI
+}
 
 // ErrElevationDeclined: the user did not agree to elevate.
 var ErrElevationDeclined = errors.New("elevation declined")

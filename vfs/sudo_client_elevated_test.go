@@ -124,9 +124,12 @@ func TestSudoClientAsksBeforeUACOncePerSession(t *testing.T) {
 // agrees, closing it does not.
 func TestAskElevationOnUIWaitsForTheAnswer(t *testing.T) {
 	oldFM := vtui.FrameManager
+	oldConfirm := confirmElevation
 	t.Cleanup(func() { vtui.FrameManager = oldFM })
+	t.Cleanup(func() { confirmElevation = oldConfirm })
 	vtui.FrameManager = &vtui.FrameManagerType{}
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	EnableElevationPrompt()
 
 	type answer struct{ agree, remember bool }
 	for _, tc := range []struct {
@@ -142,7 +145,7 @@ func TestAskElevationOnUIWaitsForTheAnswer(t *testing.T) {
 		got := make(chan answer, 1)
 		before := vtui.FrameManager.GetTopFrame()
 		go func() {
-			agree, remember := askElevationOnUI()
+			agree, remember := confirmElevation()
 			got <- answer{agree, remember}
 		}()
 		var dlg *vtui.Window
@@ -181,5 +184,31 @@ func TestAskElevationOnUIWaitsForTheAnswer(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("answer %d did not reach the caller", tc.code)
 		}
+	}
+}
+
+func TestSudoClientWithoutUIDeclinesElevationImmediately(t *testing.T) {
+	oldConfirm, oldLaunch := confirmElevation, launchElevated
+	t.Cleanup(func() { confirmElevation, launchElevated = oldConfirm, oldLaunch })
+	confirmElevation = declineElevation
+	launches := 0
+	launchElevated = func(string, string, string) error {
+		launches++
+		return nil
+	}
+
+	c := &SudoClient{appPath: "f4.exe"}
+	started := time.Now()
+	c.mu.Lock()
+	err := c.connectElevatedLocked()
+	c.mu.Unlock()
+	if !errors.Is(err, ErrElevationDeclined) {
+		t.Fatalf("connect without a UI = %v, want elevation declined", err)
+	}
+	if launches != 0 {
+		t.Errorf("started the elevated dispatcher %d times after declining", launches)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Errorf("declining without a UI took %v, want an immediate refusal", elapsed)
 	}
 }
