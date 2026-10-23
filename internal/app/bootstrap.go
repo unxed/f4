@@ -1099,7 +1099,6 @@ func InitCore() *vtui.ScreenBuf {
 	scr.AllocBuf(width, height)
 
 	vtui.FrameManager.Init(scr)
-	vfs.EnableElevationPrompt()
 
 	// Only this console path may pick the first-start style from the console:
 	// the GUI window draws in true colour whatever the process's console is.
@@ -1130,6 +1129,7 @@ func SetupUI() {
 // colour style to start with in place of the built-in default. It is asked only
 // when no settings.ini has chosen a style (issue #513).
 func setupUI(firstRunStyle func() (string, bool)) {
+	vfs.EnableElevationPrompt()
 	configureUnicodeInput()
 	vtui.ConfigDiskLogging(os.Getenv("VTUI_DEBUG") != "")
 	vtui.DebugLog("=== F4 STARTUP [%s] PID:%d ===", getFormattedVersionInfo(), os.Getpid())
