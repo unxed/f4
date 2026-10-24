@@ -2407,9 +2407,13 @@ func actionCalcDirSize(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel, idx in
 	basePath := fsp.Vfs.GetPath()
 
 	var targetPath = fsp.Vfs.Join(basePath, name)
+	scanOpts := vfs.ScanOptions{FollowSymlinkDirs: false}
+	if vfs.LinkKindOf(&entry.VFSItem) == vfs.LinkJunction {
+		scanOpts.FollowRootSymlinkDirs = true
+	}
 	actionRunSizeScan(pf, fsp,
 		func(ctx context.Context, cb vfs.ScanCallback) (vfs.OpStats, error) {
-			return vfs.CalculateStatsWithOptions(ctx, fsp.Vfs, targetPath, []string{""}, vfs.ScanOptions{FollowSymlinkDirs: false}, cb)
+			return vfs.CalculateStatsWithOptions(ctx, fsp.Vfs, targetPath, []string{""}, scanOpts, cb)
 		},
 		func(totalStats vfs.OpStats) {
 			entry.Size = totalStats.FilesSize(config.App.DirSizeCountsFolders)

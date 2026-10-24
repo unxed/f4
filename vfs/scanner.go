@@ -89,6 +89,9 @@ type ScanOptions struct {
 	// the symlink as a leaf, counting it once with its own tiny
 	// size, matching what `find` and far2l report.
 	FollowSymlinkDirs bool
+	// FollowRootSymlinkDirs allows the scan roots to be followed even when
+	// FollowSymlinkDirs is false. Descendant symlink directories remain leaves.
+	FollowRootSymlinkDirs bool
 	// DedupInodes tells the scanner to skip any entry whose
 	// (Device, Inode) pair has already been seen in this walk — the
 	// far2l behaviour (see far2l/src/dirinfo.cpp:120 ScannedINodes).
@@ -259,7 +262,7 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	// target. Only fires when the caller opted out of the historical
 	// follow-through — copy/move pre-scans still recurse because the
 	// actual copy path recurses.
-	if item.IsSymlink && !opts.FollowSymlinkDirs {
+	if item.IsSymlink && !opts.FollowSymlinkDirs && !(depth == 0 && opts.FollowRootSymlinkDirs) {
 		stats.Files++
 		if item.Size == 0 && !item.SizeKnown {
 			stats.UnknownSizeFiles++
