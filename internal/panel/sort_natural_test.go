@@ -140,6 +140,11 @@ func TestNaturalCompareNameCollation(t *testing.T) {
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("sorted = %v, want %v", names, want)
 	}
+	for _, pair := range [][2]string{{"!", "\""}, {"\"", "#"}, {"#", "$"}, {"$", "%"}, {"%", "&"}, {"&", "_"}} {
+		if got := compare(pair[0], pair[1]); got >= 0 {
+			t.Errorf("newNamePrimaryComparer(%q, %q) = %d, want ASCII order", pair[0], pair[1], got)
+		}
+	}
 	if got := naturalCompare("Track_2", "track_10", compare); got >= 0 {
 		t.Errorf("naturalCompare(Track_2, track_10) = %d, want < 0", got)
 	}

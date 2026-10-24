@@ -32,7 +32,10 @@ func newNamePrimaryComparer() func(a, b string) int {
 				continue
 			}
 			if isASCIIPunctuation(ra[i]) && isASCIIPunctuation(rb[i]) {
-				return cmpInt(int(ra[i]), int(rb[i]))
+				if ra[i] < rb[i] {
+					return -1
+				}
+				return 1
 			}
 			// Preserve root collation for every difference except two ASCII
 			// punctuation characters, whose numeric-sort order is by code point.
