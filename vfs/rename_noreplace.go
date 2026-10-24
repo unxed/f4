@@ -81,6 +81,15 @@ func renameNoReplacePortable(oldPath, newPath string) error {
 		}
 		if err := os.Rename(oldPath, newPath); err != nil {
 			_ = os.Remove(newPath)
+			// Some filesystems (notably eCryptfs) reject renaming a directory
+			// over the empty directory used as our reservation. Retry once the
+			// reservation is gone, but only if the destination is still absent.
+			if errors.Is(err, os.ErrExist) {
+				if existsErr := destinationExists(newPath); existsErr != nil {
+					return existsErr
+				}
+				return os.Rename(oldPath, newPath)
+			}
 			return err
 		}
 		return nil
