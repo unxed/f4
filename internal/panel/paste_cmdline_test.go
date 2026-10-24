@@ -44,6 +44,34 @@ func TestPasteIntoCommandLineCRIsNotEnter(t *testing.T) {
 	}
 }
 
+func TestTerminalPasteForwardsCarriageReturn(t *testing.T) {
+	for _, bracketed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "plain", true: "bracketed"}[bracketed], func(t *testing.T) {
+			f := newIssue2049Fixture(t)
+			f.pf.ShowPanels = false
+			f.pf.Executing = true
+			pty := &mockPty{}
+			f.pf.Pty = pty
+			f.pf.TermView.BracketedPasteMode = bracketed
+
+			f.pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: true})
+			f.pf.ProcessKey(&vtinput.InputEvent{
+				Type: vtinput.KeyEventType, KeyDown: true, Char: '\r',
+				VirtualKeyCode: vtinput.VK_RETURN, IsLegacy: true, InputSource: "legacy_ctrl",
+			})
+			f.pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.PasteEventType, PasteStart: false})
+
+			want := "\r"
+			if bracketed {
+				want = "\x1b[200~\r\x1b[201~"
+			}
+			if got := pty.String(); got != want {
+				t.Fatalf("terminal paste bytes %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestPasteIntoCommandLineLFIsNotLost(t *testing.T) {
 	f := newIssue2049Fixture(t)
 	got := pasteInto(t, f,
