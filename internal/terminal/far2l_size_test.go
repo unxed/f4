@@ -44,6 +44,25 @@ func TestFar2lWindowMaxSizeReply(t *testing.T) {
 	}
 }
 
+func TestFar2lFKeyTitlesReplyFalseWhenNotDisplayed(t *testing.T) {
+	e := newSixelEnv(t)
+	stk := vtinput.Far2lStack{}
+	stk.PushU8('f')
+	for i := 0; i < 12; i++ {
+		stk.PushU8(0) // no title for this function key
+	}
+	stk.PushU8(1) // request id
+	e.p.Process([]byte("\x1b_far2l:" + base64.StdEncoding.EncodeToString(stk) + "\x07"))
+
+	reply := far2lAwaitReply(t, e)
+	if id := reply.PopU8(); id != 1 {
+		t.Fatalf("request id: got %d, want 1", id)
+	}
+	if shown := reply.PopU8(); shown != 0 {
+		t.Errorf("F-key titles reported as displayed (%d), want false", shown)
+	}
+}
+
 // The title is on top of the stack, the text under it.
 func TestFar2lNotificationOrder(t *testing.T) {
 	var gotTitle, gotText string

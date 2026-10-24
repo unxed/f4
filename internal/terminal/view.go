@@ -2324,10 +2324,10 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 		for i := 0; i < 12; i++ {
 			state := stk.PopU8()
 			if state != 0 {
-				_ = stk.PopString() // Just pop, we can ignore it for now or implement KeyBar update
+				_ = stk.PopString() // f4 does not display far2l titles in its key bar.
 			}
 		}
-		reply.PushU8(1)
+		reply.PushU8(0) // The titles are not displayed; report false.
 	case 'x': // Extra features
 		feats := stk.PopU64()
 		tv.far2lCompactInput.Store(tv.far2lExtensionsOn.Load() && feats&far2lFeatCompactInput != 0)
