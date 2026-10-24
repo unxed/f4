@@ -502,6 +502,9 @@ func (pf *PanelsFrame) reportProcessEnvironmentShellFailure() {
 }
 
 func (pf *PanelsFrame) WritePTY(pty terminal.PtyBackend, data []byte) (int, error) {
+	if bytes.ContainsAny(data, "\r\n") || bytes.Equal(data, []byte("\x1b[200~")) || bytes.Equal(data, []byte("\x1b[201~")) {
+		vtui.DebugLog("F4#2180 WritePTY input bytes: % x (%q)", data, data)
+	}
 	if pf.Parser != nil && bytes.HasPrefix(data, terminal.WindowsSyncCommandPrefix) {
 		pf.Parser.ExpectWindowsSyncEcho()
 	}
