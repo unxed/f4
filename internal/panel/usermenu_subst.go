@@ -162,7 +162,7 @@ func SubstFileName(cmd string, ctx *SubstContext) SubstResult {
 			// The closing '!' can also open the next token: in `!\\!.!`,
 			// it starts the `!.!` filename token rather than closing `!\\!`.
 			if strings.HasPrefix(rest[2:], "!.!") {
-				out.WriteString(panel.CurDir)
+				out.WriteString(addTrailingPathSeparator(panel.CurDir))
 				i += 2
 				continue
 			}
@@ -301,6 +301,19 @@ func trimTrailingSlash(dir string) string {
 		return dir[:len(dir)-1]
 	}
 	return dir
+}
+
+// addTrailingPathSeparator keeps directory and filename substitutions in a
+// combined path separate, regardless of whether the panel path is Unix- or
+// Windows-shaped (the host running f4 may not match the VFS path style).
+func addTrailingPathSeparator(dir string) string {
+	if dir == "" || strings.HasSuffix(dir, "/") || strings.HasSuffix(dir, "\\") {
+		return dir
+	}
+	if strings.Contains(dir, "\\") {
+		return dir + "\\"
+	}
+	return dir + "/"
 }
 
 func marked(p *PanelSnapshot) []string {

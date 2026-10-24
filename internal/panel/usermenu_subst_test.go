@@ -36,6 +36,18 @@ func TestSubstFileName_Tokens(t *testing.T) {
 	}
 }
 
+func TestSubstFileName_DirectoryThenFilenameWindowsPaths(t *testing.T) {
+	ctx := &SubstContext{
+		Active:  PanelSnapshot{CurDir: `D:\Tes`, CurrentFile: "test_merge1_a.cpp"},
+		Passive: PanelSnapshot{CurDir: `D:\Test`, CurrentFile: "test_merge1_b.cpp"},
+	}
+	got := SubstFileName(`echo meld.exe "!\!.!" "!#!\!.!"`, ctx)
+	want := `echo meld.exe "D:\Tes\test_merge1_a.cpp" "D:\Test\test_merge1_b.cpp"`
+	if got.Command != want {
+		t.Fatalf("SubstFileName() = %q, want %q", got.Command, want)
+	}
+}
+
 func TestTrimTrailingSlash(t *testing.T) {
 	cases := map[string]string{
 		"/mnt/data/": "/mnt/data",
