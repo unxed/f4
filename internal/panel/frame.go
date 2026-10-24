@@ -165,6 +165,17 @@ func (pf *PanelsFrame) InsertPathToCmdLine(path string) {
 	if path == "" {
 		return
 	}
+	quoted := quoteDroppedPath(path)
+	txt := pf.CmdLine.Edit.GetText()
+	if len(txt) > 0 && txt[len(txt)-1] != ' ' {
+		pf.CmdLine.InsertString(" ")
+	}
+	pf.CmdLine.InsertString(quoted)
+}
+
+// quoteDroppedPath quotes one dropped path using the same shell rules as the
+// command-line drop target, for insertion into either the command line or PTY.
+func quoteDroppedPath(path string) string {
 	// A trailing separator is kept outside the quotes: it separates whatever
 	// the user types next, and inside a quoted Windows word a lone backslash
 	// right before the closing quote would escape that quote for the
@@ -192,11 +203,7 @@ func (pf *PanelsFrame) InsertPathToCmdLine(path string) {
 			}
 		}
 	}
-	txt := pf.CmdLine.Edit.GetText()
-	if len(txt) > 0 && txt[len(txt)-1] != ' ' {
-		pf.CmdLine.InsertString(" ")
-	}
-	pf.CmdLine.InsertString(quoted + trailing)
+	return quoted + trailing
 }
 
 // InsertDirPathToCmdLine inserts a directory path into the command line with

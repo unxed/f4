@@ -391,6 +391,31 @@ func TestIssue2049_DropOnCommandLineInsertsPaths(t *testing.T) {
 	}
 }
 
+func TestIssue2162_DropOnUnboundTerminalPastesQuotedPaths(t *testing.T) {
+	f := newIssue2049Fixture(t)
+	f.pf.ShowPanels = false
+	f.pf.Pty = &mockPty{}
+	f.pf.TermView.BracketedPasteMode = true
+	x1, y1, x2, y2 := f.pf.TermView.GetPosition()
+	x, y := (x1+x2)/2, (y1+y2)/2
+	path := filepath.Join(t.TempDir(), "a file's.txt")
+	paths := []string{f.source, path}
+	event := &vtui.DragEvent{
+		Phase: vtui.DragDrop, X: x, Y: y,
+		Allowed: vtui.DropCopy | vtui.DropMove, Suggested: vtui.DropMove,
+		Payload: vtui.DragPayload{Paths: paths},
+	}
+
+	if got := f.pf.HandleDrag(event); got != vtui.DropCopy {
+		t.Fatalf("drop on unbound terminal returned %s, want copy", got)
+	}
+	want := "\x1b[200~" + quoteDroppedPath(NormalizeExternalDropPath(paths[0])) + " " +
+		quoteDroppedPath(NormalizeExternalDropPath(paths[1])) + "\x1b[201~"
+	if got := f.pf.Pty.(*mockPty).String(); got != want {
+		t.Fatalf("terminal paste %q, want %q", got, want)
+	}
+}
+
 // Nothing dropped on the command line is moved: Shift does not make it a
 // move, and a source that offers nothing but a move is refused.
 func TestIssue2049_DropOnCommandLineNeverMoves(t *testing.T) {

@@ -118,7 +118,7 @@ func (s *dropFileSource) Close() {
 // panel is under the pointer and gets the drop instead.
 func (pf *PanelsFrame) terminalDropTarget(ev *vtui.DragEvent) (action vtui.DropAction, handled bool) {
 	tv := pf.TermView
-	if tv == nil || !tv.DropBound() {
+	if tv == nil {
 		return vtui.DropNone, false
 	}
 	if _, onPanel := pf.resolveDropTarget(ev.X, ev.Y); onPanel {
@@ -127,6 +127,31 @@ func (pf *PanelsFrame) terminalDropTarget(ev *vtui.DragEvent) (action vtui.DropA
 	x1, y1, x2, y2 := tv.GetPosition()
 	if ev.X < x1 || ev.X > x2 || ev.Y < y1 || ev.Y > y2 {
 		return vtui.DropNone, true
+	}
+	if !tv.DropBound() {
+		pty := pf.GetActivePTY()
+		if pty == nil || !ev.Allowed.Has(vtui.DropCopy) {
+			return vtui.DropNone, true
+		}
+		if ev.Phase != vtui.DragDrop {
+			return vtui.DropCopy, true
+		}
+		paths := make([]string, 0, len(ev.Payload.Paths))
+		for _, raw := range ev.Payload.Paths {
+			path := NormalizeExternalDropPath(raw)
+			if path != "" {
+				paths = append(paths, quoteDroppedPath(path))
+			}
+		}
+		if len(paths) == 0 {
+			return vtui.DropNone, true
+		}
+		paste := strings.Join(paths, " ")
+		if tv.BracketedPasteMode {
+			paste = "\x1b[200~" + paste + "\x1b[201~"
+		}
+		_, _ = pf.WritePTY(pty, []byte(paste))
+		return vtui.DropCopy, true
 	}
 	// The program only reads; nothing can be moved out of the user's files.
 	if !ev.Allowed.Has(vtui.DropCopy) {
