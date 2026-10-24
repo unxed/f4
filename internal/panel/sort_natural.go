@@ -15,6 +15,15 @@ func isASCIIDigit(r rune) bool {
 	return r >= '0' && r <= '9'
 }
 
+// isASCIIPunctuation reports ASCII punctuation and symbols, excluding digits
+// and letters. Numeric sort orders these by their ASCII code point.
+func isASCIIPunctuation(r rune) bool {
+	if r < '!' || r > '~' {
+		return false
+	}
+	return !isASCIIDigit(r) && !(r >= 'A' && r <= 'Z') && !(r >= 'a' && r <= 'z')
+}
+
 // splitDigitRuns splits s into alternating runs of non-digit and digit
 // characters. The result always starts with a (possibly empty) non-digit
 // run, so index parity tells the run's kind without looking at its content:

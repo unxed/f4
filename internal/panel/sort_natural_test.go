@@ -126,8 +126,8 @@ func TestNaturalCompare(t *testing.T) {
 
 func TestNaturalCompareNameCollation(t *testing.T) {
 	compare := newNamePrimaryComparer()
-	names := []string{"1", "2", "_1", "!Backup", "!tmp", "#1", "$RECYCLE.BIN", "Downloads", "Test", "VirtualBox"}
-	want := []string{"_1", "!Backup", "!tmp", "#1", "$RECYCLE.BIN", "1", "2", "Downloads", "Test", "VirtualBox"}
+	names := []string{"1", "2", "_1", "!Backup", "!tmp", "#1", "$RECYCLE.BIN", "Downloads", "Test", "VirtualBox", "!", "\"", "#", "$", "%", "&"}
+	want := []string{"!", "!Backup", "!tmp", "\"", "#", "#1", "$", "$RECYCLE.BIN", "%", "&", "_1", "1", "2", "Downloads", "Test", "VirtualBox"}
 	for i := 0; i < len(names); i++ {
 		for j := 0; j < len(names)-1-i; j++ {
 			// #nosec G602 -- j < len(names)-1-i guarantees j+1 < len(names); a
@@ -143,7 +143,7 @@ func TestNaturalCompareNameCollation(t *testing.T) {
 	if got := naturalCompare("Track_2", "track_10", compare); got >= 0 {
 		t.Errorf("naturalCompare(Track_2, track_10) = %d, want < 0", got)
 	}
-	for _, pair := range [][2]string{{"Track_2", "track_10"}, {"!Backup", "1"}, {"_1", "!Backup"}} {
+	for _, pair := range [][2]string{{"Track_2", "track_10"}, {"!Backup", "1"}, {"_1", "!Backup"}, {"!", "\""}, {"#", "$"}, {"%", "&"}} {
 		got := naturalCompare(pair[0], pair[1], compare)
 		swapped := naturalCompare(pair[1], pair[0], compare)
 		if sign(swapped) != -sign(got) {

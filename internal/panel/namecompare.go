@@ -21,5 +21,25 @@ func newNameComparer() func(a, b string) int {
 // then falls back to newNameComparer for a stable total order.
 func newNamePrimaryComparer() func(a, b string) int {
 	c := collate.New(language.Und, collate.IgnoreCase)
-	return c.CompareString
+	return func(a, b string) int {
+		ra, rb := []rune(a), []rune(b)
+		n := len(ra)
+		if len(rb) < n {
+			n = len(rb)
+		}
+		for i := 0; i < n; i++ {
+			if ra[i] == rb[i] {
+				continue
+			}
+			if isASCIIPunctuation(ra[i]) && isASCIIPunctuation(rb[i]) {
+				return cmpInt(int(ra[i]), int(rb[i]))
+			}
+			// Preserve root collation for every difference except two ASCII
+			// punctuation characters, whose numeric-sort order is by code point.
+			if c.CompareString(string(ra[i]), string(rb[i])) != 0 {
+				return c.CompareString(string(ra[i:]), string(rb[i:]))
+			}
+		}
+		return c.CompareString(a, b)
+	}
 }

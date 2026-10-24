@@ -3540,6 +3540,12 @@ func TestFileSystemPanel_SortNumeric(t *testing.T) {
 		&FileEntry{VFSItem: vfs.VFSItem{Name: "1"}},
 		&FileEntry{VFSItem: vfs.VFSItem{Name: "!Backup"}},
 		&FileEntry{VFSItem: vfs.VFSItem{Name: "_1"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "!"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "\""}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "#"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "$"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "%"}},
+		&FileEntry{VFSItem: vfs.VFSItem{Name: "&"}},
 	)
 	fp.SortNumeric = true
 	fp.SortEntries()
@@ -3547,7 +3553,7 @@ func TestFileSystemPanel_SortNumeric(t *testing.T) {
 	for i, entry := range fp.Entries[1:] {
 		gotNumeric[i] = entry.Name
 	}
-	wantNumeric = []string{"_1", "!Backup", "1", "1.Track_1", "2.Track_2", "10.Track_10"}
+	wantNumeric = []string{"!", "!Backup", "\"", "#", "$", "%", "&", "_1", "1", "1.Track_1", "2.Track_2", "10.Track_10"}
 	if !reflect.DeepEqual(gotNumeric, wantNumeric) {
 		t.Fatalf("numeric name sort = %v, want %v", gotNumeric, wantNumeric)
 	}

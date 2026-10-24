@@ -61,6 +61,9 @@ func newNamePrimaryComparer() func(a, b string) int {
 	return func(a, b string) int {
 		ra, rb := []rune(a), []rune(b)
 		for i := 0; i < len(ra) && i < len(rb); i++ {
+			if isASCIIPunctuation(ra[i]) && isASCIIPunctuation(rb[i]) && ra[i] != rb[i] {
+				return cmpInt(int(ra[i]), int(rb[i]))
+			}
 			ca, ka := nameRank(ra[i])
 			cb, kb := nameRank(rb[i])
 			if ca != cb {
