@@ -6873,19 +6873,21 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	}
 	// The caption sits in the rule itself, as the menu title does, and
 	// takes no row of its own (#1148).
-	menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Links")})
-	for index, bookmark := range driveBookmarks {
-		bookmark := bookmark
-		driveBookmarkRows[menu.GetItemCount()] = index
-		menu.AddItem(vtui.MenuItem{
-			Text: DriveBookmarkMenuText(bookmark),
-			// The global hot key stands at the right edge, as a menu shows
-			// the key of a command (f4#2171).
-			Shortcut: keymap.FormatKeyForUI(strings.TrimSpace(bookmark.GlobalHotkey)),
-			UserData: func(fsp *FileSystemPanel) {
-				pf.NavigateToBookmark(fsp, Bookmark{Path: bookmark.Path})
-			},
-		})
+	if !driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuHideLinks) {
+		menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Links")})
+		for index, bookmark := range driveBookmarks {
+			bookmark := bookmark
+			driveBookmarkRows[menu.GetItemCount()] = index
+			menu.AddItem(vtui.MenuItem{
+				Text: DriveBookmarkMenuText(bookmark),
+				// The global hot key stands at the right edge, as a menu shows
+				// the key of a command (f4#2171).
+				Shortcut: keymap.FormatKeyForUI(strings.TrimSpace(bookmark.GlobalHotkey)),
+				UserData: func(fsp *FileSystemPanel) {
+					pf.NavigateToBookmark(fsp, Bookmark{Path: bookmark.Path})
+				},
+			})
+		}
 	}
 
 	// A moved row reopens the menu: the old menu is closed in the same task

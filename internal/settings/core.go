@@ -48,7 +48,11 @@ func coreSettingValue(cfg config.F4Config, id string) string {
 	}
 	if strings.HasPrefix(id, "DriveMenuOptions.") {
 		bit, _ := strconv.Atoi(strings.TrimPrefix(id, "DriveMenuOptions."))
-		return strconv.FormatBool(cfg.DriveMenuOptions&(1<<bit) != 0)
+		value := cfg.DriveMenuOptions&(1<<bit) != 0
+		if id == driveMenuOptionFieldID("Drive.ShowLinks") {
+			value = !value
+		}
+		return strconv.FormatBool(value)
 	}
 	if id == "ConsoleMode" {
 		return terminal.ConsoleViewStyleOf(terminal.ShellModeConfig{ConsoleMode: cfg.ConsoleMode, ConsoleOverlayUI: cfg.ConsoleOverlayUI})
@@ -74,6 +78,9 @@ func setCoreSetting(cfg *config.F4Config, id, value string) error {
 	}
 	if strings.HasPrefix(id, "DriveMenuOptions.") {
 		bit, _ := strconv.Atoi(strings.TrimPrefix(id, "DriveMenuOptions."))
+		if id == driveMenuOptionFieldID("Drive.ShowLinks") {
+			value = strconv.FormatBool(value != "true")
+		}
 		if value == "true" {
 			cfg.DriveMenuOptions |= 1 << bit
 		} else {
@@ -146,10 +153,13 @@ func coreSettingsStaticFields() []f4settings.Field {
 	for i, label := range []string{"Command history timestamps", "Folder history timestamps", "Viewer/editor history timestamps"} {
 		fields = append(fields, f4settings.Field{ID: fmt.Sprintf("HistoryShowTimes.%d", i), Category: "history", Group: "Presentation", Label: f4settings.Text{English: label}, Description: f4settings.Text{English: "Choose the timestamp presentation independently for this history."}, Kind: f4settings.ChoiceKind, Choices: settingsChoices("0:Date and time;1:Date;2:None"), Timing: "new history dialogs"})
 	}
-	driveDescriptions := []string{"Add the drive-kind column.", "Display the filesystem volume label.", "This stored compatibility flag currently has no consumer.", "Display filesystem type.", "Display total and free capacity columns.", "Use fractional human-readable capacity instead of integer binary units.", "Display the mount target when different from the drive path.", "Include registered plugin drives and providers.", "Order plugin drive rows by their assigned shortcut.", "Include removable drives.", "Include optical drives.", "Include mapped and network drives.", "This stored compatibility flag has no consumer. SUBST detection runs independently.", "Include saved bookmarks and links."}
-	driveLabels := []string{"Show disk type", "Show disk label", "Use shell name", "Show file system type", "Show size", "Show size float", "Show network path", "Show tools", "Sort tools by hot key", "Show removable drive parameters", "Show CD drive parameters", "Show remote drive parameters", "Detect virtual drives", "Show bookmarks"}
+	driveDescriptions := []string{"Add the drive-kind column.", "Display the filesystem volume label.", "This stored compatibility flag currently has no consumer.", "Display filesystem type.", "Display total and free capacity columns.", "Use fractional human-readable capacity instead of integer binary units.", "Display the mount target when different from the drive path.", "Include registered plugin drives and providers.", "Order plugin drive rows by their assigned shortcut.", "Include removable drives.", "Include optical drives.", "Include mapped and network drives.", "This stored compatibility flag has no consumer. SUBST detection runs independently.", "Include saved bookmarks.", "Display the Links section in the drive menu."}
+	driveLabels := []string{"Show disk type", "Show disk label", "Use shell name", "Show file system type", "Show size", "Show size float", "Show network path", "Show tools", "Sort tools by hot key", "Show removable drive parameters", "Show CD drive parameters", "Show remote drive parameters", "Detect virtual drives", "Show bookmarks", "Show links"}
 	for i, spec := range panel.DriveMenuOptionSpecs {
 		f := f4settings.Field{ID: driveMenuOptionFieldID(spec.Label), Category: "drives", Group: "Drive entries", Label: f4settings.Text{English: driveLabels[i], Key: spec.Label}, Description: f4settings.Text{English: driveDescriptions[i]}, Kind: f4settings.Boolean, Timing: "next drive menu"}
+		if spec.Label == "Drive.ShowLinks" {
+			f.Description.Key = "Drive.ShowLinks.Description"
+		}
 		if i == 2 || i == 12 {
 			f.Unavailable = driveDescriptions[i]
 		}

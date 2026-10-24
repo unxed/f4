@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/unxed/f4/internal/action"
+	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/sysinfo"
@@ -903,5 +904,74 @@ func TestDriveBookmarksPageShowBookmarksSwitch(t *testing.T) {
 	check.OnChange(0)
 	if got := box.session.draft.Values[id]; got != "false" {
 		t.Errorf("draft value after unchecking = %q, want false", got)
+	}
+}
+
+// f4#1148: the Links page has its own visibility switch immediately above the
+// named-links box; this fails when the switch is missing from the catalog.
+func TestDriveLinksPageShowLinksSwitch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	if !OpenCategoryOnly("drives") {
+		t.Fatal("the window did not open")
+	}
+	c, ok := vtui.FrameManager.GetTopFrame().(*settingsCenter)
+	if !ok {
+		t.Fatalf("top frame is %T", vtui.FrameManager.GetTopFrame())
+	}
+	defer vtui.FrameManager.Pop()
+	c.SetPosition(0, 0, 129, 44)
+	id := driveMenuOptionFieldID("Drive.ShowLinks")
+
+	c.selectCategory(driveOptionsPage)
+	for _, row := range c.page.rows {
+		if row.field.ID == id {
+			t.Fatal("Show links is still on the Drive options page")
+		}
+	}
+
+	c.selectCategory(driveLinksPage)
+	var box, list *settingsRow
+	for _, row := range c.page.rows {
+		switch {
+		case row.field.ID == id:
+			box = row
+		case row.control != nil && row.control.GetId() == "collection:drive-links":
+			list = row
+		}
+	}
+	if box == nil || list == nil {
+		t.Fatalf("Links page: Show links %v, links list %v", box != nil, list != nil)
+	}
+	check, ok := box.control.(*settingsCheckbox)
+	if !ok {
+		t.Fatalf("Show links is a %T, want a check box", box.control)
+	}
+	if got := strings.TrimSpace(check.lines[0]); got != "Show links" {
+		t.Errorf("check box label = %q, want %q", got, "Show links")
+	}
+	if box.y >= list.y {
+		t.Fatalf("Show links (line %d) is not above the list (line %d)", box.y, list.y)
+	}
+	if gap := list.y - (box.y + box.height); gap != 1 {
+		t.Errorf("%d blank lines between Show links and the list, want 1", gap)
+	}
+
+	// An old options mask has no hide bit and therefore still shows links.
+	cfg := config.F4Config{}
+	if got := coreSettingValue(cfg, id); got != "true" {
+		t.Errorf("Show links for an old options mask = %q, want true", got)
+	}
+	if err := setCoreSetting(&cfg, id, "false"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DriveMenuOptions&config.DriveMenuHideLinks == 0 || coreSettingValue(cfg, id) != "false" {
+		t.Errorf("unchecking Show links did not persist: options=%b, value=%q", cfg.DriveMenuOptions, coreSettingValue(cfg, id))
+	}
+	if err := setCoreSetting(&cfg, id, "true"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DriveMenuOptions&config.DriveMenuHideLinks != 0 || coreSettingValue(cfg, id) != "true" {
+		t.Errorf("checking Show links did not persist: options=%b, value=%q", cfg.DriveMenuOptions, coreSettingValue(cfg, id))
 	}
 }

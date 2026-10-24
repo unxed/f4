@@ -292,6 +292,9 @@ const (
 	DriveMenuShowRemote
 	DriveMenuDetectVirtual
 	DriveMenuShowBookmarks
+	// Kept unset by default so profiles written before f4#1148 continue to show
+	// Links. Settings Center presents the inverse as "Show links".
+	DriveMenuHideLinks
 )
 
 const DefaultDriveMenuOptions = DriveMenuShowType |
