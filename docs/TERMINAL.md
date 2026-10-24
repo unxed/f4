@@ -235,6 +235,11 @@ panel switching between two live shells: the modes of the one being left stay
 on for the one being entered. Doing that properly means keeping the modes per
 session rather than per `TerminalView`.
 
+The far2l extensions have their own per-view active bit, set by `far2l1` and
+cleared by `far2l0`, the end of the shell command, and
+`ResetKeyboardProtocols`. The input path must consult this bit before selecting
+far2l event encoding; it must never carry over to the next command.
+
 ### The shell's kitty flags are scoped to its prompt (f4#1693)
 
 For a fresh local shell f4 turns on the kitty keyboard protocol's disambiguate flag itself (`KittyEnableDisambiguateSeq`), so that Ctrl+Tab can be told from Tab at the prompt. A bare readline-based shell does not ask for it, and neither does what it runs: `cat` or `ping` are not told that keys now arrive as `CSI u`, so Ctrl+C reached them as `CSI 99;5u` and was printed instead of interrupting. With the shell's OSC 133 marks the flags are now scoped to the prompt: `OSC 133;C` (a command starts) saves the flags and clears them, `OSC 133;D` (it ended) restores the shell's own and drops whatever the command left switched on. A program that speaks the protocol (far2l) asks for it itself after it started, so it keeps working. A shell without OSC 133 marks gets no such scoping: the flag stays on for the whole session. The key code of a Ctrl+letter is the letter (`CSI 99;5u` for Ctrl+C), never the control character (`3`); Ctrl+I, Ctrl+M and Ctrl+H keep the codes of Tab, Enter and Backspace.

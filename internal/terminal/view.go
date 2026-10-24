@@ -82,6 +82,10 @@ type TerminalView struct {
 	// cross-goroutine flags (syncEchoTracked/syncEchoArms in ansi.go).
 	KittyFlags      atomic.Int32
 	KittyFlagsStack []int
+	// far2lExtensionsOn is set by the child terminal program's far2l1/far2l0
+	// requests and will gate far2l input encoding. It is atomic because the ANSI
+	// parser and input handling run on different goroutines.
+	far2lExtensionsOn atomic.Bool
 	// kittyBeforeCommand and kittyCommandRunning scope the shell's own kitty
 	// flags to its prompt: they hold the flags in force when a command started
 	// (OSC 133;C) so that the command runs with none and the shell gets them
@@ -1893,6 +1897,7 @@ func (tv *TerminalView) ResetKeyboardProtocols() {
 	tv.Win32InputMode = false
 	tv.KittyFlags.Store(0)
 	tv.kittyCommandRunning.Store(false)
+	tv.far2lExtensionsOn.Store(false)
 	tv.ApplicationCursorKeys = false
 }
 
@@ -1951,10 +1956,12 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 	s = s[idx:]
 
 	if s == "far2l1" {
+		tv.far2lExtensionsOn.Store(true)
 		if tv.Pty != nil {
 			_, _ = tv.Pty.Write([]byte("\x1b_far2lok\x07"))
 		}
 	} else if s == "far2l0" {
+		tv.far2lExtensionsOn.Store(false)
 		// Switching the extensions off revokes every drop offer (§ 12 of
 		// the DnD specification).
 		tv.dndReset()
@@ -2121,6 +2128,7 @@ func (tv *TerminalView) HandleOSC133(payload string) {
 	} else if payload == "D" || strings.HasPrefix(payload, "D;") {
 		// Whatever the command left switched on is dropped, and the shell's
 		// own flags come back for its prompt.
+		tv.far2lExtensionsOn.Store(false)
 		if tv.kittyCommandRunning.Swap(false) {
 			tv.KittyFlags.Store(tv.kittyBeforeCommand.Load())
 		}

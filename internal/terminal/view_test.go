@@ -51,12 +51,18 @@ func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 
 	// Simulate far2l1 (enable)
 	tv.HandleFar2lAPC("far2l1")
+	if !tv.far2lExtensionsOn.Load() {
+		t.Fatal("far2l1 did not enable the extensions")
+	}
 	if string(Pty.written) != "\x1b_far2lok\x07" {
 		t.Errorf("Expected far2lok response, got %q", string(Pty.written))
 	}
 
 	// Simulate far2l0 (disable)
 	tv.HandleFar2lAPC("far2l0") // Should not panic or write anything
+	if tv.far2lExtensionsOn.Load() {
+		t.Fatal("far2l0 did not disable the extensions")
+	}
 
 	// Simulate window size Request via f2l
 	stk := vtinput.Far2lStack{}
@@ -80,6 +86,19 @@ func TestTerminalView_HandleFar2lAPC(t *testing.T) {
 		t.Errorf("Expected window size reply, got %q", written)
 	}
 }
+
+func TestTerminalView_Far2lExtensionsTurnOffWhenCommandEnds(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	tv.far2lExtensionsOn.Store(true)
+
+	tv.HandleOSC133("D")
+
+	if tv.far2lExtensionsOn.Load() {
+		t.Fatal("command end left far2l extensions enabled for the next shell prompt")
+	}
+}
+
 func TestTerminalView_HandleFar2lAPC_Garbage(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	defer tv.Close()
