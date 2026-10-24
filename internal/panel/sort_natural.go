@@ -21,7 +21,7 @@ func isASCIIPunctuation(r rune) bool {
 	if r < '!' || r > '~' {
 		return false
 	}
-	return !isASCIIDigit(r) && !(r >= 'A' && r <= 'Z') && !(r >= 'a' && r <= 'z')
+	return !(isASCIIDigit(r) || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z'))
 }
 
 // splitDigitRuns splits s into alternating runs of non-digit and digit
