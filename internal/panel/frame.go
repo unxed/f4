@@ -341,6 +341,10 @@ type PanelsFrame struct {
 	// managedExecSawBusy is set once PTY.IsBusy() has read true since arming:
 	// only then does a false reading mean "stopped" and not "not started yet".
 	managedExecSawBusy bool
+	// managedExecPollStop stops the ticker that keeps frames coming while a
+	// command runs (startManagedExecPoll); nil when it is not running. UI
+	// thread only.
+	managedExecPollStop chan struct{}
 
 	MenuBar *vtui.MenuBar
 	CmdLine *cmdline.CommandLine
@@ -1880,6 +1884,7 @@ func (pf *PanelsFrame) Close() {
 	if pf.terminalRedraw != nil {
 		pf.terminalRedraw.Stop()
 	}
+	pf.stopManagedExecPoll()
 	pf.CmdSession.close()
 	if pf.ShellMode == terminal.ShellModeHost && pf.IsHostConsoleActive() {
 		pf.LeaveHostConsole()
@@ -2508,6 +2513,59 @@ func (pf *PanelsFrame) armManagedExecDebounce() {
 	pf.managedExecStartedAt = time.Now()
 	pf.managedExecIdleStreak = 0
 	pf.managedExecSawBusy = false
+	pf.startManagedExecPoll()
+}
+
+// managedExecPollEvery is how often, while a command runs, the panels ask
+// for a frame of their own, so that pollManagedExecutionDebounce keeps
+// reading IsBusy() when nothing else draws: a stopped job prints nothing
+// more, and an idle window redraws on no timer (the GUI's 250 ms idle
+// redraw is gone with vtui#253, and the TTY never had one).
+const managedExecPollEvery = 250 * time.Millisecond
+
+// managedExecFrameRequest returns what the poll ticker calls to ask for a
+// frame. It reads vtui.FrameManager here, on the goroutine that starts the
+// ticker: the ticker outlives that call, and reading the global from it
+// races whatever reassigns it meanwhile. A variable so that tests count the
+// requests.
+var managedExecFrameRequest = func() func() {
+	fm := vtui.FrameManager
+	return func() {
+		if fm != nil {
+			fm.Redraw()
+		}
+	}
+}
+
+// startManagedExecPoll starts the ticker behind managedExecPollEvery unless
+// it is running. pollManagedExecutionDebounce stops it once the execution is
+// over, by whatever path that happened; Close stops it too.
+func (pf *PanelsFrame) startManagedExecPoll() {
+	if pf.managedExecPollStop != nil {
+		return
+	}
+	stop := make(chan struct{})
+	pf.managedExecPollStop = stop
+	requestFrame := managedExecFrameRequest()
+	go func() {
+		tick := time.NewTicker(managedExecPollEvery)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+				requestFrame()
+			}
+		}
+	}()
+}
+
+func (pf *PanelsFrame) stopManagedExecPoll() {
+	if pf.managedExecPollStop != nil {
+		close(pf.managedExecPollStop)
+		pf.managedExecPollStop = nil
+	}
 }
 
 // pollManagedExecutionDebounce is #1603's backstop for job-control stops
@@ -2540,6 +2598,7 @@ func (pf *PanelsFrame) armManagedExecDebounce() {
 func (pf *PanelsFrame) pollManagedExecutionDebounce() {
 	if !pf.Executing {
 		pf.managedExecIdleStreak = 0
+		pf.stopManagedExecPoll()
 		return
 	}
 	active := pf.GetActivePTY()

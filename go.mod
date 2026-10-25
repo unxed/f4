@@ -227,6 +227,16 @@ replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 // modules that build f4 (plugins/android, ios, cloudfox) carry it too.
 replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.1
 
+// f4 --gui memory and idle CPU, until upstream merges and tags them (tracked
+// in docs/UPSTREAM.md): vtui v0.1.422 with unxed/vtui#250 (fallback fonts from
+// the cmap table), unxed/vtui#251 (no MSAA) and unxed/vtui#253 (caret blink on
+// the held frame), and gg v0.52.5 with gogpu/gg#546 (one copy of each font)
+// and gogpu/gg#547 (SetAcceleratorMaxSampleCount). The plugin modules carry
+// the same lines.
+replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1
+
+replace github.com/gogpu/gg => github.com/sogonov/gg v0.52.6-memory.1
+
 replace github.com/unxed/f4/plugins/android => ./plugins/android
 
 replace github.com/unxed/f4/plugins/ios => ./plugins/ios

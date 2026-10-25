@@ -63,7 +63,8 @@ Checked on 2026-09-25 for every open PR in the tables below:
 | [godesktop/xkb-go](#godesktopxkb-go) | unxed/xkb-go `main` | 0 | 2 | 0 | nothing |
 | [neurlang/wayland](#neurlangwayland) | unxed/wayland | 2 | 1 | 0 | nothing |
 | [nwaples/rardecode](#nwaplesrardecode) | unxed/rardecode (branches only) | 0 | 3 | 0 | nothing |
-| [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu | 2 | 0 | 0 | nothing |
+| [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu; sogonov/gg `f4/memory-v0.52` | 2 | 2 | 0 | nothing |
+| [unxed/vtui](#unxedvtui) | sogonov/vtui `f4/memory-cpu` | 0 | 3 + 1 issue | 0 | nothing |
 | [alecthomas/chroma](#alecthomaschroma) | unxed/chroma | 1 | 0 | 0 | nothing |
 | [korli/go](#korligo-go-for-haiku) (Go for Haiku) | unxed/go | 0 | 0 | 0 | nothing |
 
@@ -224,6 +225,36 @@ branches of unxed/rardecode and are offered upstream.
 | --- | --- | --- |
 | [gogpu/gg#332](https://github.com/gogpu/gg/pull/332) | HiDPI: scale damage rectangles to physical pixels | Merged 2026-05-19 |
 | [gogpu/gogpu#435](https://github.com/gogpu/gogpu/pull/435) | Drag and drop under X11 | Merged 2026-08-07 |
+| [gogpu/gg#546](https://github.com/gogpu/gg/pull/546) | `FontSource` parses its own copy of the data and keeps one: `NewFontSource` parsed the caller's slice (reusing it broke the font) while keeping an unread copy, so every font took twice its file size; `NewFontSourceFromFile` no longer copies | Open since 2026-10-25, CI awaiting approval |
+| [gogpu/gg#547](https://github.com/gogpu/gg/pull/547) | `SetAcceleratorMaxSampleCount` / `SampleCountAware`: an opt-in MSAA cap; 1 turns off the 4x color and depth/stencil targets, about 120 MB of GPU memory for a 2060x1638 window | Open since 2026-10-25, CI awaiting approval |
+
+gg's `main` already requires gpucontext v0.31 and gputypes v0.8, which f4 and
+gogpu v0.53 do not use yet, so f4 takes both PRs on top of v0.52.5:
+`replace github.com/gogpu/gg => github.com/sogonov/gg v0.52.6-memory.1`
+(branch `f4/memory-v0.52`, the same patches as gogpu/gg#546 and
+gogpu/gg#547). Once gg
+releases them, drop the replace and require that release; moving the fork
+under unxed first is the owner's call.
+
+## unxed/vtui
+
+f4's own UI library, listed here because f4 takes these changes from a fork
+by `replace` until they are merged and tagged.
+
+| PR | What | State |
+| --- | --- | --- |
+| [#250](https://github.com/unxed/vtui/pull/250) | GUI fallback fonts: coverage from the cmap table instead of parsing every font at start (about 820 MB of garbage on macOS); Menlo and Apple Symbols ahead of the CJK fonts; color bitmap fonts passed over | Open since 2026-10-25, CI green |
+| [#251](https://github.com/unxed/vtui/pull/251) | gogpu: ask gg for 1x MSAA (through the method gogpu/gg#547 adds; a no-op with older gg) | Open since 2026-10-25, CI green |
+| [#253](https://github.com/unxed/vtui/pull/253) | gogpu: the idle heartbeat blinks the caret on the held frame instead of calling `Redraw`; an unfocused window holds the caret still | Open since 2026-10-25, CI green |
+| [Issue #252](https://github.com/unxed/vtui/issues/252) | gogpu: redraw only the damaged cells. For later, the author takes it himself | Open |
+
+f4 uses all three through
+`replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1`
+(branch `f4/memory-cpu`: v0.1.422 with the three PRs). Once vtui tags a
+release with them, drop the replace and require that release.
+
+The `replace` lines are repeated in plugins/android, ios and cloudfox, as the
+gogpu one is.
 
 ## alecthomas/chroma
 

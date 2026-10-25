@@ -19,7 +19,6 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/macro"
-	"github.com/unxed/f4/internal/sysinfo"
 
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/fileops"
@@ -505,6 +504,9 @@ type dirCacheKey struct {
 
 type FileSystemPanel struct {
 	selMemo selectionMemo
+
+	// freeSpace keeps the info line's free space between frames.
+	freeSpace freeSpaceCache
 
 	// drop is where a drag in progress over the panel would land, shown
 	// while files are dragged in from another application (#2049).
@@ -2718,6 +2720,7 @@ func (fp *FileSystemPanel) moveToParentAfterLoadFailure(loadVFS vfs.VFS, failedP
 }
 
 func (fp *FileSystemPanel) readDirectoryEx(keepEntries bool) {
+	fp.freeSpace.reset()
 	if fp.CancelLoad != nil {
 		fp.CancelLoad()
 		fp.CancelLoad = nil
@@ -3395,8 +3398,9 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 	freeSpaceStr := ""
 	if _, isLocal := fp.Vfs.(*vfs.OSVFS); isLocal {
 		// Drawn on every frame: FreeBytes skips the /proc/mounts lookup that
-		// FS does for the mount point and type, which this line never shows.
-		if free, ok := sysinfo.FreeBytes(fp.Vfs.GetPath()); ok {
+		// FS does for the mount point and type, which this line never shows,
+		// and the cache spares the statfs on all but one frame a second.
+		if free, ok := fp.freeSpace.get(fp.Vfs.GetPath(), time.Now()); ok {
 			freeSpaceStr = formatBytes(free)
 		}
 	}

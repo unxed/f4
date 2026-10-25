@@ -99,4 +99,9 @@ replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 // gogpu with the drag callbacks vtui calls (#2049, see ../../go.mod).
 replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.1
 
+// vtui and gg with the f4 --gui memory and idle CPU fixes (see ../../go.mod).
+replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1
+
+replace github.com/gogpu/gg => github.com/sogonov/gg v0.52.6-memory.1
+
 replace github.com/neurlang/wayland => github.com/unxed/wayland v0.4.5-0.20260924170549-04f3e691fadc

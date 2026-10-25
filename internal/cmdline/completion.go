@@ -15,6 +15,15 @@ func NewCompletionMenu(edit *vtui.Edit) *CompletionMenu {
 }
 
 func (menu *CompletionMenu) ProcessKey(event *vtinput.InputEvent) bool {
+	if isCtrlY(event) {
+		// The menu sits above the command line, so the line's own Ctrl+Y
+		// never sees the key, and vtui's edit control has no Ctrl+Y to fall
+		// back on. Far closes the list and clears the line in one press
+		// (unxed/f4#2187).
+		menu.Close()
+		clearLine(menu.Edit)
+		return true
+	}
 	ctrl := event.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
 	if event.Type == vtinput.KeyEventType && event.VirtualKeyCode == vtinput.VK_RETURN && ctrl {
 		if !event.KeyDown {
