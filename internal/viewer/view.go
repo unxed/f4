@@ -649,6 +649,43 @@ func (vv *ViewerView) decodeStep(off int64) int64 {
 	return int64(DisasmInstLen(data, vv.disasmMode()))
 }
 
+// pageUpWrappedText skips a viewport-sized byte range when the previous page
+// contains no logical line break. FindLineStart cannot identify wrapped rows
+// in that case, and an asynchronously loaded range can otherwise move back
+// only one byte per attempted row.
+func (vv *ViewerView) pageUpWrappedText(contentHeight int64) bool {
+	if !vv.WrapMode || contentHeight <= 0 {
+		return false
+	}
+	width := vv.X2 - vv.X1 + 1
+	if vv.ScrollBar != nil {
+		width--
+	}
+	if width < 1 {
+		width = 1
+	}
+
+	pageBytes := int64(width) * contentHeight
+	probeBytes := int64(vv.rowReadSize(width)) * contentHeight
+	if probeBytes > vv.TopOffset {
+		probeBytes = vv.TopOffset
+	}
+	data, err := vv.Backend.ReadAt(vv.TopOffset-probeBytes, int(probeBytes))
+	if err == nil {
+		for _, b := range data {
+			if b == '\n' {
+				return false
+			}
+		}
+	}
+
+	vv.TopOffset -= pageBytes
+	if vv.TopOffset < 0 {
+		vv.TopOffset = 0
+	}
+	return true
+}
+
 // rowReadSize is how many bytes to read to lay out one screen row. Escape
 // sequences take bytes and no room, so an ANSI-mode row needs a longer read.
 func (vv *ViewerView) rowReadSize(width int) int {
@@ -894,8 +931,10 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		} else if vv.HexMode {
 			vv.TopOffset -= step * contentHeight
 		} else {
-			for i := 0; i < int(contentHeight); i++ {
-				vv.TopOffset = vv.Backend.FindLineStart(vv.TopOffset - 1)
+			if !vv.pageUpWrappedText(contentHeight) {
+				for i := 0; i < int(contentHeight); i++ {
+					vv.TopOffset = vv.Backend.FindLineStart(vv.TopOffset - 1)
+				}
 			}
 		}
 		if vv.TopOffset < 0 {

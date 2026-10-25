@@ -145,6 +145,9 @@ var macroPasting bool
 
 func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	if e.Type == vtinput.MouseEventType {
+		if panel.PlayerIndicatorClick(e) {
+			return true
+		}
 		return macroMouseWheel(m, e)
 	}
 	if e.Type == vtinput.PasteEventType {

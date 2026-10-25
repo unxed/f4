@@ -6,6 +6,7 @@ f4 — efficient and cozy file manager in go
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
 ~Panel modes~PanelModes@
+~Audio player~Player@
 ~Mouse wheel settings~MouseWheel@
 ~Portable mode~PortableSettings@
 ~Visual File Renamer (VisRen)~VisRen@
@@ -552,6 +553,7 @@ f4 is an experimental Far Manager / far2l clone in Go.
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
 ~Panel modes~PanelModes@
+~Audio player~Player@
 ~MediaInfo plugin~MediaInfo@
 ~Console modes (Ctrl+O)~ConsoleModes@
 ~Environment Manager plugin~EnvironmentManager@
@@ -1012,3 +1014,104 @@ $Panel modes
 
   Widths: 0 is the type's default (a name takes a share of the free space), a number is that many characters, N% is a share of the free space. When the columns do not fit, the last one is shortened and then dropped.
   A repeated group of types forms stripes: N,N,N is three name stripes, N,S,N,S two stripes of a name and a size.
+
+@Player
+$Audio player (Ctrl+Shift+M)
+  Ctrl+Shift+M opens the player in the panel opposite the active one, the
+way Ctrl+L opens the info panel, and closes it again. Tab moves the focus
+between the player and the file panel.
+
+  From the top the player shows what plays, the playback bar between two
+clocks, the facts about the stream, the spectrum, the buttons with the
+volume slider, and the playlist. The bar and the spectrum can be turned off
+in ~Settings~SettingsCenter@ (Panels, Audio player).
+
+  MP3, WAV, FLAC and Ogg Vorbis play by themselves; AAC, M4A, Opus, WMA, AMR
+and the other formats need ffmpeg.
+
+ #Adding music#
+
+  #F5# in the file panel    Adds the selected files and folders to the
+                          playlist; a folder becomes a playlist folder.
+                          The playlist keeps paths, nothing is copied, and
+                          F6 is refused so nothing is moved on disk.
+
+  #Enter# on a recording    Plays it at once, without adding it. The player
+                          then goes on through the recordings of that panel:
+                          Down plays the next one, and so does the end of a
+                          track. It follows the cursor of the panel only
+                          while it plays the panel's recordings or nothing;
+                          a track of the playlist is never swapped for the
+                          file under the cursor.
+
+ #Keys in the player#
+
+  The cursor walks one column: the playback bar, the buttons, the playlist.
+
+  #Up, Down#                Move the cursor; Ctrl+Home goes to the buttons.
+
+  #Left, Right#             On the bar: seek 5 seconds. On the buttons: the
+                          next button, or the volume on its slider. In the
+                          playlist: fold or unfold a folder; Left on a track
+                          goes to its folder.
+
+  #Enter, Space#            Press the button, play the track, fold or unfold
+                          the folder; on the bar, play or pause.
+
+  #Shift+Up, Shift+Down#    Move the item under the cursor among its
+                          neighbours. Shift+Right puts it into the folder
+                          above it, Shift+Left takes it out of its folder.
+                          Ctrl with the arrows does the same where the
+                          system lets it through (not on macOS).
+
+  #F7#                      New playlist folder.
+
+  #Del, F8#                 Remove from the playlist; the file stays on disk.
+
+  #H#                       Show the keys on the buttons and in the bottom
+                          border, or hide them.
+
+ #Mouse#
+
+  A click presses a button, sets the volume where it lands on the slider
+and moves the track where it lands on the playback bar; the slider and the
+bar can be dragged, and the track goes where the bar is let go. In the
+playlist a click puts the cursor on a row, a click on ▸ or ▾ folds or
+unfolds a folder, and a double click plays a track or folds a folder. The
+wheel scrolls the playlist, and over the slider turns the volume.
+
+ #Letter keys#
+
+  Which of them work is set in Settings, Panels, Audio player, Player keys:
+WinAmp's, YouTube's or both, the default. They work in any keyboard layout.
+
+  #WinAmp#                  Z previous track, X play, C pause, V stop,
+                          B next track.
+
+  #YouTube#                 K play or pause, J and L ten seconds back and
+                          forward, Shift+P and Shift+N previous and next
+                          track, M sound off and on, 0 to 9 a tenth of the
+                          track: 0 the start, 5 the middle.
+
+  #+, -#                    Volume, with either.
+
+ #From the file panel#
+
+  #Ctrl+Alt+Left, Ctrl+Alt+Right#
+                          Seek 5 seconds without leaving the file panel.
+
+  The command palette (Ctrl+Shift+P) lists the player's commands, as
+"Player: ...", while the player has the focus.
+
+ #Playing in the background#
+
+  Closing the player while music plays, with Ctrl+Shift+M or by opening
+another panel in its place, asks whether to go on playing in the
+background or to stop; Esc keeps the player open. In the background a ♪ in
+the top right corner of the screen says that music plays, ‖ that it is
+paused. A click on it, or Ctrl+Shift+M, opens the player again on what
+plays.
+
+  Without the player the command palette has "Music: play or pause",
+"Music: next track", "Music: previous track" and "Music: stop". They have
+no keys of their own; the Hotkey Configurator gives them some.

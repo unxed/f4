@@ -41,7 +41,7 @@ type AudioEngine struct {
 	Path   string
 
 	duration time.Duration
-	info     audioTrackInfo
+	info     AudioTrackInfo
 	volume   float64
 	loaded   bool
 
@@ -209,7 +209,7 @@ func (a *AudioEngine) loadLocked(Path string) error {
 		src = NewLinearResampler(source, srcRate, a.ctxRate)
 	}
 	a.duration = source.Duration
-	a.info = audioTrackInfo{SampleRate: srcRate, Mono: source.Mono, Codec: source.Codec}
+	a.info = AudioTrackInfo{SampleRate: srcRate, Mono: source.Mono, Codec: source.Codec}
 	if st, err := os.Stat(Path); err == nil && a.duration > 0 {
 		a.info.BitrateKbps = int(math.Round(float64(st.Size()) * 8 / a.duration.Seconds() / 1000))
 	} else if err != nil {
@@ -230,10 +230,9 @@ func (a *AudioEngine) loadLocked(Path string) error {
 }
 
 // Seek moves the current track by delta and keeps its playing/paused state.
-// Decoders expose a common PCM stream rather than a common seek interface,
-// so the engine reloads the source and discards decoded PCM up to the target.
-// This is deliberately format-independent: native FLAC/MP3/WAV and ffmpeg
-// backed AMR use exactly the same path.
+// The engine reloads the source, which drops what the device has buffered,
+// and moves the decoder to the target (audioSource.seek); a source that
+// cannot seek is decoded up to the target and that PCM discarded.
 func (a *AudioEngine) Seek(delta time.Duration) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -256,15 +255,41 @@ func (a *AudioEngine) Seek(delta time.Duration) bool {
 		return false
 	}
 
-	bytes := int64(float64(target) / float64(time.Second) * float64(a.ctxRate*AudioBytesPerFrame))
-	if bytes > 0 {
-		_, _ = io.CopyN(io.Discard, a.tap, bytes)
+	if err := a.seekSourceLocked(target); err != nil {
+		if !errors.Is(err, errNoSourceSeek) {
+			vtui.DebugLog("AUDIO: seek in the decoder failed Path=%q target=%s: %v; decoding up to it", path, target, err)
+			if err := a.loadLocked(path); err != nil {
+				vtui.DebugLog("AUDIO: seek reload failed Path=%q: %v", path, err)
+				return false
+			}
+		}
+		_, _ = skipPCM(a.tap, target, a.ctxRate)
 	}
 	if wasPlaying {
 		a.player.Play()
 	}
 	vtui.DebugLog("AUDIO: seek requested Path=%q delta=%s target=%s playing=%v", path, delta, target, wasPlaying)
 	return true
+}
+
+var errNoSourceSeek = errors.New("the decoder cannot seek")
+
+// seekSourceLocked moves a track just loaded to target in its decoder, which
+// reads on from there. Decoding everything before the target and dropping it
+// made a jump to 90% of a long track take a while (#2185). The tap counts
+// from the target, so that the clock shows it.
+func (a *AudioEngine) seekSourceLocked(target time.Duration) error {
+	if a.source == nil || a.source.seek == nil {
+		return errNoSourceSeek
+	}
+	if target <= 0 {
+		return nil
+	}
+	if err := a.source.seek(int64(target.Seconds() * float64(a.source.Rate))); err != nil {
+		return err
+	}
+	a.tap.startAt(int64(target.Seconds()*float64(a.ctxRate)) * AudioBytesPerFrame)
+	return nil
 }
 
 func (a *AudioEngine) unloadLocked() {
@@ -417,7 +442,7 @@ func (a *AudioEngine) Duration() time.Duration {
 	return a.duration
 }
 
-func (a *AudioEngine) Info() audioTrackInfo {
+func (a *AudioEngine) Info() AudioTrackInfo {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.info

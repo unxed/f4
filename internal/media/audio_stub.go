@@ -27,7 +27,7 @@ func (a *AudioEngine) Volume() float64         { return a.volume }
 func (a *AudioEngine) SetVolume(v float64)     { a.volume = max(0, min(1, v)) }
 func (a *AudioEngine) Position() time.Duration { return 0 }
 func (a *AudioEngine) Duration() time.Duration { return 0 }
-func (a *AudioEngine) Info() audioTrackInfo    { return audioTrackInfo{} }
+func (a *AudioEngine) Info() AudioTrackInfo    { return AudioTrackInfo{} }
 func (a *AudioEngine) Spectrum(bands int) []float64 {
 	return make([]float64, bands)
 }

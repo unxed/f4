@@ -12,6 +12,7 @@ import (
 
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/macro"
+	"github.com/unxed/f4/internal/panel"
 	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/update"
 	"github.com/unxed/vtui"
@@ -186,6 +187,7 @@ func UpdateWindowTitle(scr *vtui.ScreenBuf) {
 	drawWorktreeIdentity(scr)
 
 	drawMacroRecordingIndicator(scr)
+	panel.DrawPlayerIndicator(scr)
 }
 
 // drawMacroRecordingIndicator marks the screen while a macro is being recorded

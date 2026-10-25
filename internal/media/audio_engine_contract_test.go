@@ -19,7 +19,7 @@ func TestAudioEngineEmptyLifecycle(t *testing.T) {
 	if got := a.Position(); got != 0 || a.Duration() != 0 {
 		t.Fatalf("empty clock position=%s duration=%s", got, a.Duration())
 	}
-	if got := a.Info(); !reflect.DeepEqual(got, audioTrackInfo{}) {
+	if got := a.Info(); !reflect.DeepEqual(got, AudioTrackInfo{}) {
 		t.Fatalf("empty info=%+v", got)
 	}
 	if got := a.Spectrum(4); !reflect.DeepEqual(got, []float64{0, 0, 0, 0}) {

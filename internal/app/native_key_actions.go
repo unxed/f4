@@ -119,6 +119,30 @@ func withPanels(do func(pf *panel.PanelsFrame) bool) func() bool {
 	}
 }
 
+// playerCommand does cmd in the focused player (PlayerPanel.Do).
+func playerCommand(cmd panel.PlayerCommand) func() bool {
+	return withPanels(func(pf *panel.PanelsFrame) bool {
+		player := pf.FocusedPlayer()
+		if player == nil || !player.Do(cmd) {
+			return false
+		}
+		vtui.FrameManager.Redraw()
+		return true
+	})
+}
+
+// playerJump moves the track of the focused player to tenth tenths of it.
+func playerJump(tenth int) func() bool {
+	return withPanels(func(pf *panel.PanelsFrame) bool {
+		player := pf.FocusedPlayer()
+		if player == nil || !player.JumpToTenth(tenth) {
+			return false
+		}
+		vtui.FrameManager.Redraw()
+		return true
+	})
+}
+
 func init() {
 	for _, spec := range nativeKeyActions() {
 		registerNativeKeyAction(spec)
@@ -243,54 +267,85 @@ func nativeKeyActions() []nativeKeyAction {
 			desc: "Switch AI panel to memory view",
 			keys: []string{"Ctrl4:AIPanel"}, condition: "AIPanel"},
 
-		// The player (Ctrl+Shift+M).
+		// The player (Ctrl+Shift+M). Which of its letter keys work depends
+		// on the scheme picked in the settings (WinAmp, YouTube or both), so
+		// the palette and macros run its commands instead of pressing a key
+		// that may be off.
 		{name: "Panel.Player.Previous", area: "Shell", label: "Player: Previous Track",
 			desc: "Play the previous track of the playlist",
-			keys: []string{"Z:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"Z:PlayerFocused", "ShiftP:PlayerFocused"}, condition: "PlayerFocused",
+			handler: playerCommand(panel.PlayerPrevious)},
 		{name: "Panel.Player.Play", area: "Shell", label: "Player: Play",
 			desc: "Start playing",
-			keys: []string{"X:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"X:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerPlay)},
 		{name: "Panel.Player.Pause", area: "Shell", label: "Player: Pause",
 			desc: "Pause playing, or go on playing",
-			keys: []string{"C:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"C:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerPause)},
 		{name: "Panel.Player.Stop", area: "Shell", label: "Player: Stop",
 			desc: "Stop playing",
-			keys: []string{"V:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"V:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerStop)},
 		{name: "Panel.Player.Next", area: "Shell", label: "Player: Next Track",
 			desc: "Play the next track of the playlist",
-			keys: []string{"B:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"B:PlayerFocused", "ShiftN:PlayerFocused"}, condition: "PlayerFocused",
+			handler: playerCommand(panel.PlayerNext)},
 		{name: "Panel.Player.VolumeUp", area: "Shell", label: "Player: Volume Up",
 			desc: "Make the player louder",
 			keys: []string{"VK_BB:PlayerFocused"}, aliases: []string{"ShiftVK_BB:PlayerFocused", "Add:PlayerFocused"},
-			condition: "PlayerFocused"},
+			condition: "PlayerFocused", handler: playerCommand(panel.PlayerVolumeUp)},
 		{name: "Panel.Player.VolumeDown", area: "Shell", label: "Player: Volume Down",
 			desc: "Make the player quieter",
 			keys: []string{"VK_BD:PlayerFocused"}, aliases: []string{"ShiftVK_BD:PlayerFocused", "Subtract:PlayerFocused"},
-			condition: "PlayerFocused"},
+			condition: "PlayerFocused", handler: playerCommand(panel.PlayerVolumeDown)},
+		{name: "Panel.Player.Mute", area: "Shell", label: "Player: Mute",
+			desc: "Turn the sound of the player off, or back on",
+			keys: []string{"M:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerMute)},
+		{name: "Panel.Player.SeekBack10", area: "Shell", label: "Player: Back 10 Seconds",
+			desc: "Move the track ten seconds back",
+			keys: []string{"J:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerSeekBack10)},
+		{name: "Panel.Player.SeekForward10", area: "Shell", label: "Player: Forward 10 Seconds",
+			desc: "Move the track ten seconds forward",
+			keys: []string{"L:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerSeekForward10)},
+		{name: "Panel.Player.JumpToStart", area: "Shell", label: "Player: Back to the Start",
+			desc: "Play the track from its start",
+			keys: []string{"0:PlayerFocused"}, condition: "PlayerFocused", handler: playerJump(0)},
+		// 1 to 9 go to that tenth of the track, which a palette entry cannot
+		// ask for, so it is not offered there. Run on its own (a macro) it
+		// goes to the first tenth, like its other commands without a key.
+		{name: "Panel.Player.JumpToTenth", area: "Shell", label: "Player: Jump to a Tenth of the Track",
+			desc: "Move the track to that tenth of its length: 1 to a tenth, 5 to the middle, 9 near the end",
+			keys: []string{"1:PlayerFocused", "2:PlayerFocused", "3:PlayerFocused", "4:PlayerFocused", "5:PlayerFocused",
+				"6:PlayerFocused", "7:PlayerFocused", "8:PlayerFocused", "9:PlayerFocused"},
+			condition: "PlayerFocused", hidden: true, handler: playerJump(1)},
 		{name: "Panel.Player.Activate", area: "Shell", label: "Player: Play Item or Open Folder",
 			desc: "Play the playlist item under the cursor, open or close a playlist folder, or press the button under the cursor",
 			keys: []string{"Enter:PlayerFocused"}, condition: "PlayerFocused"},
 		{name: "Panel.Player.TogglePause", area: "Shell", label: "Player: Play or Pause",
 			desc: "Pause or go on playing, or play the item under the cursor when nothing plays",
-			keys: []string{"Space:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"Space:PlayerFocused", "K:PlayerFocused"}, condition: "PlayerFocused",
+			handler: playerCommand(panel.PlayerPlayPause)},
 		{name: "Panel.Player.RemoveItem", area: "Shell", label: "Player: Remove from Playlist",
 			desc: "Remove the item under the cursor from the playlist",
-			keys: []string{"Del:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"Del:PlayerFocused", "F8:PlayerFocused"}, condition: "PlayerFocused"},
+		{name: "Panel.Player.ToggleKeyHints", area: "Shell", label: "Player: Show Keys",
+			desc: "Show the keys of the player on its buttons and in its bottom border, or hide them",
+			keys: []string{"H:PlayerFocused"}, condition: "PlayerFocused", handler: playerCommand(panel.PlayerToggleKeyHints)},
 		{name: "Panel.Player.NewFolder", area: "Shell", label: "Player: New Playlist Folder",
 			desc: "Create a folder in the playlist",
 			keys: []string{"F7:PlayerFocused"}, condition: "PlayerFocused"},
+		// Shift with the arrows works everywhere; Ctrl with them, which the
+		// player had first, never reaches f4 on macOS (Mission Control).
 		{name: "Panel.Player.MoveItemUp", area: "Shell", label: "Player: Move Item Up",
 			desc: "Move the playlist item under the cursor one place up",
-			keys: []string{"CtrlUp:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"ShiftUp:PlayerFocused"}, aliases: []string{"CtrlUp:PlayerFocused"}, condition: "PlayerFocused"},
 		{name: "Panel.Player.MoveItemDown", area: "Shell", label: "Player: Move Item Down",
 			desc: "Move the playlist item under the cursor one place down",
-			keys: []string{"CtrlDown:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"ShiftDown:PlayerFocused"}, aliases: []string{"CtrlDown:PlayerFocused"}, condition: "PlayerFocused"},
 		{name: "Panel.Player.MoveOut", area: "Shell", label: "Player: Move out of Folder",
 			desc: "Move the playlist item under the cursor out of its folder",
-			keys: []string{"CtrlLeft:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"ShiftLeft:PlayerFocused"}, aliases: []string{"CtrlLeft:PlayerFocused"}, condition: "PlayerFocused"},
 		{name: "Panel.Player.MoveInto", area: "Shell", label: "Player: Move into Folder",
 			desc: "Move the playlist item under the cursor into the folder above it",
-			keys: []string{"CtrlRight:PlayerFocused"}, condition: "PlayerFocused"},
+			keys: []string{"ShiftRight:PlayerFocused"}, aliases: []string{"CtrlRight:PlayerFocused"}, condition: "PlayerFocused"},
 		{name: "Panel.Player.Controls", area: "Shell", label: "Player: Go to Buttons",
 			desc: "Move the cursor from the playlist to the buttons of the player",
 			keys: []string{"CtrlHome:PlayerFocused"}, condition: "PlayerFocused"},

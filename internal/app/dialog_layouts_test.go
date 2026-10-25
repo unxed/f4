@@ -379,6 +379,10 @@ func (rig *dialogLayoutRig) reset(t *testing.T) {
 	if !foundPanels || rig.panels.IsDone() {
 		t.Fatal("layout validation action mutated the shared panels frame")
 	}
+	// What an action types into the command line would stay there for every
+	// later one, so what Del or Tab opened depended on where that text
+	// happened to end: a path offers completions, a stray letter none.
+	rig.panels.CmdLine.Clear()
 }
 
 func (rig *dialogLayoutRig) detach(t *testing.T) {

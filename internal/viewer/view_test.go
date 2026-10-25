@@ -81,6 +81,41 @@ func TestViewer_UsesDedicatedScrollbarPaletteSlot(t *testing.T) {
 	}
 }
 
+func TestViewerPageUpMovesOneViewportWithinLongWrappedLine(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "long.txt")
+	const lineBytes = 8 << 20
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", lineBytes)), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(root), path)
+	if err != nil {
+		t.Fatalf("NewViewerView: %v", err)
+	}
+	defer vv.Close()
+	vv.SetPosition(0, 0, 79, 24)
+	vv.WrapMode = true
+
+	width := vv.X2 - vv.X1 + 1
+	if vv.ScrollBar != nil {
+		width--
+	}
+	pageBytes := int64(width * (vv.Y2 - vv.Y1))
+	start := int64(lineBytes/2) / pageBytes * pageBytes
+	vv.TopOffset = start
+
+	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR})
+
+	want := start - pageBytes
+	if want < 0 {
+		want = 0
+	}
+	if vv.TopOffset != want {
+		t.Fatalf("PageUp moved viewport to byte %d, want one page back at %d (from %d)", vv.TopOffset, want, start)
+	}
+}
+
 func TestViewerRenderHighlightsCurrentSearchResult(t *testing.T) {
 	vtui.SetDefaultPalette()
 	theme.SetDefaultF4Palette()

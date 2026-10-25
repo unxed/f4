@@ -153,7 +153,7 @@ func TestParseAMRCountsFrames(t *testing.T) {
 }
 
 func TestExternalAudioArgsShape(t *testing.T) {
-	args := externalAudioArgs("/tmp/x.amr", 48000)
+	args := externalAudioArgs("/tmp/x.amr", 48000, 0)
 	joined := strings.Join(args, " ")
 	for _, want := range []string{"-nostdin", "-i /tmp/x.amr", "-f s16le", "-ac 2", "-ar 48000", "-vn"} {
 		if !strings.Contains(joined, want) {
@@ -162,6 +162,16 @@ func TestExternalAudioArgsShape(t *testing.T) {
 	}
 	if args[len(args)-1] != "-" {
 		t.Errorf("output must be stdout, got %q", args[len(args)-1])
+	}
+	if strings.Contains(joined, "-ss") {
+		t.Errorf("a track from its start has a start: %q", joined)
+	}
+
+	// A seek starts ffmpeg at the target, given before the input so that
+	// ffmpeg seeks in the file rather than decoding up to it.
+	joined = strings.Join(externalAudioArgs("/tmp/x.amr", 48000, 90500*time.Millisecond), " ")
+	if !strings.Contains(joined, "-ss 90.500 -i /tmp/x.amr") {
+		t.Errorf("a start at 1:30.5 is not before the input: %q", joined)
 	}
 }
 

@@ -57,6 +57,26 @@ func ParseMacKeysMode(value string) string {
 	}
 }
 
+// The letter keys of the audio player (Ctrl+Shift+M), as written to
+// settings.ini: WinAmp's Z X C V B, YouTube's K J L M, Shift+N, Shift+P and
+// the digits, or both, which do not share a key (f4#2185).
+const (
+	PlayerKeysBoth    = "both"
+	PlayerKeysWinAmp  = "winamp"
+	PlayerKeysYouTube = "youtube"
+)
+
+// ParsePlayerKeys normalizes a settings.ini value. Anything unrecognized is
+// both schemes, so no key stops working over a typo.
+func ParsePlayerKeys(value string) string {
+	switch v := strings.ToLower(strings.TrimSpace(value)); v {
+	case PlayerKeysWinAmp, PlayerKeysYouTube:
+		return v
+	default:
+		return PlayerKeysBoth
+	}
+}
+
 // ---- from colorer_settings.go ----
 // Cross drawing modes. FarColorer calls the option "Show cross" and lets the
 // scheme pick the axes through its parameters; those are not reachable through

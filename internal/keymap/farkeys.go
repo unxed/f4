@@ -46,7 +46,15 @@ func layoutShortcutVK(e *vtinput.InputEvent) uint16 {
 	if e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed|vtinput.LeftAltPressed|vtinput.RightAltPressed) == 0 {
 		return 0
 	}
-	switch unicode.ToLower(e.Char) {
+	return LayoutLetterVK(e.Char)
+}
+
+// LayoutLetterVK is the Latin letter key that types r in the standard Russian
+// layout, or 0 for any other character. A widget that takes plain letters as
+// commands -- the player's WinAmp keys -- uses it when the terminal sent only
+// the character, so the command works whatever layout is on.
+func LayoutLetterVK(r rune) uint16 {
+	switch unicode.ToLower(r) {
 	case 'й':
 		return vtinput.VK_Q
 	case 'ц':

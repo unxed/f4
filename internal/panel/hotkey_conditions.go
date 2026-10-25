@@ -165,6 +165,9 @@ var hotkeyConditions = map[string]func() bool{
 	"quickviewfocused": func() bool { return focusedAltPanelKind() == "quick_view" },
 	"playerfocused":    func() bool { return focusedAltPanelKind() == "player" },
 	"aichatfocused":    func() bool { return focusedAltPanelKind() == "ai_chat" },
+	// musicplaying: the player has a track loaded and no player has the
+	// focus, there or in the background: the Music.* commands work (#2185).
+	"musicplaying": func() bool { return MusicLoaded() && focusedAltPanelKind() != "player" },
 	// fastfind: the quick search of the active panel is open; autofilter: it
 	// is open as the filter.
 	"fastfind": func() bool {

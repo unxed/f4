@@ -2472,15 +2472,15 @@ func init() {
 		Description: "Seek backward while the file panel has focus",
 		DescKey:     "Action.Panel.Player.SeekBack.Desc",
 		DefaultKeys: []string{"CtrlAltLeft"},
-		// The focused player seeks on the plain arrows (PlayerPanel.controlKey).
+		// The focused player seeks on the plain arrows on its playback bar
+		// (PlayerPanel.barKey).
 		NativeKeys:  []string{"Left:PlayerFocused"},
 		MenuPath:    "Commands",
 		MenuSubPath: "Player",
+		// The player is on either side: in the other slot while the file
+		// panel has the focus, which is what these keys are for (#2185).
 		Handler: withPF(func(pf *panel.PanelsFrame) {
-			if pf.ActiveIdx < 0 || pf.ActiveIdx >= len(pf.AltPanels) {
-				return
-			}
-			if player, ok := pf.AltPanels[pf.ActiveIdx].(*panel.PlayerPanel); ok {
+			if player := openPlayerPanel(pf); player != nil {
 				player.SeekBy(-5 * time.Second)
 			}
 		}),
@@ -2498,14 +2498,44 @@ func init() {
 		MenuPath:    "Commands",
 		MenuSubPath: "Player",
 		Handler: withPF(func(pf *panel.PanelsFrame) {
-			if pf.ActiveIdx < 0 || pf.ActiveIdx >= len(pf.AltPanels) {
-				return
-			}
-			if player, ok := pf.AltPanels[pf.ActiveIdx].(*panel.PlayerPanel); ok {
+			if player := openPlayerPanel(pf); player != nil {
 				player.SeekBy(5 * time.Second)
 			}
 		}),
 	})
+	// The music the player plays, from anywhere and with the player closed,
+	// when it plays in the background (#2185). No keys of their own: the
+	// Hotkey Configurator gives them one. With the player focused its own
+	// commands (Panel.Player.*) do the same.
+	for _, m := range []struct {
+		name, label, desc string
+		cmd               panel.PlayerCommand
+	}{
+		{"Music.PlayPause", "Music: Play or Pause", "Pause the music the player plays, or go on playing it", panel.PlayerPlayPause},
+		{"Music.Next", "Music: Next Track", "Play the next track", panel.PlayerNext},
+		{"Music.Previous", "Music: Previous Track", "Play the previous track", panel.PlayerPrevious},
+		{"Music.Stop", "Music: Stop", "Stop the music the player plays", panel.PlayerStop},
+	} {
+		registerAction(action.Action{
+			Name:        m.name,
+			Area:        "Common",
+			Label:       m.label,
+			LabelKey:    "Action." + m.name,
+			Description: m.desc,
+			DescKey:     "Action." + m.name + ".Desc",
+			Visible:     conditionHolds("MusicPlaying"),
+			Enabled:     conditionHolds("MusicPlaying"),
+			Handler: func() bool {
+				if !panel.MusicCommand(m.cmd) {
+					return false
+				}
+				if vtui.FrameManager != nil {
+					vtui.FrameManager.Redraw()
+				}
+				return true
+			},
+		})
+	}
 	registerAction(action.Action{
 		Name:        "Panel.Tree",
 		Area:        "Shell",

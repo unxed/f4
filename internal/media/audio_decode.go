@@ -53,6 +53,10 @@ type audioSource struct {
 	Length   int64
 	Duration time.Duration
 	closer   func()
+	// seek moves the decoder to the frame-th frame at Rate, so that the
+	// next read starts there, without decoding what comes before it. Nil
+	// for a source that cannot; the engine then decodes up to the target.
+	seek func(frame int64) error
 }
 
 // Close releases whatever the decoder holds: the file, or the ffmpeg process.
@@ -117,8 +121,27 @@ func decodeMP3(f *os.File, Path string) (*audioSource, error) {
 		Rate:   dec.SampleRate(),
 		Length: dec.Length(),
 		Mono:   Mp3FirstFrameIsMono(Path),
+		// go-mp3 knows where every MP3 frame starts. It goes to one a few
+		// before the target, and what they decode to up to the target is
+		// dropped: see mp3SeekWarmUp.
+		seek: func(frame int64) error {
+			from := max(0, frame-mp3SeekWarmUp)
+			if _, err := dec.Seek(from*AudioBytesPerFrame, io.SeekStart); err != nil {
+				return err
+			}
+			_, err := io.CopyN(io.Discard, dec, (frame-from)*AudioBytesPerFrame)
+			return err
+		},
 	}, nil
 }
+
+// mp3SeekWarmUp is how many samples a seek in an MP3 decodes and drops before
+// the target. The data of a frame may begin in the frames before it, up to
+// 511 bytes back (the bit reservoir): at the lowest bitrates that is six
+// frames, and go-mp3 decodes only the one before. The frames it gets wrong
+// played as a click after the seek; eight frames of 1152 samples cover the
+// reservoir and are dropped instead.
+const mp3SeekWarmUp = 8 * 1152
 
 // ---- WAV --------------------------------------------------------------
 
@@ -199,14 +222,28 @@ func decodeWAV(f *os.File) (*audioSource, error) {
 					size = 1 << 62
 				}
 			}
-			bytesPerFrame := channels * bits / 8
-			frames := size / int64(bytesPerFrame)
-			pcm := &wavPCM{r: br, bits: bits, channels: channels, float: format == 3, left: frames * int64(bytesPerFrame), frame: make([]byte, bytesPerFrame)}
+			bytesPerFrame := int64(channels * bits / 8)
+			frames := size / bytesPerFrame
+			pcm := &wavPCM{r: br, bits: bits, channels: channels, float: format == 3, left: frames * bytesPerFrame, frame: make([]byte, bytesPerFrame)}
+			pos, err := f.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return nil, fmt.Errorf("wav: %w", err)
+			}
+			dataStart := pos - int64(br.Buffered())
 			return &audioSource{
 				Reader: pcm,
 				Rate:   rate,
 				Mono:   channels == 1,
 				Length: frames * AudioBytesPerFrame,
+				seek: func(frame int64) error {
+					frame = max(0, min(frame, frames))
+					if _, err := f.Seek(dataStart+frame*bytesPerFrame, io.SeekStart); err != nil {
+						return err
+					}
+					br.Reset(f)
+					pcm.left = (frames - frame) * bytesPerFrame
+					return nil
+				},
 			}, nil
 		default:
 			if size%2 == 1 {
@@ -284,7 +321,7 @@ type flacPCM struct {
 }
 
 func decodeFLAC(f *os.File) (*audioSource, error) {
-	stream, err := flac.New(f)
+	stream, err := flac.NewSeek(f)
 	if err != nil {
 		return nil, fmt.Errorf("flac: %w", err)
 	}
@@ -292,11 +329,30 @@ func decodeFLAC(f *os.File) (*audioSource, error) {
 	if info == nil || info.SampleRate == 0 {
 		return nil, errors.New("flac: no stream info")
 	}
+	fp := &flacPCM{stream: stream}
 	return &audioSource{
-		Reader: &flacPCM{stream: stream},
+		Reader: fp,
 		Rate:   int(info.SampleRate),
 		Mono:   info.NChannels == 1,
 		Length: numeric.BoundedInt64(info.NSamples) * AudioBytesPerFrame,
+		// The stream seeks to the FLAC frame that holds the target, by its
+		// seek table, and the samples of that frame before it are dropped.
+		seek: func(frame int64) error {
+			fp.buf, fp.err = nil, nil
+			if frame <= 0 {
+				frame = 0
+			}
+			if total := numeric.BoundedInt64(info.NSamples); total > 0 && frame >= total {
+				fp.err = io.EOF
+				return nil
+			}
+			at, err := stream.Seek(uint64(frame))
+			if err != nil {
+				return err
+			}
+			_, err = io.CopyN(io.Discard, fp, (frame-numeric.BoundedInt64(at))*AudioBytesPerFrame)
+			return err
+		},
 	}, nil
 }
 
@@ -379,11 +435,16 @@ func decodeVorbis(f *os.File) (*audioSource, error) {
 	}
 	// Length is total samples per channel; the reader knows it only when
 	// the input can seek, which a file can.
+	v := &vorbisPCM{r: r, channels: ch, floats: make([]float32, 4096*ch)}
 	return &audioSource{
-		Reader: &vorbisPCM{r: r, channels: ch, floats: make([]float32, 4096*ch)},
+		Reader: v,
 		Rate:   r.SampleRate(),
 		Mono:   ch == 1,
 		Length: r.Length() * AudioBytesPerFrame,
+		seek: func(frame int64) error {
+			v.pending, v.err = nil, nil
+			return r.SetPosition(max(0, frame))
+		},
 	}, nil
 }
 
@@ -443,29 +504,39 @@ func openExternalAudio(Path string, format audioFormat, preferRate int) (*audioS
 	if preferRate <= 0 {
 		preferRate = 48000
 	}
-	cmd := exec.Command(bin, externalAudioArgs(Path, preferRate)...)
-	cmd.Env = toolEnv()
-	cmd.Stderr = nil
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("%s would not start: %w", filepath.Base(bin), err)
-	}
-	vtui.DebugLog("AUDIO: %s decoding %q at %d Hz", bin, Path, preferRate)
-
-	src := &audioSource{
-		Reader: bufio.NewReaderSize(out, 64*1024),
-		Rate:   preferRate,
-		Codec:  format.Codec,
-		closer: func() {
+	src := &audioSource{Rate: preferRate, Codec: format.Codec}
+	// run starts ffmpeg decoding from at on, in place of the one running.
+	run := func(at time.Duration) error {
+		src.Close()
+		// #nosec G204 -- bin is the ffmpeg f4 found itself; the arguments are fixed options and the file to play.
+		cmd := exec.Command(bin, externalAudioArgs(Path, preferRate, at)...)
+		cmd.Env = toolEnv()
+		cmd.Stderr = nil
+		out, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("%s would not start: %w", filepath.Base(bin), err)
+		}
+		vtui.DebugLog("AUDIO: %s decoding %q at %d Hz from %s", bin, Path, preferRate, at)
+		src.Reader = bufio.NewReaderSize(out, 64*1024)
+		src.closer = func() {
 			_ = out.Close()
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
 			_ = cmd.Wait()
-		},
+		}
+		return nil
+	}
+	if err := run(0); err != nil {
+		return nil, err
+	}
+	// A seek starts ffmpeg over at the target, which it finds in the file
+	// by itself, instead of decoding everything before it.
+	src.seek = func(frame int64) error {
+		return run(time.Duration(float64(max(0, frame)) / float64(preferRate) * float64(time.Second)))
 	}
 	if info, ok := amrFileInfo(Path); ok {
 		src.Codec, src.Mono, src.Duration = info.Codec, true, info.Duration
@@ -483,16 +554,21 @@ func openExternalAudio(Path string, format audioFormat, preferRate int) (*audioS
 }
 
 // externalAudioArgs is ffmpeg's command line, kept as a plain function so
-// its shape can be checked without ffmpeg or a sound device.
-func externalAudioArgs(Path string, rate int) []string {
-	return []string{
-		"-nostdin", "-hide_banner", "-loglevel", "error",
+// its shape can be checked without ffmpeg or a sound device. A start past
+// zero goes before the input, where ffmpeg seeks in the file instead of
+// decoding up to it.
+func externalAudioArgs(Path string, rate int, start time.Duration) []string {
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error"}
+	if start > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(start.Seconds(), 'f', 3, 64))
+	}
+	return append(args,
 		"-i", Path,
 		"-vn", "-sn", "-dn",
 		"-f", "s16le", "-acodec", "pcm_s16le",
 		"-ac", "2", "-ar", strconv.Itoa(rate),
 		"-",
-	}
+	)
 }
 
 type probeInfo struct {

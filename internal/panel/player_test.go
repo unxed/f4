@@ -13,10 +13,8 @@ import (
 
 func newTestPlayerPanel() *PlayerPanel {
 	return &PlayerPanel{
-		Engine: media.NewAudioEngine(),
-		root:   &playlistItem{Folder: true, Expanded: true},
-		cursor: -1,
-		stop:   make(chan struct{}),
+		playerSession: newPlayerSession(media.NewAudioEngine()),
+		cursor:        playerCursorButtons,
 	}
 }
 

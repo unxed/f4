@@ -6,15 +6,16 @@ import (
 	"math"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/unxed/vtui"
 )
 
-// audioTrackInfo is what the panel prints in the "128kbps 44kHz stereo"
+// AudioTrackInfo is what the panel prints in the "128kbps 44kHz stereo"
 // slot. Bitrate is the average over the file (size / duration), which is
 // what most players show for VBR anyway; for MP3 the channel mode comes from
 // the first frame header because go-mp3 always emits stereo PCM.
-type audioTrackInfo struct {
+type AudioTrackInfo struct {
 	BitrateKbps int
 	SampleRate  int
 	Mono        bool
@@ -99,6 +100,14 @@ func (t *pcmTap) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// startAt makes the tap count from n bytes, for a track a seek started in
+// its middle, so that the clock says where it is.
+func (t *pcmTap) startAt(n int64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.n = n
+}
+
 func (t *pcmTap) BytesRead() int64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -146,6 +155,21 @@ func (t *pcmTap) Spectrum(bands int) []float64 {
 		out[b] = math.Max(0, math.Min(1, v))
 	}
 	return out
+}
+
+// skipPCM reads and drops the PCM of the first d of r, a stream of
+// AudioBytesPerFrame-byte frames at rate, and says how many bytes it dropped.
+// It drops whole frames only. Dropping part of one shifts every sample after it
+// by a byte or two, which the speakers play as white noise: the first seek of
+// a track was noise and the next one, by luck back on a frame, played (#2185).
+// And the resampler hands out whole frames only, so the last few bytes of a
+// partial frame never came and the copy waited for them forever.
+func skipPCM(r io.Reader, d time.Duration, rate int) (int64, error) {
+	frames := int64(d.Seconds() * float64(rate))
+	if frames <= 0 {
+		return 0, nil
+	}
+	return io.CopyN(io.Discard, r, frames*AudioBytesPerFrame)
 }
 
 // linearResampler converts 16-bit stereo LE PCM from srcRate to dstRate.

@@ -92,6 +92,8 @@ var configOptionExtraDocs = map[string]string{
 	"Panel.DropOnFolder": "Where files dragged in from another application go when they are dropped over a folder and f4 could not highlight that folder while they were dragged " +
 		"(macOS and Wayland until gogpu reports a drag in progress, gogpu on Windows, 32-bit Windows, far2l). current, the default: into the folder the panel shows; " +
 		"folder: into the folder under the pointer; ask: ask which of the two. Where f4 can follow the drag (Windows, X11), the highlighted folder is where the files go.",
+	"Panel.PlayerKeyHints": "1 while the audio player (Ctrl+Shift+M) shows its keys on its buttons and in its bottom border. " +
+		"H in the player turns it on and off; 0, the default, shows only how to see them.",
 	"Panel.VimHotkeys": "Kept for older f4 versions and shared settings files: 1 while NavigationMode is vim. " +
 		"f4 reads it only when NavigationMode is missing.",
 	"System.AutoSaveSettings": "The older switch for automatic saving. f4 keeps it on while any of the four automatic saving options is on, " +

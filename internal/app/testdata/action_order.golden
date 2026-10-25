@@ -150,6 +150,10 @@ Panel.AutoFilter
 Panel.Player
 Panel.Player.SeekBack
 Panel.Player.SeekForward
+Music.PlayPause
+Music.Next
+Music.Previous
+Music.Stop
 Panel.Tree
 Panel.SplitLeft
 Panel.SplitRight
@@ -384,9 +388,15 @@ Panel.Player.Stop
 Panel.Player.Next
 Panel.Player.VolumeUp
 Panel.Player.VolumeDown
+Panel.Player.Mute
+Panel.Player.SeekBack10
+Panel.Player.SeekForward10
+Panel.Player.JumpToStart
+Panel.Player.JumpToTenth
 Panel.Player.Activate
 Panel.Player.TogglePause
 Panel.Player.RemoveItem
+Panel.Player.ToggleKeyHints
 Panel.Player.NewFolder
 Panel.Player.MoveItemUp
 Panel.Player.MoveItemDown

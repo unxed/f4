@@ -29,21 +29,21 @@ func TestPlayerPlaylistKeysAndBounds(t *testing.T) {
 	if pp.GetSelectedName() != "first" {
 		t.Fatalf("GetSelectedName() = %q", pp.GetSelectedName())
 	}
-	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_UP}, false)
+	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_UP}, false, false)
 	if pp.cursor != 0 {
 		t.Fatalf("Up cursor = %d, want 0", pp.cursor)
 	}
-	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_LEFT}, false)
+	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_LEFT}, false, false)
 	if folder.Expanded {
 		t.Fatal("Left did not collapse the folder")
 	}
-	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_RIGHT}, false)
+	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_RIGHT}, false, false)
 	if !folder.Expanded {
 		t.Fatal("Right did not expand the folder")
 	}
 	pp.rebuildRows()
 	pp.cursor = 1
-	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_DELETE}, false)
+	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_DELETE}, false, false)
 	if len(folder.Children) != 0 || len(pp.root.Children) != 2 {
 		t.Fatalf("Delete changed wrong playlist level: folder=%d root=%d", len(folder.Children), len(pp.root.Children))
 	}
@@ -52,11 +52,11 @@ func TestPlayerPlaylistKeysAndBounds(t *testing.T) {
 	// of a folder preserves the selected item.
 	pp.rebuildRows()
 	pp.cursor = 0
-	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_UP, ControlKeyState: vtinput.LeftCtrlPressed}, true)
+	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_UP, ControlKeyState: vtinput.LeftCtrlPressed}, true, false)
 	if pp.root.Children[0] != folder {
 		t.Fatal("Ctrl+Up moved the first item past the edge")
 	}
-	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.LeftCtrlPressed}, true)
+	pp.playlistKey(&vtinput.InputEvent{VirtualKeyCode: vtinput.VK_DOWN, ControlKeyState: vtinput.LeftCtrlPressed}, true, false)
 	if pp.root.Children[0] != second || second.parent != pp.root {
 		t.Fatalf("Ctrl+Down order = %#v", pp.root.Children)
 	}

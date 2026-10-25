@@ -2,16 +2,17 @@ package panel
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/mattn/go-runewidth"
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/i18n"
+	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/media"
 	"github.com/unxed/f4/internal/theme"
 	id3 "github.com/unxed/id3-go"
@@ -34,38 +35,34 @@ import (
 // through the panel's files instead of the playlist (see PlayFile).
 //
 // Keyboard model, chosen so that Tab keeps its f4 meaning (switch panels):
-// Up/Down walk one column that starts at the control row and continues into
-// the playlist; Left/Right pick a button while the control row has the
-// cursor, and collapse/expand a folder while the playlist has it. Enter and
-// Space act on whatever has the cursor. WinAmp's Z X C V B keys and +/- for
-// volume work anywhere in the panel.
+// Up/Down walk one column that starts at the playback bar, goes on to the
+// control row and continues into the playlist; Left/Right seek on the bar,
+// pick a button on the control row, and collapse/expand a folder in the
+// playlist. Enter and Space act on whatever has the cursor. The letter keys
+// (WinAmp's or YouTube's) and +/- for volume work anywhere in the panel.
 type PlayerPanel struct {
 	vtui.ScreenObject
+	// The session is what plays (player_session.go); the panel shows it
+	// and has the cursor.
+	*playerSession
 	src     *FileSystemPanel
 	frame   *vtui.BorderedFrame
 	focused bool
 
-	Engine *media.AudioEngine
-	root   *playlistItem // invisible root; children are the top level
 	rows   []playlistRow // flattened view, rebuilt on every Show
-	cursor int           // index into rows; -1 = control row has the cursor
-	button int           // focused control when cursor == -1
+	cursor int           // index into rows, or playerCursorButtons / playerCursorBar
+	button int           // focused control when cursor == playerCursorButtons
 	top    int           // first visible playlist row
+	// followed is the cursor the view last scrolled to; the view follows
+	// the cursor when it moves, and the wheel scrolls away from it.
+	followed int
 
-	current *playlistItem // the track loaded in the engine, if any
-	marquee int
-
-	// queue is the file panel's audio files when the current track came
-	// from Enter in the panel rather than the playlist; queuePos is the
-	// current one. Nil while the playlist drives playback.
-	queue    []string
-	queuePos int
-
-	ffmpegWarned bool // the install message is shown once per panel
-	//lastTick time.Time // fix linter error
-	status string // one-line error/notice shown instead of the title
-
-	stop chan struct{}
+	// The mouse (player_mouse.go): where Show put what a click can hit,
+	// what the button held since it went down drags, and where the knob of
+	// the playback bar is while it is dragged, 0 to 1.
+	layout   playerLayout
+	drag     playerDrag
+	dragSeek float64
 }
 
 type playlistItem struct {
@@ -92,19 +89,38 @@ const (
 	playerBtnCount
 )
 
-const playerControlRows = 5 // title, time/info, spectrum×2, buttons
+// controlRows is the height of the block above the playlist: the title; the
+// playback bar and the stream facts under it, or with the bar off the clock
+// and the facts on one row; the two rows of the spectrum when it is on; the
+// buttons.
+func (pp *PlayerPanel) controlRows() int {
+	rows := 3
+	if config.App.PlayerBar {
+		rows++
+	}
+	if config.App.PlayerSpectrum {
+		rows += 2
+	}
+	return rows
+}
 
 const playerSeekStep = 5 * time.Second
+
+// The rows above the playlist the cursor stops on: the buttons, and above
+// them the playback bar, where the arrows seek.
+const (
+	playerCursorButtons = -1
+	playerCursorBar     = -2
+)
 
 func NewPlayerPanel(src *FileSystemPanel) *PlayerPanel {
 	x1, y1, x2, y2 := src.GetPosition()
 	pp := &PlayerPanel{
-		src:    src,
-		Engine: media.NewAudioEngine(),
-		root:   &playlistItem{Folder: true, Expanded: true},
-		cursor: -1,
-		button: playerBtnPlay,
-		stop:   make(chan struct{}),
+		playerSession: openPlayerSession(),
+		src:           src,
+		cursor:        playerCursorButtons,
+		button:        playerBtnPlay,
+		followed:      playerCursorButtons,
 	}
 	pp.SetVisible(true)
 	pp.frame = vtui.NewBorderedFrame(x1, y1, x2, y2, vtui.SingleBox, i18n.Msg("Player.Title"))
@@ -112,8 +128,11 @@ func NewPlayerPanel(src *FileSystemPanel) *PlayerPanel {
 	pp.frame.ColorTitleIdx = theme.ColPanelTitle
 	pp.frame.ColorBackgroundIdx = theme.ColPanelText
 	pp.SetPosition(x1, y1, x2, y2)
-	pp.loadPlaylist()
-	go pp.tick()
+	// A player opened over music playing in the background shows it as it
+	// is, with the cursor on the track that plays.
+	if pp.current != nil {
+		pp.cursorTo(pp.current)
+	}
 	return pp
 }
 
@@ -124,13 +143,25 @@ func (pp *PlayerPanel) SetPosition(x1, y1, x2, y2 int) {
 	}
 }
 
+// FocusedPlayer is the player when it has the focus in the panels, or nil.
+// The Panel.Player.* actions act on it.
+func (pf *PanelsFrame) FocusedPlayer() *PlayerPanel {
+	if pf == nil || !pf.ShowPanels || pf.ActiveIdx < 0 || pf.ActiveIdx >= len(pf.AltPanels) {
+		return nil
+	}
+	if pp, ok := pf.AltPanels[pf.ActiveIdx].(*PlayerPanel); ok && pp.IsFocused() {
+		return pp
+	}
+	return nil
+}
+
 func (pp *PlayerPanel) Source() *FileSystemPanel { return pp.src }
 func (pp *PlayerPanel) Kind() string             { return "player" }
 func (pp *PlayerPanel) SetFocus(f bool)          { pp.focused = f }
 func (pp *PlayerPanel) IsFocused() bool          { return pp.focused }
-func (pp *PlayerPanel) ProcessMouse(*vtinput.InputEvent) bool {
-	return false
-}
+
+// HelpTopic is the topic F1 opens while the player has the focus.
+func (pp *PlayerPanel) HelpTopic() string { return "Player" }
 
 func (pp *PlayerPanel) GetSelectedName() string {
 	if pp.cursor >= 0 && pp.cursor < len(pp.rows) {
@@ -139,66 +170,38 @@ func (pp *PlayerPanel) GetSelectedName() string {
 	return ""
 }
 
-// Close stops playback and the repaint ticker. Playback is tied to the
-// panel on purpose: with no panel there is nothing to control it from.
+// Close is the panel going away. The music it played goes on in the
+// background (playerSession); the question whether it should comes before
+// the close (AskClose).
 func (pp *PlayerPanel) Close() {
-	select {
-	case <-pp.stop:
-	default:
-		close(pp.stop)
+	if pp.playerSession != nil {
+		pp.leave()
 	}
-	pp.Engine.Close()
 }
 
-// tick repaints while something is playing so the clock, the marquee and
-// the spectrum move, and advances to the next track when one ends. It
-// never touches UI state itself; everything happens inside PostTask.
-func (pp *PlayerPanel) tick() {
-	t := time.NewTicker(150 * time.Millisecond)
-	defer t.Stop()
-	for {
-		select {
-		case <-pp.stop:
-			return
-		case <-t.C:
-			if !pp.Engine.IsLoaded() {
-				continue
-			}
-			vtui.FrameManager.PostTask(func() {
-				if pp.Engine.Finished() {
-					if !pp.playRelative(+1) {
-						pp.Engine.Stop()
-						pp.current = nil
-					}
-				}
-				pp.marquee++
-				vtui.FrameManager.Redraw()
-			})
+// AskClose: closing the player while music plays asks whether to go on
+// playing it in the background or to stop it; Cancel and Esc keep the player
+// open. With nothing loaded, or another player still showing it, the player
+// just closes.
+func (pp *PlayerPanel) AskClose(proceed func()) {
+	if pp.playerSession == nil || pp.views > 1 || !pp.Engine.IsLoaded() {
+		proceed()
+		return
+	}
+	dlg := vtui.ShowMessage(i18n.Msg("Player.Title"), i18n.Msg("Player.CloseWhilePlaying"),
+		[]string{i18n.Msg("Player.PlayInBackground"), i18n.Msg("Player.StopPlaying"), i18n.Msg("vtui.Cancel")})
+	dlg.OnResult = func(code int) {
+		switch code {
+		case 0:
+			proceed()
+		case 1:
+			pp.stopPlaying()
+			proceed()
 		}
 	}
 }
 
 // ---- playlist model ---------------------------------------------------
-
-func playlistFile() string {
-	return filepath.Join(config.GetF4ConfigDir(), "playlist.json")
-}
-
-func (pp *PlayerPanel) loadPlaylist() {
-	data, err := os.ReadFile(playlistFile())
-	if err != nil {
-		return
-	}
-	_ = unmarshalPlaylist(data, pp.root)
-}
-
-func (pp *PlayerPanel) savePlaylist() {
-	data, err := marshalPlaylist(pp.root)
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile(playlistFile(), data, 0o600)
-}
 
 func marshalPlaylist(root *playlistItem) ([]byte, error) {
 	return json.MarshalIndent(root.Children, "", " ")
@@ -372,141 +375,7 @@ func trackDisplayName(path string) string {
 	return base
 }
 
-// ---- playback ---------------------------------------------------------
-
-func (pp *PlayerPanel) playItem(it *playlistItem) bool {
-	if it == nil || it.Folder {
-		return false
-	}
-	// A playlist track takes over from the file panel queue.
-	if it.parent != nil {
-		pp.queue = nil
-	}
-	pp.status = ""
-	if err := pp.Engine.Load(it.Path); err != nil {
-		pp.status = err.Error()
-		pp.current = nil
-		if errors.Is(err, media.ErrNeedFFmpeg) {
-			pp.status = fmt.Sprintf(i18n.Msg("Player.NeedFFmpeg"), filepath.Ext(it.Path))
-			if !pp.ffmpegWarned {
-				pp.ffmpegWarned = true
-				vtui.ShowMessage(i18n.Msg("Player.Title"), media.ToolFFmpeg.MissingMessage(), []string{i18n.Msg("vtui.Ok")})
-			}
-		}
-		return false
-	}
-	pp.current = it
-	pp.marquee = 0
-	pp.Engine.Play()
-	return true
-}
-
-// PlayFile plays one file that is not in the playlist — the one under the
-// cursor of the file panel — and remembers its neighbours so that playback
-// can go on to the next recording, and |< >| move within the folder. The
-// list is the panel's audio files in panel order; pos is the one to play.
-func (pp *PlayerPanel) PlayFile(files []string, pos int) bool {
-	if pos < 0 || pos >= len(files) {
-		return false
-	}
-	it := &playlistItem{Name: trackDisplayName(files[pos]), Path: files[pos]}
-	if !pp.playItem(it) {
-		return false
-	}
-	pp.queue = append([]string(nil), files...)
-	pp.queuePos = pos
-	return true
-}
-
-// AutoPlayFile follows the file-panel cursor without restarting a track when
-// an arrow key merely hits the edge of the list.
-func (pp *PlayerPanel) AutoPlayFile(files []string, pos int) bool {
-	if pp.Engine == nil || pos < 0 || pos >= len(files) {
-		return false
-	}
-	if pp.current != nil && pp.current.Path == files[pos] && pp.Engine.IsLoaded() {
-		return false
-	}
-	return pp.PlayFile(files, pos)
-}
-
-// StopIfPlaying stops playback when the current track is one of paths.
-// The delete action calls it before removing files: an open file cannot be
-// deleted on Windows, and a player that carries on reading a file that is
-// gone is not what anybody expects on the others. The queue forgets the
-// files too so the player does not step onto them later.
-func (pp *PlayerPanel) StopIfPlaying(paths []string) {
-	set := make(map[string]bool, len(paths))
-	for _, p := range paths {
-		set[filepath.Clean(p)] = true
-	}
-	if pp.current != nil && set[filepath.Clean(pp.current.Path)] {
-		pp.Engine.Stop()
-		pp.current = nil
-	}
-	if pp.queue == nil {
-		return
-	}
-	kept := pp.queue[:0]
-	pos := pp.queuePos
-	for i, p := range pp.queue {
-		if set[filepath.Clean(p)] {
-			if i < pp.queuePos {
-				pos--
-			}
-			continue
-		}
-		kept = append(kept, p)
-	}
-	pp.queue = kept
-	pp.queuePos = max(-1, min(pos, len(kept)-1))
-}
-
-// playQueueRelative steps through the file panel's files. Files that have
-// gone since the list was taken (deleted from the panel meanwhile) are
-// skipped.
-func (pp *PlayerPanel) playQueueRelative(delta int) bool {
-	for i := pp.queuePos + delta; i >= 0 && i < len(pp.queue); i += delta {
-		if _, err := os.Stat(pp.queue[i]); err != nil {
-			continue
-		}
-		if pp.PlayFile(pp.queue, i) {
-			return true
-		}
-	}
-	return false
-}
-
-// playRelative plays the track delta positions away from the current one
-// in play order. With nothing current it starts from the ends.
-func (pp *PlayerPanel) playRelative(delta int) bool {
-	if pp.queue != nil {
-		return pp.playQueueRelative(delta)
-	}
-	list := pp.root.tracks(nil)
-	if len(list) == 0 {
-		return false
-	}
-	idx := -1
-	for i, t := range list {
-		if t == pp.current {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		if delta > 0 {
-			idx = -1
-		} else {
-			idx = len(list)
-		}
-	}
-	idx += delta
-	if idx < 0 || idx >= len(list) {
-		return false
-	}
-	return pp.playItem(list[idx])
-}
+// ---- buttons ----------------------------------------------------------
 
 func (pp *PlayerPanel) pressButton(b int) {
 	switch b {
@@ -527,9 +396,7 @@ func (pp *PlayerPanel) pressButton(b int) {
 	case playerBtnPause:
 		pp.Engine.TogglePause()
 	case playerBtnStop:
-		pp.Engine.Stop()
-		pp.current = nil
-		pp.queue = nil
+		pp.stopPlaying()
 	case playerBtnNext:
 		pp.playRelative(+1)
 	case playerBtnVolume:
@@ -537,17 +404,61 @@ func (pp *PlayerPanel) pressButton(b int) {
 	}
 }
 
-func (pp *PlayerPanel) adjustVolume(delta float64) {
-	pp.Engine.SetVolume(pp.Engine.Volume() + delta)
-}
+// PlayerCommand is something the player does on a key and from the command
+// palette (Panel.Player.*). The palette asks for the command, not for its key:
+// which keys work depends on config.App.PlayerKeys.
+type PlayerCommand int
 
-// SeekBy moves the current track by delta. It is also used by the file-panel
-// shortcuts, where the player is open but does not have keyboard focus.
-func (pp *PlayerPanel) SeekBy(delta time.Duration) bool {
-	if pp.Engine == nil || !pp.Engine.IsLoaded() {
+const (
+	PlayerPrevious PlayerCommand = iota
+	PlayerPlay
+	PlayerPause
+	PlayerStop
+	PlayerNext
+	PlayerPlayPause
+	PlayerVolumeUp
+	PlayerVolumeDown
+	PlayerMute
+	PlayerSeekBack10
+	PlayerSeekForward10
+	PlayerToggleKeyHints
+)
+
+// Do does cmd and reports whether it was one the player knows.
+func (pp *PlayerPanel) Do(cmd PlayerCommand) bool {
+	switch cmd {
+	case PlayerPrevious:
+		pp.pressButton(playerBtnPrev)
+	case PlayerPlay:
+		pp.pressButton(playerBtnPlay)
+	case PlayerPause:
+		pp.pressButton(playerBtnPause)
+	case PlayerStop:
+		pp.pressButton(playerBtnStop)
+	case PlayerNext:
+		pp.pressButton(playerBtnNext)
+	case PlayerPlayPause:
+		if pp.Engine.IsLoaded() {
+			pp.Engine.TogglePause()
+		} else {
+			pp.pressButton(playerBtnPlay)
+		}
+	case PlayerVolumeUp:
+		pp.adjustVolume(+0.05)
+	case PlayerVolumeDown:
+		pp.adjustVolume(-0.05)
+	case PlayerMute:
+		pp.toggleMute()
+	case PlayerSeekBack10:
+		pp.SeekBy(-10 * time.Second)
+	case PlayerSeekForward10:
+		pp.SeekBy(10 * time.Second)
+	case PlayerToggleKeyHints:
+		config.App.PlayerKeyHints = !config.App.PlayerKeyHints
+		config.RequestSaveConfig()
+	default:
 		return false
 	}
-	pp.Engine.Seek(delta)
 	return true
 }
 
@@ -565,11 +476,13 @@ func (pp *PlayerPanel) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 	handled := true
 	switch {
-	case !ctrl && !shift && e.Char != 0 && pp.globalChar(e.Char):
+	case !ctrl && pp.globalKey(e):
+	case pp.cursor == playerCursorBar:
+		handled = pp.barKey(e)
 	case pp.cursor < 0:
-		handled = pp.controlKey(e, ctrl)
+		handled = pp.controlKey(e)
 	default:
-		handled = pp.playlistKey(e, ctrl)
+		handled = pp.playlistKey(e, ctrl, shift)
 	}
 	if !handled && !ctrl && isFilePanelOnlyKey(e.VirtualKeyCode) {
 		// F3/F4/F5/F8 and their Shift variants, Ins, Del: with the player
@@ -587,10 +500,10 @@ func (pp *PlayerPanel) ProcessKey(e *vtinput.InputEvent) bool {
 
 // OwnsKey: while the player has the focus it keeps (altPanelKeyOwner) the
 // characters -- WinAmp's Z X C V B, + and - for the volume -- which must not
-// go to the command line, Enter and Del, and Ctrl with the arrows and Home,
-// which move playlist items (docs/PLAYER.md) instead of the split between the
-// panels. The file keys no focused alternative panel lets through
-// (altPanelListsFiles, #380, #902).
+// go to the command line, Enter and Del, and Shift or Ctrl with the arrows,
+// which move playlist items (docs/PLAYER.md) instead of marking files or the
+// split between the panels, and Ctrl+Home. The file keys no focused
+// alternative panel lets through (altPanelListsFiles, #380, #902).
 func (pp *PlayerPanel) OwnsKey(e *vtinput.InputEvent) bool {
 	if e.Char != 0 || e.VirtualKeyCode == vtinput.VK_RETURN || e.VirtualKeyCode == vtinput.VK_DELETE {
 		return true
@@ -598,53 +511,123 @@ func (pp *PlayerPanel) OwnsKey(e *vtinput.InputEvent) bool {
 	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0
 	alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0
 	shift := e.ControlKeyState&vtinput.ShiftPressed != 0
-	if ctrl && !alt && !shift {
-		switch e.VirtualKeyCode {
-		case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT, vtinput.VK_HOME:
-			return true
-		}
+	if alt || ctrl == shift {
+		return false
+	}
+	switch e.VirtualKeyCode {
+	case vtinput.VK_UP, vtinput.VK_DOWN, vtinput.VK_LEFT, vtinput.VK_RIGHT:
+		return true
+	case vtinput.VK_HOME:
+		return ctrl
 	}
 	return false
 }
 
-// globalChar handles the WinAmp letter keys and volume characters that
-// work wherever the cursor is.
-func (pp *PlayerPanel) globalChar(ch rune) bool {
-	switch ch {
-	case 'z', 'Z':
-		pp.pressButton(playerBtnPrev)
-	case 'x', 'X':
-		pp.pressButton(playerBtnPlay)
-	case 'c', 'C':
-		pp.pressButton(playerBtnPause)
-	case 'v', 'V':
-		pp.pressButton(playerBtnStop)
-	case 'b', 'B':
-		pp.pressButton(playerBtnNext)
-	case '+', '=':
-		pp.adjustVolume(+0.05)
-	case '-', '_':
-		pp.adjustVolume(-0.05)
-	default:
-		return false
+// globalKey handles the letter keys of the scheme config.App.PlayerKeys
+// names, the digits of YouTube's, and the volume keys, which work wherever
+// the cursor is. The letters are told by the key they are on, not by what it
+// types: with the Russian layout on, Z types я, and the player still has to
+// go back a track (#2185).
+func (pp *PlayerPanel) globalKey(e *vtinput.InputEvent) bool {
+	if tenth, ok := playerDigit(e); ok && config.App.PlayerKeys != config.PlayerKeysWinAmp {
+		pp.JumpToTenth(tenth)
+		return true
 	}
-	return true
+	cmd, ok := playerKeyCommand(e, config.App.PlayerKeys)
+	if ok {
+		pp.Do(cmd)
+	}
+	return ok
 }
 
-func (pp *PlayerPanel) controlKey(e *vtinput.InputEvent, ctrl bool) bool {
+// playerKeyCommand is the command of a key in the focused player with the
+// letter scheme scheme. WinAmp: Z X C V B. YouTube: K play or pause, J and L
+// ten seconds back and forward, M mute, Shift+P and Shift+N the previous and
+// the next track. The two share no key, so both can be on. H, with either,
+// shows the keys on the player and hides them again.
+func playerKeyCommand(e *vtinput.InputEvent, scheme string) (PlayerCommand, bool) {
+	winamp := scheme != config.PlayerKeysYouTube
+	youtube := scheme != config.PlayerKeysWinAmp
+	shift := e.ControlKeyState&vtinput.ShiftPressed != 0
+	switch letter := playerLetterKey(e); {
+	case letter == vtinput.VK_H:
+		return PlayerToggleKeyHints, true
+	case winamp && letter == vtinput.VK_Z:
+		return PlayerPrevious, true
+	case winamp && letter == vtinput.VK_X:
+		return PlayerPlay, true
+	case winamp && letter == vtinput.VK_C:
+		return PlayerPause, true
+	case winamp && letter == vtinput.VK_V:
+		return PlayerStop, true
+	case winamp && letter == vtinput.VK_B:
+		return PlayerNext, true
+	case youtube && letter == vtinput.VK_K:
+		return PlayerPlayPause, true
+	case youtube && letter == vtinput.VK_J:
+		return PlayerSeekBack10, true
+	case youtube && letter == vtinput.VK_L:
+		return PlayerSeekForward10, true
+	case youtube && letter == vtinput.VK_M:
+		return PlayerMute, true
+	case youtube && shift && letter == vtinput.VK_P:
+		return PlayerPrevious, true
+	case youtube && shift && letter == vtinput.VK_N:
+		return PlayerNext, true
+	case e.Char == '+' || e.Char == '=' || e.VirtualKeyCode == vtinput.VK_OEM_PLUS || e.VirtualKeyCode == vtinput.VK_ADD:
+		return PlayerVolumeUp, true
+	case e.Char == '-' || e.Char == '_' || e.VirtualKeyCode == vtinput.VK_OEM_MINUS || e.VirtualKeyCode == vtinput.VK_SUBTRACT:
+		return PlayerVolumeDown, true
+	}
+	return 0, false
+}
+
+// playerDigit is the digit of a digit key pressed without Shift, which types
+// the same digit in every layout.
+func playerDigit(e *vtinput.InputEvent) (int, bool) {
+	if e.ControlKeyState&vtinput.ShiftPressed != 0 {
+		return 0, false
+	}
+	switch {
+	case e.Char >= '0' && e.Char <= '9':
+		return int(e.Char - '0'), true
+	case e.Char == 0 && e.VirtualKeyCode >= vtinput.VK_0 && e.VirtualKeyCode <= vtinput.VK_9:
+		return int(e.VirtualKeyCode - vtinput.VK_0), true
+	}
+	return 0, false
+}
+
+// playerLetterKey is the Latin letter key e was typed on, or 0. That is the
+// virtual key when the terminal or the window reported one; a terminal that
+// sends only the character gives a letter of the layout that is on, and a
+// Russian one is put back on its key.
+func playerLetterKey(e *vtinput.InputEvent) uint16 {
+	if vk := e.VirtualKeyCode; vk >= vtinput.VK_A && vk <= vtinput.VK_Z {
+		return vk
+	}
+	if e.VirtualKeyCode != 0 || e.Char == 0 {
+		return 0
+	}
+	if r := unicode.ToUpper(e.Char); r >= 'A' && r <= 'Z' {
+		return uint16(r)
+	}
+	return keymap.LayoutLetterVK(e.Char)
+}
+
+// controlKey: on the buttons Left and Right go from one to the next, and on
+// the volume slider make it louder or quieter, whether a track is loaded or
+// not. They used to seek while one was, so nobody could get from Play to
+// Stop with the arrows while it played (#2185); seeking is on the bar above.
+func (pp *PlayerPanel) controlKey(e *vtinput.InputEvent) bool {
 	switch e.VirtualKeyCode {
 	case vtinput.VK_LEFT:
-		if !ctrl && pp.Engine.IsLoaded() {
-			pp.Engine.Seek(-playerSeekStep)
-		} else if pp.button == playerBtnVolume {
+		if pp.button == playerBtnVolume {
 			pp.adjustVolume(-0.05)
 		} else if pp.button > 0 {
 			pp.button--
 		}
 	case vtinput.VK_RIGHT:
-		if !ctrl && pp.Engine.IsLoaded() {
-			pp.Engine.Seek(playerSeekStep)
-		} else if pp.button == playerBtnVolume {
+		if pp.button == playerBtnVolume {
 			pp.adjustVolume(+0.05)
 		} else {
 			pp.button++
@@ -660,32 +643,56 @@ func (pp *PlayerPanel) controlKey(e *vtinput.InputEvent, ctrl bool) bool {
 	case vtinput.VK_RETURN, vtinput.VK_SPACE:
 		pp.pressButton(pp.button)
 	case vtinput.VK_UP:
-		// Top of the column: nothing above, but swallow so the file
-		// panel below the alt does not react.
+		pp.cursor = playerCursorBar
+	case vtinput.VK_F7:
+		// On the buttons too, and with the playlist still empty, where the
+		// cursor never leaves them: the folder goes to the end (#2185).
+		pp.newFolder(nil)
 	default:
 		return false
 	}
 	return true
 }
 
-func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl bool) bool {
+// barKey: the playback bar, or the clock with the bar off, is a row of the
+// cursor's own above the buttons, and Left and Right there move the track
+// five seconds. Up is the top of the column: nothing above, but the key is
+// swallowed so the file panel behind the player does not take it.
+func (pp *PlayerPanel) barKey(e *vtinput.InputEvent) bool {
+	switch e.VirtualKeyCode {
+	case vtinput.VK_LEFT:
+		pp.SeekBy(-playerSeekStep)
+	case vtinput.VK_RIGHT:
+		pp.SeekBy(playerSeekStep)
+	case vtinput.VK_DOWN, vtinput.VK_NEXT:
+		pp.cursor = playerCursorButtons
+	case vtinput.VK_UP, vtinput.VK_PRIOR:
+	case vtinput.VK_RETURN, vtinput.VK_SPACE:
+		pp.Do(PlayerPlayPause)
+	case vtinput.VK_F7:
+		pp.newFolder(nil)
+	default:
+		return false
+	}
+	return true
+}
+
+// playlistKey: Shift with an arrow moves the item under the cursor, and so
+// does Ctrl, which is what the player had first. Shift is the one that works
+// everywhere: macOS keeps Ctrl with the arrows for Mission Control and the
+// switching of Spaces and never lets them reach the terminal (#2185).
+func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl, shift bool) bool {
 	pp.rebuildRows()
 	if pp.cursor >= len(pp.rows) {
 		pp.cursor = len(pp.rows) - 1
 	}
 	if pp.cursor < 0 {
-		return pp.controlKey(e, ctrl)
+		pp.cursor = playerCursorButtons
+		return pp.controlKey(e)
 	}
-	if !ctrl && pp.Engine.IsLoaded() {
-		switch e.VirtualKeyCode {
-		case vtinput.VK_LEFT:
-			pp.Engine.Seek(-playerSeekStep)
-			return true
-		case vtinput.VK_RIGHT:
-			pp.Engine.Seek(playerSeekStep)
-			return true
-		}
-	}
+	// Left and Right fold and unfold a folder, and Left takes a track to
+	// its folder, also while something plays: they seeked then (#2185).
+	move := ctrl || shift
 	row := pp.rows[pp.cursor]
 	it := row.item
 	page := pp.playlistHeight()
@@ -694,15 +701,15 @@ func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl bool) bool {
 	}
 	switch e.VirtualKeyCode {
 	case vtinput.VK_UP:
-		if ctrl {
+		if move {
 			pp.moveItem(it, -1)
 		} else if pp.cursor == 0 {
-			pp.cursor = -1
+			pp.cursor = playerCursorButtons
 		} else {
 			pp.cursor--
 		}
 	case vtinput.VK_DOWN:
-		if ctrl {
+		if move {
 			pp.moveItem(it, +1)
 		} else if pp.cursor < len(pp.rows)-1 {
 			pp.cursor++
@@ -713,14 +720,14 @@ func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl bool) bool {
 		pp.cursor = min(len(pp.rows)-1, pp.cursor+page)
 	case vtinput.VK_HOME:
 		if ctrl {
-			pp.cursor = -1
+			pp.cursor = playerCursorButtons
 		} else {
 			pp.cursor = 0
 		}
 	case vtinput.VK_END:
 		pp.cursor = len(pp.rows) - 1
 	case vtinput.VK_LEFT:
-		if ctrl {
+		if move {
 			pp.moveOut(it)
 		} else if it.Folder && it.Expanded {
 			it.Expanded = false
@@ -729,7 +736,7 @@ func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl bool) bool {
 			pp.cursorTo(it.parent)
 		}
 	case vtinput.VK_RIGHT:
-		if ctrl {
+		if move {
 			pp.moveInto(it)
 		} else if it.Folder && !it.Expanded {
 			it.Expanded = true
@@ -748,7 +755,9 @@ func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl bool) bool {
 		} else if !it.Folder {
 			pp.playItem(it)
 		}
-	case vtinput.VK_DELETE:
+	case vtinput.VK_DELETE, vtinput.VK_F8:
+		// F8 too, which deletes in the file panels: the key bar says Remove
+		// over it while the player has the focus.
 		if it == pp.current || (it.Folder && pp.currentInside(it)) {
 			pp.Engine.Stop()
 			pp.current = nil
@@ -846,7 +855,7 @@ func (pp *PlayerPanel) newFolder(after *playlistItem) {
 // ---- drawing ---------------------------------------------------------
 
 func (pp *PlayerPanel) playlistHeight() int {
-	return pp.Y2 - pp.Y1 - 2 - playerControlRows - 1
+	return pp.Y2 - pp.Y1 - 2 - pp.controlRows() - 1
 }
 
 func fmtClock(d time.Duration) string {
@@ -890,11 +899,9 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 	}
 	put(y, title, text)
 
-	// Row 1: clock and stream facts.
-	clock := "--:-- / --:--"
+	loaded := pp.Engine.IsLoaded()
 	facts := ""
-	if pp.Engine.IsLoaded() {
-		clock = fmtClock(pp.Engine.Position()) + " / " + fmtClock(pp.Engine.Duration())
+	if loaded {
 		info := pp.Engine.Info()
 		mode := i18n.Msg("Player.Stereo")
 		if info.Mono {
@@ -905,66 +912,114 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 			facts = info.Codec + " " + facts
 		}
 	}
-	line := clock
-	if gap := w - runewidth.StringWidth(clock) - runewidth.StringWidth(facts); gap > 1 {
-		line += strings.Repeat(" ", gap) + facts
+	// The bar, or the clock, is where the cursor stops to seek.
+	barAttr := text
+	if pp.focused && pp.cursor == playerCursorBar {
+		barAttr = hi
 	}
-	put(y+1, line, text)
+	row := y + 1
+	pp.layout = playerLayout{barY: row}
+	if config.App.PlayerBar {
+		// Where the track is, on a bar between the two clocks, and the
+		// stream facts under it. While the bar is dragged its knob is where
+		// the mouse is; the track goes there when the button is let go.
+		pos, dur := pp.Engine.Position(), pp.Engine.Duration()
+		if pp.drag == playerDragBar && dur > 0 {
+			pos = time.Duration(pp.dragSeek * float64(dur))
+		}
+		put(row, playbackBar(pos, dur, loaded, w), barAttr)
+		if left, right := playbackClocks(pos, dur, loaded); loaded && dur > 0 {
+			if start, width := playbackBarSpan(left, right, w); width >= 3 {
+				pp.layout.barX, pp.layout.barW = x+start, width
+			}
+		}
+		put(row+1, facts, text)
+		row += 2
+	} else {
+		// The clock and the stream facts on one row.
+		clock := "--:-- / --:--"
+		if loaded {
+			clock = fmtClock(pp.Engine.Position()) + " / " + fmtClock(pp.Engine.Duration())
+		}
+		line := clock
+		if gap := w - runewidth.StringWidth(clock) - runewidth.StringWidth(facts); gap > 1 {
+			line += strings.Repeat(" ", gap) + facts
+		}
+		put(row, line, barAttr)
+		row++
+	}
 
-	// Rows 2-3: spectrum, two rows of eighth blocks = 16 levels per band.
-	bands := min(24, max(4, (w-2)/2))
-	spec := pp.Engine.Spectrum(bands)
-	if !pp.Engine.IsPlaying() {
-		for i := range spec {
-			spec[i] = 0
+	// The spectrum, when it is on: two rows of eighth blocks, 16 levels a band.
+	if config.App.PlayerSpectrum {
+		bands := min(24, max(4, (w-2)/2))
+		spec := pp.Engine.Spectrum(bands)
+		var hiRow, loRow strings.Builder
+		for _, v := range spec {
+			if !pp.Engine.IsPlaying() {
+				v = 0
+			}
+			lvl := int(v*16 + 0.5)
+			hiRow.WriteString(eighthBlock(lvl-8) + " ")
+			loRow.WriteString(eighthBlock(lvl) + " ")
+		}
+		put(row, hiRow.String(), text)
+		put(row+1, loRow.String(), text)
+		row += 2
+	}
+
+	// The last row: buttons and volume. While the keys are shown (H) each
+	// button carries the letter that presses it.
+	by := row
+	labels := []string{"|<", " > ", "||", " # ", ">|"}
+	if config.App.PlayerKeyHints {
+		for i, key := range playerButtonKeys(config.App.PlayerKeys) {
+			if key != "" {
+				labels[i] = key + " " + strings.TrimSpace(labels[i])
+			}
 		}
 	}
-	var hiRow, loRow strings.Builder
-	for _, v := range spec {
-		lvl := int(v*16 + 0.5)
-		hiRow.WriteString(eighthBlock(lvl-8) + " ")
-		loRow.WriteString(eighthBlock(lvl) + " ")
-	}
-	put(y+2, hiRow.String(), text)
-	put(y+3, loRow.String(), text)
-
-	// Row 4: buttons and volume.
-	labels := []string{"|<", " > ", "||", " # ", ">|"}
 	bx := x
-	scr.FillRect(x, y+4, pp.X2-1, y+4, ' ', text)
+	pp.layout.buttonsY = by
+	scr.FillRect(x, by, pp.X2-1, by, ' ', text)
 	for i, l := range labels {
 		attr := text
-		if pp.focused && pp.cursor < 0 && pp.button == i {
+		if pp.focused && pp.cursor == playerCursorButtons && pp.button == i {
 			attr = hi
 		}
 		cells := vtui.StringToCharInfo("["+l+"]", attr)
-		scr.Write(bx, y+4, cells)
+		scr.Write(bx, by, cells)
+		pp.layout.buttons[i] = [2]int{bx, bx + len(cells) - 1}
 		bx += len(cells) + 1
 	}
 	volW := w - (bx - x) - 5
 	if volW >= 4 {
+		pp.layout.volX, pp.layout.volW = bx, volW
 		filled := int(pp.Engine.Volume()*float64(volW) + 0.5)
 		bar := strings.Repeat("█", filled) + strings.Repeat("░", volW-filled)
 		attr := text
-		if pp.focused && pp.cursor < 0 && pp.button == playerBtnVolume {
+		if pp.focused && pp.cursor == playerCursorButtons && pp.button == playerBtnVolume {
 			attr = hi
 		}
-		scr.Write(bx, y+4, vtui.StringToCharInfo(bar, attr))
-		scr.Write(bx+volW, y+4, vtui.StringToCharInfo(fmt.Sprintf("%3d%%", int(pp.Engine.Volume()*100+0.5)), text))
+		scr.Write(bx, by, vtui.StringToCharInfo(bar, attr))
+		scr.Write(bx+volW, by, vtui.StringToCharInfo(fmt.Sprintf("%3d%%", int(pp.Engine.Volume()*100+0.5)), text))
 	}
 
 	// Separator on the frame's own lines.
 	sep := "├" + strings.Repeat("─", w) + "┤"
-	scr.Write(pp.X1, y+playerControlRows, vtui.StringToCharInfo(sep, box))
+	scr.Write(pp.X1, by+1, vtui.StringToCharInfo(sep, box))
+	pp.showKeyHints(scr, box)
 
 	// Playlist.
 	pp.rebuildRows()
 	ph := pp.playlistHeight()
-	py := y + playerControlRows + 1
+	py := by + 2
 	if ph <= 0 {
 		return
 	}
-	if pp.cursor >= 0 {
+	pp.layout.listY, pp.layout.listRows = py, ph
+	// The view follows the cursor when it has moved; the wheel scrolls the
+	// view away from a cursor that stays.
+	if pp.cursor >= 0 && pp.cursor != pp.followed {
 		if pp.cursor < pp.top {
 			pp.top = pp.cursor
 		}
@@ -972,9 +1027,8 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 			pp.top = pp.cursor - ph + 1
 		}
 	}
-	if pp.top > max(0, len(pp.rows)-ph) {
-		pp.top = max(0, len(pp.rows)-ph)
-	}
+	pp.followed = pp.cursor
+	pp.top = max(0, min(pp.top, len(pp.rows)-ph))
 	if len(pp.rows) == 0 {
 		put(py, i18n.Msg("Player.EmptyPlaylist"), text)
 		return
@@ -1002,6 +1056,91 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 		}
 		put(py+i, s, attr)
 	}
+}
+
+// playbackClocks are the clocks at the two ends of the playback bar.
+func playbackClocks(pos, dur time.Duration, loaded bool) (left, right string) {
+	left, right = "--:--", "--:--"
+	if loaded {
+		left = fmtClock(pos)
+		if dur > 0 {
+			right = fmtClock(dur)
+		}
+	}
+	return left, right
+}
+
+// playbackBarSpan is where the bar starts in its row, w cells wide, between
+// the clocks left and right, and how wide it is; under 3 cells there is none.
+func playbackBarSpan(left, right string, w int) (start, width int) {
+	lw := runewidth.StringWidth(left)
+	return lw + 1, w - lw - runewidth.StringWidth(right) - 2
+}
+
+// showKeyHints writes on the bottom border how to see the player's keys, or,
+// while they are shown, the keys the buttons do not carry: as many as the
+// border has room for, and always the one that hides them again. The full
+// list is too long for a panel, and a player that showed it all the time
+// would be a page of keys with a player in it (#2185).
+func (pp *PlayerPanel) showKeyHints(scr *vtui.ScreenBuf, attr uint64) {
+	room := pp.X2 - pp.X1 - 3
+	line := i18n.Msg("Player.KeysHint")
+	if config.App.PlayerKeyHints {
+		key := "Player.KeysLine.Both"
+		switch config.App.PlayerKeys {
+		case config.PlayerKeysWinAmp:
+			key = "Player.KeysLine.WinAmp"
+		case config.PlayerKeysYouTube:
+			key = "Player.KeysLine.YouTube"
+		}
+		line = fitHints(strings.Split(i18n.Msg(key), "|"), room-2)
+	}
+	if line = " " + line + " "; runewidth.StringWidth(line) <= room {
+		scr.Write(pp.X1+2, pp.Y2, vtui.StringToCharInfo(line, attr))
+	}
+}
+
+// fitHints joins as many of hints as fit in room, in their order, and the
+// last of them whatever room is left.
+func fitHints(hints []string, room int) string {
+	const gap = "  "
+	last := hints[len(hints)-1]
+	width := runewidth.StringWidth(last)
+	var shown []string
+	for _, h := range hints[:len(hints)-1] {
+		w := runewidth.StringWidth(h) + len(gap)
+		if width+w > room {
+			break
+		}
+		shown = append(shown, h)
+		width += w
+	}
+	return strings.Join(append(shown, last), gap)
+}
+
+// playerButtonKeys are the letters the buttons carry while the keys are
+// shown: WinAmp's when they are on, else YouTube's, which has no stop.
+func playerButtonKeys(scheme string) [5]string {
+	if scheme == config.PlayerKeysYouTube {
+		return [5]string{"⇧P", "K", "K", "", "⇧N"}
+	}
+	return [5]string{"Z", "X", "C", "V", "B"}
+}
+
+// playbackBar is the row with the clocks at its two ends and a bar between
+// them that fills as the track plays: "02:15 ━━━━━━●────── 04:31". A track
+// whose length is not known leaves the bar empty.
+func playbackBar(pos, dur time.Duration, loaded bool, w int) string {
+	left, right := playbackClocks(pos, dur, loaded)
+	_, barW := playbackBarSpan(left, right, w)
+	if barW < 3 {
+		return left + " / " + right
+	}
+	if !loaded || dur <= 0 {
+		return left + " " + strings.Repeat("─", barW) + " " + right
+	}
+	knob := int(float64(barW-1)*min(1, max(0, float64(pos)/float64(dur))) + 0.5)
+	return left + " " + strings.Repeat("━", knob) + "●" + strings.Repeat("─", barW-knob-1) + " " + right
 }
 
 func eighthBlock(level int) string {
