@@ -43,7 +43,23 @@ func DrawPlayerIndicator(scr *vtui.ScreenBuf) {
 // then, the player says what plays.
 func playerOnScreen() bool {
 	pf, ok := vtui.FrameManager.GetTopFrame().(*PanelsFrame)
-	if !ok || !pf.ShowPanels {
+	return ok && panelsShowPlayer(pf)
+}
+
+// playerInView is whether the screen in front has panels that show a player,
+// with or without a dialog over them.
+func playerInView() bool {
+	fm := vtui.FrameManager
+	for _, f := range fm.GetActiveFrames(fm.ActiveIdx) {
+		if pf, ok := f.(*PanelsFrame); ok && panelsShowPlayer(pf) {
+			return true
+		}
+	}
+	return false
+}
+
+func panelsShowPlayer(pf *PanelsFrame) bool {
+	if !pf.ShowPanels {
 		return false
 	}
 	for _, a := range pf.AltPanels {

@@ -25,7 +25,8 @@ import (
 // fixed for the life of the process, so a track recorded at another rate is
 // resampled (linear interpolation) before it reaches the device. That is not
 // audiophile-grade, but it keeps one context, one player type and no
-// re-initialisation of the device between tracks.
+// re-initialisation of the device between tracks. The device is suspended
+// while nothing plays, see outputPower.
 //
 // All methods are safe to call from the UI thread; nothing here blocks on
 // the device except NewContext, which is done once.
@@ -34,6 +35,8 @@ type AudioEngine struct {
 	ctx     *oto.Context
 	ctxRate int
 	ctxErr  error
+	power   *outputPower
+	holding bool // the engine plays and keeps the output device on
 
 	player *oto.Player
 	source *audioSource
@@ -66,6 +69,7 @@ func NewAudioEngine() *AudioEngine {
 var (
 	sharedAudioCtxMu sync.Mutex
 	sharedAudioCtx   *oto.Context
+	sharedAudioPower *outputPower
 	sharedAudioRate  int
 	sharedAudioErr   error
 )
@@ -86,6 +90,7 @@ func (a *AudioEngine) ensureContext(rate int) error {
 	defer sharedAudioCtxMu.Unlock()
 	if sharedAudioCtx != nil {
 		a.ctx = sharedAudioCtx
+		a.power = sharedAudioPower
 		a.ctxRate = sharedAudioRate
 		vtui.DebugLog("AUDIO: reusing process-wide oto context sample_rate=%d requested_rate=%d", a.ctxRate, rate)
 		return nil
@@ -116,8 +121,10 @@ func (a *AudioEngine) ensureContext(rate int) error {
 		return a.ctxErr
 	}
 	sharedAudioCtx = ctx
+	sharedAudioPower = newOutputPower(ctx, time.Now, afterFunc)
 	sharedAudioRate = rate
 	a.ctx = ctx
+	a.power = sharedAudioPower
 	a.ctxRate = rate
 	vtui.DebugLog("AUDIO: oto context ready sample_rate=%d channels=2 format=signed-int16-le", rate)
 	return nil
@@ -266,7 +273,7 @@ func (a *AudioEngine) Seek(delta time.Duration) bool {
 		_, _ = skipPCM(a.tap, target, a.ctxRate)
 	}
 	if wasPlaying {
-		a.player.Play()
+		a.playLocked()
 	}
 	vtui.DebugLog("AUDIO: seek requested Path=%q delta=%s target=%s playing=%v", path, delta, target, wasPlaying)
 	return true
@@ -296,7 +303,7 @@ func (a *AudioEngine) unloadLocked() {
 	if a.player != nil {
 		a.checkErrorsLocked()
 		vtui.DebugLog("AUDIO: unloading track Path=%q playing=%v buffered=%d pcm_bytes=%d", a.Path, a.player.IsPlaying(), a.player.BufferedSize(), a.tap.BytesRead())
-		a.player.Pause()
+		a.pauseLocked()
 		//_ = a.player.Close() // fix linter error
 		// SA1019: (*github.com/ebitengine/oto/v3.Player).Close is deprecated: as of v3.4. you don't have to call Close. (staticcheck)
 		a.player = nil
@@ -317,6 +324,30 @@ func (a *AudioEngine) Close() {
 	a.unloadLocked()
 }
 
+// playLocked and pauseLocked start and stop the player, and keep the output
+// device on while it plays (outputPower).
+func (a *AudioEngine) playLocked() {
+	a.holdOutputLocked(true)
+	a.player.Play()
+}
+
+func (a *AudioEngine) pauseLocked() {
+	a.player.Pause()
+	a.holdOutputLocked(false)
+}
+
+func (a *AudioEngine) holdOutputLocked(on bool) {
+	if a.holding == on || a.power == nil {
+		return
+	}
+	a.holding = on
+	if on {
+		a.power.hold()
+		return
+	}
+	a.power.release()
+}
+
 func (a *AudioEngine) Play() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -325,7 +356,7 @@ func (a *AudioEngine) Play() {
 		vtui.DebugLog("AUDIO: play ignored because no track is loaded")
 		return
 	}
-	a.player.Play()
+	a.playLocked()
 	vtui.DebugLog("AUDIO: play requested Path=%q playing=%v buffered=%d", a.Path, a.player.IsPlaying(), a.player.BufferedSize())
 	a.checkErrorsLocked()
 }
@@ -338,7 +369,7 @@ func (a *AudioEngine) Pause() {
 		vtui.DebugLog("AUDIO: pause ignored because no track is loaded")
 		return
 	}
-	a.player.Pause()
+	a.pauseLocked()
 	vtui.DebugLog("AUDIO: pause requested Path=%q buffered=%d", a.Path, a.player.BufferedSize())
 }
 
@@ -352,11 +383,11 @@ func (a *AudioEngine) TogglePause() bool {
 		return false
 	}
 	if a.player.IsPlaying() {
-		a.player.Pause()
+		a.pauseLocked()
 		vtui.DebugLog("AUDIO: toggled to paused Path=%q buffered=%d", a.Path, a.player.BufferedSize())
 		return false
 	}
-	a.player.Play()
+	a.playLocked()
 	vtui.DebugLog("AUDIO: toggled to playing Path=%q playing=%v buffered=%d", a.Path, a.player.IsPlaying(), a.player.BufferedSize())
 	a.checkErrorsLocked()
 	return true
