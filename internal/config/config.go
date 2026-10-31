@@ -530,6 +530,7 @@ type F4Config struct {
 	NavigationMode           PanelNavigationMode
 	PanelAutoFilter          bool // a lone Alt press opens the panel autofilter (hides non-matching rows); Alt+letter stays the quick search
 	PanelStrictAutoFilter    bool // panel quick search/autofilter requires an exact match instead of tolerating one typo
+	PanelQuickSearchXLat     bool // a quick search/autofilter text that finds nothing is tried in the other keyboard layout, as far2l's XLat.EnableForFastFileFind
 	PanelGroupSmallMiB       int
 	PanelGroupMediumMiB      int
 	PanelGroupLargeMiB       int
@@ -795,6 +796,7 @@ var App = F4Config{
 	NavigationMode:           NavigationClassic,
 	PanelAutoFilter:          false,
 	PanelStrictAutoFilter:    false,
+	PanelQuickSearchXLat:     true,
 	PanelGroupSmallMiB:       5,
 	PanelGroupMediumMiB:      10,
 	PanelGroupLargeMiB:       100,
@@ -1097,6 +1099,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 	}
 	cfg.PanelAutoFilter = merged.GetString("Panel", "PanelAutoFilter", "0") == "1"
 	cfg.PanelStrictAutoFilter = merged.GetString("Panel", "PanelStrictAutoFilter", "0") == "1"
+	cfg.PanelQuickSearchXLat = merged.GetString("Panel", "PanelQuickSearchXLat", "1") == "1"
 	cfg.PanelGroupSmallMiB = parseGroupLimit(merged.GetString("Panel", "PanelGroupSmallMiB", "5"))
 	cfg.PanelGroupMediumMiB = parseGroupLimit(merged.GetString("Panel", "PanelGroupMediumMiB", "10"))
 	cfg.PanelGroupLargeMiB = parseGroupLimit(merged.GetString("Panel", "PanelGroupLargeMiB", "100"))
@@ -1467,6 +1470,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "NavigationMode = %s\n", cfg.NavigationMode.String())
 	fmt.Fprintf(&sb, "PanelAutoFilter = %d\n", map[bool]int{true: 1, false: 0}[cfg.PanelAutoFilter])
 	fmt.Fprintf(&sb, "PanelStrictAutoFilter = %d\n", map[bool]int{true: 1, false: 0}[cfg.PanelStrictAutoFilter])
+	fmt.Fprintf(&sb, "PanelQuickSearchXLat = %d\n", map[bool]int{true: 1, false: 0}[cfg.PanelQuickSearchXLat])
 	fmt.Fprintf(&sb, "PanelGroupSmallMiB = %d\nPanelGroupMediumMiB = %d\nPanelGroupLargeMiB = %d\n", cfg.PanelGroupSmallMiB, cfg.PanelGroupMediumMiB, cfg.PanelGroupLargeMiB)
 	fmt.Fprintf(&sb, "SearchCommandStayFocused = %d\n", map[bool]int{true: 1, false: 0}[cfg.SearchCommandStayFocused])
 	// Keep the legacy key synchronized for older f4 versions and shared configs.

@@ -85,37 +85,31 @@ func menuBarRaisedOver(top vtui.Frame) bool {
 	return !top.IsModal() || top.GetMenuBar() == menu
 }
 
-// isPanelFastFindToggleKey identifies contextual panel-toggle keys owned by
-// Fast Find. They must reach panel.PanelsFrame before macros and configurable
-// hotkeys, otherwise Esc/Del -> Panel.Toggle hides the panels first.
-func isPanelFastFindToggleKey(e *vtinput.InputEvent) bool {
-	if e.Type != vtinput.KeyEventType || !e.KeyDown ||
-		(e.VirtualKeyCode != vtinput.VK_ESCAPE && e.VirtualKeyCode != vtinput.VK_DELETE) {
-		return false
-	}
-	mods := e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
-		vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed)
-	if mods != 0 || vtui.FrameManager == nil {
-		return false
+// panelsWithFastFind is the panels frame on top while the quick search or the
+// autofilter of its active panel is open, or nil.
+func panelsWithFastFind() *panel.PanelsFrame {
+	if vtui.FrameManager == nil {
+		return nil
 	}
 	pf, ok := vtui.FrameManager.GetTopFrame().(*panel.PanelsFrame)
 	if !ok || !pf.ShowPanels {
-		return false
+		return nil
 	}
-	fsp := pf.GetActivePanel()
-	return fsp != nil && fsp.FastFindMode
+	if fsp := pf.GetActivePanel(); fsp == nil || !fsp.FastFindMode {
+		return nil
+	}
+	return pf
 }
 
-func isPanelFastFindActive() bool {
-	if vtui.FrameManager == nil {
+// hotkeyKeepsFastFind reports whether e runs an action that leaves an open
+// quick search open (actionKeepsFastFind), so the router must not close the
+// search before the action runs.
+func hotkeyKeepsFastFind(area string, e *vtinput.InputEvent) bool {
+	hm := keymap.GlobalHotkeysMgr
+	if hm == nil {
 		return false
 	}
-	pf, ok := vtui.FrameManager.GetTopFrame().(*panel.PanelsFrame)
-	if !ok || !pf.ShowPanels {
-		return false
-	}
-	fsp := pf.GetActivePanel()
-	return fsp != nil && fsp.FastFindMode
+	return actionKeepsFastFind(keymap.ConfiguredHotkeyAction(hm, area, keymap.EventToHotkeyString(e)))
 }
 
 func macroCommandLine() string {
@@ -257,14 +251,22 @@ func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	}
 
 	currentArea := macroCurrentArea()
-	if currentArea == "Shell" && isPanelFastFindActive() {
-		// zoin-bot: Fast Find is a transient panel input mode, so Shell macros
-		// must not consume keys before panel.PanelsFrame can update its query.
-		return false
+	if pf := panelsWithFastFind(); currentArea == "Shell" && pf != nil {
+		// The open quick search or autofilter has the first say on a key
+		// (panel's fastfind_keys.go, #2186). The keys it keeps go straight to
+		// the panels frame: no macro or hotkey may take a character, Esc or
+		// Del from it. Any other key closes it and then goes on as if no
+		// search had been open, unless the key runs an action that leaves
+		// the search open.
+		if !pf.FastFindClosesOn(e) {
+			return false
+		}
+		if !hotkeyKeepsFastFind(currentArea, e) && pf.CancelFastFind() {
+			vtui.FrameManager.Redraw()
+		}
 	}
 	if currentArea == "Shell" &&
-		((keymap.IsPanelBookmarkHotkey(e) && !keymap.ConfigurableHotkeyOwnsPanelBookmark(keymap.GlobalHotkeysMgr, currentArea, e)) ||
-			isPanelFastFindToggleKey(e)) {
+		keymap.IsPanelBookmarkHotkey(e) && !keymap.ConfigurableHotkeyOwnsPanelBookmark(keymap.GlobalHotkeysMgr, currentArea, e) {
 		return false
 	}
 

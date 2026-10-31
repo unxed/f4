@@ -3012,9 +3012,8 @@ func (pf *PanelsFrame) commandLineOwnsSelection(e *vtinput.InputEvent) bool {
 }
 
 // VetoActionKey reports modal input states in which the panels must see
-// the key before the global hotkey dispatcher. During fast find,
-// printable characters and the gray selection keys belong to the
-// panel's own search input.
+// the key before the global hotkey dispatcher. During fast find, the keys
+// the search keeps belong to the panel's own search input.
 func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
@@ -3082,37 +3081,10 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		}
 		return false
 	}
-	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	if e.Char != 0 && !ctrl && !alt {
-		return true
-	}
-	// Fast Find owns plain Esc, plain Delete, plain F2 (search mode toggle) and
-	// Ctrl+Enter; the filter must not turn them into Panel.Toggle,
-	// Panel.UserMenu or Panel.InsertFileName.
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift {
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt {
-		return true
-	}
-	// Ctrl+E flips the filter's exact-match option; it is the command line's
-	// history key elsewhere.
-	if e.VirtualKeyCode == vtinput.VK_E && ctrl && !alt && !shift && fsp.autoFilterMode {
-		return true
-	}
-	switch e.VirtualKeyCode {
-	case vtinput.VK_ADD, vtinput.VK_SUBTRACT, vtinput.VK_MULTIPLY:
-		return true
-	}
-	return false
+	// The open search keeps its keys from the hotkey table: Esc must not
+	// become Panel.Toggle, F2 Panel.UserMenu, Ctrl+Enter
+	// Panel.InsertFileName (fastfind_keys.go).
+	return fsp.fastFindKeeps(e)
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
@@ -3248,16 +3220,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// Fast Find owns Esc, Delete, F2 and Ctrl+Enter before in-frame hotkeys and
-	// command-line handling. Delegate them to the panel's normal handler.
-	if pf.ShowPanels && e.KeyDown {
+	// The open quick search or autofilter has the first say on a key, ahead
+	// of the frame's own keys and the command line's (fastfind_keys.go,
+	// #2186): it takes the keys that edit it, and any other key closes it
+	// and goes on as if it had never been open. The key router has already
+	// closed it for such a key; this covers the events that do not pass the
+	// router, a key-bar click or a macro's keys.
+	if pf.ShowPanels {
 		if fsp := pf.GetActivePanel(); fsp != nil && fsp.FastFindMode {
-			isFindEnter := e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt
-			isFindModeToggle := e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift
-			plainEscape := e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift
-			plainDelete := e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift
-			if plainEscape || plainDelete || isFindEnter || isFindModeToggle {
+			if fsp.fastFindKeeps(e) {
 				return fsp.ProcessKey(e)
+			}
+			if fsp.fastFindClosesOn(e) && pf.CancelFastFind() && vtui.FrameManager != nil {
+				vtui.FrameManager.Redraw()
 			}
 		}
 	}

@@ -365,6 +365,7 @@ CommandLine.SelectWordRight
 Panel.FastFind.Next
 Panel.FastFind.Previous
 Panel.FastFind.Anywhere
+Panel.FastFind.Clear
 Panel.AutoFilter.ToggleExact
 TempPanel.ShowOnPassive
 Panel.AltPanelCopy

@@ -611,7 +611,13 @@ type FileSystemPanel struct {
 	FastFindStr                       string
 	fastFindMatcherKey                string
 	fastFindMatcherStrict             bool
+	fastFindMatcherXLat               bool
 	fastFindMatchers                  []*vtui.FuzzyMatcher
+	// fastFindRejected is the character the search refused last, shown
+	// after its text for a moment; fastFindRejectedGen tells the timer that
+	// hides it whether it is still the same one (fastfind_layout.go).
+	fastFindRejected    string
+	fastFindRejectedGen uint64
 	// autoFilterMode is set while the filter window is open (the search
 	// box narrows the panel instead of moving the cursor), autoFilterOn
 	// while its query is actually hiding rows. unfilteredEntries then holds
@@ -3607,7 +3613,8 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		p.DrawTitle(fx1, fy1, fx2, title, vtui.Palette[vtui.ColDialogBoxTitle])
 
 		searchStr := fp.FastFindStr
-		for runewidth.StringWidth(searchStr) > boxW-3 {
+		rejected := fp.fastFindRejected
+		for searchStr != "" && runewidth.StringWidth(searchStr+rejected) > boxW-3 {
 			runes := []rune(searchStr)
 			searchStr = string(runes[1:])
 		}
@@ -3624,6 +3631,13 @@ func (fp *FileSystemPanel) Show(scr *vtui.ScreenBuf) {
 		p.Fill(fx1+1, fy1+1, fx2-1, fy1+1, ' ', editAttr)
 		searchAttr := fastFindMatchAttr(editAttr, searchColor)
 		p.DrawString(fx1+1, fy1+1, searchStr, searchAttr)
+		if rejected != "" {
+			// A character the search refused stands for a moment where it
+			// would have gone, in the colour of a search that finds nothing,
+			// with the cursor on it (fastfind_layout.go).
+			noMatchAttr := fastFindMatchAttr(editAttr, vtui.Palette[theme.ColPanelFastFindNoMatch])
+			p.DrawString(fx1+1+runewidth.StringWidth(searchStr), fy1+1, rejected, noMatchAttr)
+		}
 
 		if fp.autoFilterMode {
 			// The exact-match option sits in the filter window itself, where the
@@ -3698,26 +3712,21 @@ func (fp *FileSystemPanel) fastFindScoredMatch(name string) (startRunes, matched
 	if queryText == "" {
 		return 0, 0, 0, anywhere
 	}
-	// Matchers are cached per query text: the needle tables are built once
-	// per keystroke, not once per visible row per redraw. The strict setting
-	// is part of the cache key too, so toggling it (a "live" f4:config
-	// option) takes effect on the next redraw instead of the next keystroke.
+	// Matchers are cached per search text: the needle tables are built once
+	// per keystroke, not once per visible row per redraw. The text keeps its
+	// '*', since the other layout's spelling depends on where a name may
+	// hold it. The strict and layout settings are part of the cache key too,
+	// so toggling one (a "live" f4:config option) takes effect on the next
+	// redraw instead of the next keystroke.
 	strict := config.App.PanelStrictAutoFilter
-	if fp.fastFindMatcherKey != queryText || fp.fastFindMatcherStrict != strict {
-		fp.fastFindMatcherKey = queryText
+	xlat := config.App.PanelQuickSearchXLat
+	if fp.fastFindMatcherKey != fp.FastFindStr || fp.fastFindMatcherStrict != strict || fp.fastFindMatcherXLat != xlat {
+		fp.fastFindMatcherKey = fp.FastFindStr
 		fp.fastFindMatcherStrict = strict
+		fp.fastFindMatcherXLat = xlat
 		fp.fastFindMatchers = fp.fastFindMatchers[:0]
-		// The layout-transcoded variant ("сфы" -> "cas") is a tolerance too:
-		// strict mode searches exactly what was typed (f4 #1709).
-		queries := []string{queryText}
-		if !strict {
-			queries = append(queries, vtui.GlobalXlator.TranscodeString(queryText))
-		}
-		for _, query := range queries {
-			if m := vtui.NewFuzzyMatcher(query, false); m != nil {
-				if strict {
-					m.Strict()
-				}
+		for _, query := range fp.fastFindQueries(queryText, anywhere, strict, xlat) {
+			if m := newFastFindMatcher(query, strict); m != nil {
 				fp.fastFindMatchers = append(fp.fastFindMatchers, m)
 			}
 		}
@@ -3902,6 +3911,8 @@ func (fp *FileSystemPanel) processKey(e *vtinput.InputEvent, allowProviderPanelE
 	}
 
 	if fp.FastFindMode {
+		// A refused character is shown until the next key of the search.
+		fp.fastFindRejected = ""
 		// While the panel is narrowed every visible row is already a match, so
 		// navigation keys walk the result and the filter stays up -- that walk
 		// is the point of filtering. The cursor-moving search has nothing to
@@ -3967,6 +3978,23 @@ func (fp *FileSystemPanel) processKey(e *vtinput.InputEvent, allowProviderPanelE
 			vtui.FrameManager.Redraw()
 			return true
 		}
+		if isFastFindClearKey(e) {
+			// Like erasing the last character with Backspace, an empty text
+			// ends a quick search; the filter stays open over every row and
+			// keeps its anywhere/start-of-name mode.
+			if strings.HasPrefix(fp.FastFindStr, "*") {
+				fp.FastFindStr = "*"
+			} else {
+				fp.FastFindStr = ""
+			}
+			if !fp.autoFilterMode {
+				fp.ExitFastFind()
+			} else {
+				fp.applyFastFind()
+			}
+			vtui.FrameManager.Redraw()
+			return true
+		}
 		// Up and Down never reach this point: the cursor-moving search gave
 		// them back to ordinary navigation above, and under the filter they
 		// have to walk the narrowed list, which the navigation switch below
@@ -3984,11 +4012,13 @@ func (fp *FileSystemPanel) processKey(e *vtinput.InputEvent, allowProviderPanelE
 			fp.ExitFastFind()
 			vtui.FrameManager.Redraw()
 			// Проваливаемся ниже, чтобы обработать Enter как вход в файл/директорию
-		} else if e.Char != 0 && !ctrl {
+		} else if ch := fastFindChar(e); ch != 0 {
 			previous := fp.FastFindStr
-			fp.FastFindStr += string(unicode.ToLower(e.Char))
+			fp.FastFindStr += string(ch)
 			if !fp.fastFindHasMatches() {
 				fp.FastFindStr = previous
+				fp.rejectFastFindChar(ch)
+				vtui.FrameManager.Redraw()
 				return true
 			}
 			fp.applyFastFind()

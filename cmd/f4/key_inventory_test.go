@@ -96,7 +96,7 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 			"Plugin hotkeys and panel plugin keys are the plugins' own (plughost, vfs.PanelKeyProvider)",
 	},
 	"panel.(*PanelsFrame).VetoActionKey": {
-		nav: []string{"ADD", "DELETE", "E", "ESCAPE", "F2", "LEFT", "MULTIPLY", "RETURN", "RIGHT", "SUBTRACT"},
+		nav: []string{"F2", "LEFT", "RIGHT"},
 		rationale: "routes keys past the hotkey table to the frame while the quick search, an alternative panel or the command line " +
 			"owns them; what the keys do is audited where they are handled",
 	},
@@ -160,6 +160,21 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 			"CtrlPgUp", "CtrlPgDn", "ShiftUp", "ShiftDown", "ShiftLeft", "ShiftRight", "ShiftPgUp", "ShiftPgDn", "ShiftHome", "ShiftEnd"},
 		nav:       []string{"BACK", "DOWN", "END", "HOME", "LEFT", "NEXT", "PRIOR", "RIGHT", "UP"},
 		rationale: "the file panel: Enter opens, Ins and Shift with a cursor key mark, the quick search's keys; the plain cursor keys move, Backspace erases the quick search",
+	},
+	"panel.(*FileSystemPanel).fastFindKeeps": {
+		nav: []string{"BACK", "DELETE", "DOWN", "E", "END", "ESCAPE", "F2", "HOME", "INSERT", "LEFT", "NEXT", "PRIOR", "RETURN", "RIGHT", "UP"},
+		rationale: "routes to an open quick search or autofilter the keys it keeps ahead of every other owner (#2186); " +
+			"what they do is audited in processKey",
+	},
+	"panel.(*FileSystemPanel).fastFindClosesOn": {
+		nav: []string{"CAPITAL", "CONTROL", "LCONTROL", "LMENU", "LSHIFT", "LWIN", "MENU", "NUMLOCK",
+			"RCONTROL", "RMENU", "RSHIFT", "RWIN", "SCROLL", "SHIFT"},
+		rationale: "any key an open quick search does not keep closes it, except a modifier key's own event",
+	},
+	"panel.isFastFindClearKey": {
+		areas:     []string{"Shell"},
+		chords:    []string{"CtrlY:FastFind"},
+		rationale: "Ctrl+Y erases the text of an open quick search or autofilter (Panel.FastFind.Clear)",
 	},
 	"panel.(*FileSystemPanel).groupNavigationTarget": {
 		nav:       []string{"DOWN", "END", "HOME", "LEFT", "NEXT", "PRIOR", "RIGHT", "UP"},
@@ -299,10 +314,6 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 			"RCONTROL", "RMENU", "RSHIFT", "SCROLL", "SHIFT"},
 		rationale: "the key router: Ctrl+. records a macro (Macro.Record), held Ctrl+W repeats die at the exit question; " +
 			"a modifier key alone is never recorded",
-	},
-	"app.isPanelFastFindToggleKey": {
-		nav:       []string{"DELETE", "ESCAPE"},
-		rationale: "routes Esc and Del to an open quick search before the hotkey table",
 	},
 	"cmdline.(*CommandLine).ProcessKey": {
 		areas:     []string{"Shell"},
