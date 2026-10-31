@@ -423,7 +423,7 @@ var apCases = []apCase{
 		// had it; kept in sync with upstream's case list.
 		name:  "c47_create_file_in_existing_dir_does_not_crash",
 		files: map[string]string{"archive/old.go": "package archive\n"},
-		patch: "aa000047 AP 3.2\n\naa000047 FILE\narchive/new_test.go\n\n" +
+		patch: "aa000047 AP 3.2\n\naa000047 FILE LF\narchive/new_test.go\n\n" +
 			"aa000047 CREATE\naa000047 content\npackage archive\n",
 		expectFiles: map[string]string{"archive/new_test.go": "package archive\n",
 			"archive/old.go": "package archive\n"},
