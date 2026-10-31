@@ -431,10 +431,29 @@ func (e *engine) applyOneModification(
 	}
 
 	// === IDEMPOTENCY: is the requested state already there? ===
+	// A REPLACE equal to its region up to whitespace is either already
+	// applied or changes only indentation (dedent/indent); see
+	// whitespaceOnlyReplacement.
+	var replaceText *string
+	if action == "REPLACE" && normalizeBlock((*workingContent)[targetStart:targetEnd]) == normalizeBlock(derefOr(contentToAdd, "")) {
+		region := (*workingContent)[targetStart:targetEnd]
+		var oldText *string
+		if snippetTail == nil && snippetVal != nil && normalizeBlock(*snippetVal) == normalizeBlock(region) {
+			oldText = snippetVal
+		}
+		wc, ts, te := *workingContent, targetStart, targetEnd
+		text, apply := whitespaceOnlyReplacement(region, oldText, derefOr(contentToAdd, ""), func(n string) string {
+			return reindentContent(wc, ts, te, n, action, e.strict, func(string) {})
+		})
+		if !apply {
+			e.reportIdempotencySkip("REPLACE content already present.")
+			return skipWithPos(targetEnd)
+		}
+		e.printf("  ~ Mod #%d: 'content' differs from the target only by indentation; "+
+			"applying it as an indentation change.\n", modIdx+1)
+		replaceText = &text
+	}
 	switch {
-	case action == "REPLACE" && normalizeBlock((*workingContent)[targetStart:targetEnd]) == normalizeBlock(derefOr(contentToAdd, "")):
-		e.reportIdempotencySkip("REPLACE content already present.")
-		return skipWithPos(targetEnd)
 	case action == "INSERT_AFTER" && strings.HasPrefix(normalizeBlock((*workingContent)[targetEnd:]), normalizeBlock(derefOr(contentToAdd, ""))):
 		e.reportIdempotencySkip("INSERT_AFTER content already present.")
 		alreadyThere := smartFind((*workingContent)[targetEnd:], derefOr(contentToAdd, ""))
@@ -460,7 +479,11 @@ func (e *engine) applyOneModification(
 	indentedContent := derefOr(contentToAdd, "")
 	if (action == "REPLACE" || action == "INSERT_AFTER" || action == "INSERT_BEFORE") && derefOr(contentToAdd, "") != "" {
 		indentWarnFn := func(msg string) { e.printf("  [TOLERANT] Mod #%d: %s\n", modIdx+1, msg) }
-		indentedContent = reindentContent(*workingContent, targetStart, targetEnd, derefOr(contentToAdd, ""), action, e.strict, indentWarnFn)
+		if replaceText != nil {
+			indentedContent = *replaceText
+		} else {
+			indentedContent = reindentContent(*workingContent, targetStart, targetEnd, derefOr(contentToAdd, ""), action, e.strict, indentWarnFn)
+		}
 		originalHadTrailingNewline := targetEnd > targetStart && targetEnd-1 < len(*workingContent) && (*workingContent)[targetEnd-1] == '\n'
 		if action == "INSERT_AFTER" || action == "INSERT_BEFORE" || (action == "REPLACE" && originalHadTrailingNewline) {
 			if !strings.HasSuffix(indentedContent, "\n") {
