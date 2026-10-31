@@ -39,28 +39,41 @@ func TestFastFindMatch_StrictRejectsOneEditTypo(t *testing.T) {
 	}
 }
 
-// f4 #1709: the keyboard-layout transcoding ("сфы" typed on a Russian layout
-// also searches "cas") is a tolerance, so strict mode must not apply it: it
-// searches exactly what was typed.
-func TestFastFindMatch_StrictDoesNotTranscodeLayout(t *testing.T) {
+// f4 #1709 and #2186: strict mode searches exactly what was typed whenever
+// that finds a name ("сфы" typed on a Russian layout must not also find
+// "Cas" then). A text that finds no name is tried in the other layout, as
+// far2l does, unless "Quick search in the other layout" is off.
+func TestFastFindMatch_StrictTriesOtherLayoutOnlyWhenTypedFindsNothing(t *testing.T) {
 	oldCfg := config.App
 	defer func() { config.App = oldCfg }()
-
-	fp := &FileSystemPanel{}
-	fp.FastFindMode = true
-	fp.FastFindStr = "*сфы"
-
-	config.App.PanelStrictAutoFilter = false
-	if _, _, ok := fp.fastFindMatch("Cas"); !ok {
-		t.Skip("layout transcoding is unavailable in this environment")
-	}
-
 	config.App.PanelStrictAutoFilter = true
-	if _, _, ok := fp.fastFindMatch("Cas"); ok {
-		t.Error("strict matcher found \"Cas\" for \"сфы\": layout transcoding leaked through")
+	config.App.PanelQuickSearchXLat = true
+
+	searching := func(names ...string) *FileSystemPanel {
+		fp := &FileSystemPanel{}
+		for _, name := range names {
+			fp.Entries = append(fp.Entries, &FileEntry{VFSItem: vfs.VFSItem{Name: name}})
+		}
+		fp.FastFindMode = true
+		fp.FastFindStr = "*сфы"
+		return fp
 	}
+
+	fp := searching("Cas", "сфыв")
 	if _, _, ok := fp.fastFindMatch("сфыв"); !ok {
 		t.Error("strict matcher rejected the exact substring \"сфы\"")
+	}
+	if _, _, ok := fp.fastFindMatch("Cas"); ok {
+		t.Error("strict matcher found \"Cas\" for \"сфы\" although a name holds \"сфы\" as typed")
+	}
+
+	fp = searching("Cas")
+	if _, _, ok := fp.fastFindMatch("Cas"); !ok {
+		t.Error("strict matcher did not try \"сфы\" in the other layout when no name holds it")
+	}
+	config.App.PanelQuickSearchXLat = false
+	if _, _, ok := fp.fastFindMatch("Cas"); ok {
+		t.Error("the other layout was tried with PanelQuickSearchXLat off")
 	}
 }
 

@@ -73,6 +73,16 @@ key closes the box and then acts as if it had never been open, as in Far:
 cursor. A modifier key on its own does not close it, and neither does
 `Alt+F9`, which only maximizes the window.
 
+A character that leaves the search finding nothing is not added; it stands
+after the text for a moment in the colour of a failed search, so the key is
+seen to have been pressed. After a switch of the keyboard layout the search
+goes on: with Settings > Panels > "Quick search in the other layout" on (the
+default), a text that finds no name is tried in the other layout one
+character at a time, as far2l's `XLat.EnableForFastFileFind` does, so `Alt+F`
+and then the Russian layout's `щ` finds `foo`. The box keeps what was typed.
+With "Strict quick search" on, a text that finds a name as typed is searched
+only as typed.
+
 ## The file
 
 `keymap.ini` lives in the profile directory next to `hotkeys.ini`

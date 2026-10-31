@@ -211,6 +211,7 @@ func (fp *FileSystemPanel) ExitFastFind() {
 	}
 	fp.FastFindMode = false
 	fp.FastFindStr = ""
+	fp.fastFindRejected = ""
 	fp.autoFilterMode = false
 	if !fp.autoFilterOn {
 		return
