@@ -9,3 +9,5 @@ import _ "embed"
 
 //go:embed README.md
 var ReadmeMD string
+
+# Automated fix for issue #2215: календарь криво покрашен
