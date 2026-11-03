@@ -331,8 +331,8 @@ github.com/unxed/goclip v0.1.3-0.20261020202204-ff732bd92518 h1:NXBxCqlfir8iI/Ap
 github.com/unxed/goclip v0.1.3-0.20261020202204-ff732bd92518/go.mod h1:tgcdGkEQFrOq5jqA5aEcLuXZy81HM6gaVevy3o9XpFE=
 github.com/unxed/goffi v0.1.11 h1:/2LiDXM4BPGxeG/DSEm8Q/1HIVDloWDx4OtIr6pYDjE=
 github.com/unxed/goffi v0.1.11/go.mod h1:5yfNuseCh+0XTe9cbg8lGtZtOA12DU+Nm9Vfp6IDnFo=
-github.com/unxed/gogpu v0.53.1-drag.1-altgr.1 h1:jBAEs+LlSebOGWMRQrxeF/FKa1pZeqw/gb25OqGYTKo=
-github.com/unxed/gogpu v0.53.1-drag.1-altgr.1/go.mod h1:pUqsHA1Lo5qi4SNBYuJ1fyMqnwWMn3APHx6K63S3+mc=
+github.com/unxed/gogpu v0.53.1-drag.1-altgr.2 h1:wzzR3SjHucnDgcnKICN18JAf5qSe6XyYL1zsE1SENpA=
+github.com/unxed/gogpu v0.53.1-drag.1-altgr.2/go.mod h1:pUqsHA1Lo5qi4SNBYuJ1fyMqnwWMn3APHx6K63S3+mc=
 github.com/unxed/id3-go v0.1.2 h1:PiJ93frR640drDpBvGQpQDEXc4DKslAq+bIdj9Q2gLg=
 github.com/unxed/id3-go v0.1.2/go.mod h1:K1wLboZdka4B5A9w+uWOY+FfCgzogcpI4FIDL7fYNG0=
 github.com/unxed/keytrans v0.1.35 h1:9W0/0xHnXTc3Q2AzMmHEXTZKpBwLobzDpoAh0MHNe7E=

@@ -225,7 +225,8 @@ replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 // which vtui calls, until gogpu/gogpu#506 is released. vtui's go.mod has the
 // same line, but a replace applies only in the main module; the plugin
 // modules that build f4 (plugins/android, ios, cloudfox) carry it too.
-replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.1
+// Includes gogpu/gogpu#502: synchronize the macOS layer when display scale changes.
+replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.2
 
 // f4 --gui memory and idle CPU, until upstream merges and tags them (tracked
 // in docs/UPSTREAM.md): vtui v0.1.422 with unxed/vtui#250 (fallback fonts from

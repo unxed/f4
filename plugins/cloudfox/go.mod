@@ -120,8 +120,8 @@ replace github.com/ebitengine/hideconsole => ../../internal/hideconsole
 
 replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 
-// gogpu with the drag callbacks vtui calls (#2049, see ../../go.mod).
-replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.1
+// gogpu with drag callbacks and the macOS display-scale fix (see ../../go.mod).
+replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.2
 
 // vtui and gg with the f4 --gui memory and idle CPU fixes (see ../../go.mod).
 replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1
