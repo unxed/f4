@@ -381,6 +381,9 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 	"app.init": {
 		infrastructure: true, rationale: "Editor.DeleteWordForward runs Ctrl+Del in the editor",
 	},
+	"terminal.far2lInputEvent": {
+		infrastructure: true, rationale: "encodes keyboard and mouse records for the far2l input-event protocol",
+	},
 	"terminal.(*TerminalView).rowHasText": {
 		infrastructure: true, rationale: "compares the character of a screen cell, not a key",
 	},
