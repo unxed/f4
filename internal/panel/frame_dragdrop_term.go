@@ -113,49 +113,12 @@ func (s *dropFileSource) Close() {
 	}
 }
 
-// pasteDroppedPathsIntoTerminal handles a drop on the terminal when no program
-// in it accepts drops (#2162): the paths are typed the way a paste would, with
-// the command line's shell quoting. The answer is only ever a copy, never a
-// move: nothing is taken from the user's files, and a source told "move"
-// would delete the originals after a mere text paste.
-func (pf *PanelsFrame) pasteDroppedPathsIntoTerminal(ev *vtui.DragEvent) (vtui.DropAction, bool) {
-	if !ev.Allowed.Has(vtui.DropCopy) && !ev.Allowed.Has(vtui.DropMove) {
-		return vtui.DropNone, true
-	}
-	if ev.Phase != vtui.DragDrop {
-		return vtui.DropCopy, true
-	}
-	quoted := make([]string, 0, len(ev.Payload.Paths))
-	for _, raw := range ev.Payload.Paths {
-		if path := NormalizeExternalDropPath(raw); path != "" {
-			quoted = append(quoted, quoteDroppedPath(path))
-		}
-	}
-	if len(quoted) == 0 {
-		return vtui.DropCopy, true
-	}
-	paste := strings.Join(quoted, " ")
-	if pf.hiddenConsoleCommandLineOwnsInput() {
-		pf.pasteHiddenConsoleText(paste)
-		return vtui.DropCopy, true
-	}
-	pty := pf.GetActivePTY()
-	if pty == nil {
-		return vtui.DropNone, true
-	}
-	if pf.TermView.BracketedPasteMode {
-		paste = "\x1b[200~" + paste + "\x1b[201~"
-	}
-	_, _ = pf.WritePTY(pty, []byte(paste))
-	return vtui.DropCopy, true
-}
-
 // terminalDropTarget answers a drag over the terminal. handled is false when
 // the terminal does not take part: nothing in it accepts drops, or a visible
 // panel is under the pointer and gets the drop instead.
 func (pf *PanelsFrame) terminalDropTarget(ev *vtui.DragEvent) (action vtui.DropAction, handled bool) {
 	tv := pf.TermView
-	if tv == nil {
+	if tv == nil || !tv.DropBound() {
 		return vtui.DropNone, false
 	}
 	if _, onPanel := pf.resolveDropTarget(ev.X, ev.Y); onPanel {
@@ -164,9 +127,6 @@ func (pf *PanelsFrame) terminalDropTarget(ev *vtui.DragEvent) (action vtui.DropA
 	x1, y1, x2, y2 := tv.GetPosition()
 	if ev.X < x1 || ev.X > x2 || ev.Y < y1 || ev.Y > y2 {
 		return vtui.DropNone, true
-	}
-	if !tv.DropBound() {
-		return pf.pasteDroppedPathsIntoTerminal(ev)
 	}
 	// The program only reads; nothing can be moved out of the user's files.
 	if !ev.Allowed.Has(vtui.DropCopy) {
