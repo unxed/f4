@@ -285,6 +285,8 @@ var actionMenuOrder = []string{
 	"Viewer.ToggleHighlighting",
 	"Viewer.Quit",
 	"Viewer.WrapMode",
+	"Viewer.ScrollLeft",
+	"Viewer.ScrollRight",
 	"Viewer.HexMode",
 	"Viewer.MarkdownFormatted",
 	"Viewer.DisasmMode",

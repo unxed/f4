@@ -3950,6 +3950,34 @@ func init() {
 		Handler:     withViewer(func(vv *viewer.ViewerView) { vv.WrapMode = !vv.WrapMode }),
 	})
 	registerAction(action.Action{
+		Name:        "Viewer.ScrollLeft",
+		Area:        "Viewer",
+		Label:       "Scroll left",
+		LabelKey:    "Action.Viewer.ScrollLeft",
+		Description: "Scroll text to the left when word wrap is disabled",
+		DescKey:     "Action.Viewer.ScrollLeft.Desc",
+		DefaultKeys: []string{"Left"},
+		MenuPath:    "View",
+		Enabled: viewerState(func(vv *viewer.ViewerView) bool {
+			return !vv.WrapMode && !vv.HexMode && !vv.DecodeMode
+		}),
+		Handler: withViewer(func(vv *viewer.ViewerView) { vv.ScrollHorizontal(-1, false) }),
+	})
+	registerAction(action.Action{
+		Name:        "Viewer.ScrollRight",
+		Area:        "Viewer",
+		Label:       "Scroll right",
+		LabelKey:    "Action.Viewer.ScrollRight",
+		Description: "Scroll text to the right when word wrap is disabled",
+		DescKey:     "Action.Viewer.ScrollRight.Desc",
+		DefaultKeys: []string{"Right"},
+		MenuPath:    "View",
+		Enabled: viewerState(func(vv *viewer.ViewerView) bool {
+			return !vv.WrapMode && !vv.HexMode && !vv.DecodeMode
+		}),
+		Handler: withViewer(func(vv *viewer.ViewerView) { vv.ScrollHorizontal(1, false) }),
+	})
+	registerAction(action.Action{
 		Name:        "Viewer.HexMode",
 		Area:        "Viewer",
 		Label:       "Hex Mode",

@@ -155,6 +155,42 @@ func TestViewerRenderHighlightsCurrentSearchResult(t *testing.T) {
 	}
 }
 
+func TestViewerHorizontalScrollShowsTextBeyondViewport(t *testing.T) {
+	backend := &ViewerBackend{
+		File:      &vfs.MemoryReadAtCloser{Data: []byte("abcdefghij")},
+		size:      int64(len("abcdefghij")),
+		cacheData: []byte("abcdefghij"),
+	}
+	defer func() { _ = backend.Close() }()
+
+	vv := &ViewerView{Backend: backend, WrapMode: false}
+	vv.SetPosition(0, 0, 4, 2)
+	vv.SetVisible(true)
+	vv.ScrollHorizontal(3, false)
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(5, 3)
+	vv.DisplayObject(scr)
+	if got := string([]rune{testutil.Rune(scr.GetCell(0, 1).Char), testutil.Rune(scr.GetCell(1, 1).Char)}); got != "de" {
+		t.Fatalf("visible text after horizontal scroll = %q, want \"de\"", got)
+	}
+}
+
+func TestViewerShiftWheelScrollsHorizontallyWithoutWrap(t *testing.T) {
+	vv := &ViewerView{WrapMode: false}
+	event := &vtinput.InputEvent{
+		Type:            vtinput.MouseEventType,
+		WheelDirection:  -1,
+		ControlKeyState: vtinput.ShiftPressed,
+	}
+	if !vv.ProcessMouse(event) {
+		t.Fatal("shift+wheel was not handled")
+	}
+	if vv.LeftColumn == 0 {
+		t.Fatal("shift+wheel did not scroll horizontally")
+	}
+}
+
 func (f *largeBinaryFile) Size() int64 { return f.size }
 func (*largeBinaryFile) Close() error  { return nil }
 func (f *largeBinaryFile) Read(ctx context.Context, p []byte) (int, error) {

@@ -50,6 +50,8 @@ type ViewerView struct {
 	HexAuto    bool
 	DecodeMode bool
 	WrapMode   bool
+	// LeftColumn is the horizontal text offset used while wrapping is disabled.
+	LeftColumn int
 	// AnsiMode draws the colour sequences of terminal output (SGR) as colours
 	// instead of showing them as text (f4#1705); see ansi.go.
 	AnsiMode bool
@@ -696,6 +698,10 @@ func (vv *ViewerView) rowReadSize(width int) int {
 }
 
 func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) {
+	layoutWidth := width
+	if !vv.WrapMode {
+		layoutWidth += vv.LeftColumn
+	}
 
 	currOffset := vv.TopOffset
 	// Highlighting follows logical lines: lineStart is where the line of the
@@ -732,7 +738,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 
 		// Read a generous chunk to handle wrapping. The row helper keeps
 		// combining sequences and script conjuncts atomic.
-		data, err := vv.Backend.ReadAt(currOffset, vv.rowReadSize(width))
+		data, err := vv.Backend.ReadAt(currOffset, vv.rowReadSize(layoutWidth))
 		if err == piecetable.ErrLoading {
 			vv.visibleURLRows = append(vv.visibleURLRows, nil)
 			scr.Write(vv.X1, vv.Y1+1+y, vtui.StringToCharInfo(" [ Loading... ] ", attr))
@@ -752,14 +758,14 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		if config.App.EditorTabSize > 0 {
 			tabSize = config.App.EditorTabSize
 		}
-		row := layoutViewerTextRowANSI(data, width, tabSize, vv.WrapMode, vv.AnsiMode)
+		row := layoutViewerTextRowANSI(data, layoutWidth, tabSize, vv.WrapMode, vv.AnsiMode)
 
 		// Build []vtui.CharInfo for the line
 		var cellByteOffsets []int
 		if vv.AnsiMode {
-			vv.rowCells, cellByteOffsets = ansiRowCells(data[:row.textLen], attr, &ansiState, tabSize, width)
+			vv.rowCells, cellByteOffsets = ansiRowCells(data[:row.textLen], attr, &ansiState, tabSize, layoutWidth)
 		} else {
-			vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, width)
+			vv.rowCells, cellByteOffsets = viewerTextCells(string(data[:row.textLen]), attr, tabSize, layoutWidth)
 		}
 		if hlOK {
 			text, seen := hlTexts[lineStart]
@@ -793,6 +799,27 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 					int(matchEnd-rowStart),
 					vtui.Palette[theme.ColViewerSelectedText],
 				)
+			}
+		}
+		if !vv.WrapMode && vv.LeftColumn > 0 {
+			start := vv.LeftColumn
+			end := start + width
+			if start > len(vv.rowCells) {
+				vv.rowCells = vv.rowCells[:0]
+			} else {
+				if end > len(vv.rowCells) {
+					end = len(vv.rowCells)
+				}
+				vv.rowCells = vv.rowCells[start:end]
+			}
+			if start > len(cellByteOffsets) {
+				cellByteOffsets = cellByteOffsets[:0]
+			} else {
+				end := start + width
+				if end > len(cellByteOffsets) {
+					end = len(cellByteOffsets)
+				}
+				cellByteOffsets = cellByteOffsets[start:end]
 			}
 		}
 
@@ -966,6 +993,38 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 	}
 
 	return false
+}
+
+// ScrollHorizontal moves unwrapped text by columns or by one viewport.
+func (vv *ViewerView) ScrollHorizontal(step int, page bool) {
+	if vv.WrapMode || vv.HexMode || vv.DecodeMode {
+		return
+	}
+	if step == 0 {
+		return
+	}
+	width := vv.X2 - vv.X1
+	if width < 1 {
+		width = 1
+	}
+	if vv.ScrollBar != nil {
+		width--
+	}
+	next := vv.LeftColumn + step
+	if page {
+		next = vv.LeftColumn + step*width
+	}
+	if next < 0 {
+		next = 0
+	}
+	if next > 65536 {
+		next = 65536
+	}
+	if next != vv.LeftColumn {
+		vv.LeftColumn = next
+		vv.hoverURL = ""
+		vtui.FrameManager.Redraw()
+	}
 }
 
 // AskGoto prompts for a position. In text mode that is a line number, which
@@ -1386,6 +1445,10 @@ func (vv *ViewerView) ProcessMouse(e *vtinput.InputEvent) bool {
 		if e.WheelDirection > 0 {
 			direction = -1
 			speed = config.App.WheelViewerUp
+		}
+		if e.ControlKeyState&vtinput.ShiftPressed != 0 && !vv.HexMode && !vv.DecodeMode && !vv.WrapMode {
+			vv.ScrollHorizontal(direction*config.WheelScrollLines(speed), false)
+			return true
 		}
 		// A spin faster than one notch per spin window queues extra lines
 		// the viewer keeps scrolling on its own (see internal/wheel).
