@@ -3,10 +3,12 @@ package panel
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/terminal/far2ldnd"
 	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/internal/theme"
@@ -388,6 +390,127 @@ func TestIssue2049_DropOnCommandLineInsertsPaths(t *testing.T) {
 	f.pf.HandleDrag(ev(vtui.DragDrop, x, y, false))
 	if got := f.pf.CmdLine.Edit.GetText(); got != want {
 		t.Fatalf("command line after an untracked drop is %q, want %q", got, want)
+	}
+}
+
+// newIssue2162Terminal prepares a frame with hidden panels and a busy shell
+// (the f4 command line does not own the input then), so that a drop on the
+// terminal area goes to the PTY. It returns the PTY and the drop position.
+func newIssue2162Terminal(t *testing.T) (f *issue2049Fixture, pty *mockPty, x, y int) {
+	t.Helper()
+	f = newIssue2049Fixture(t)
+	f.pf.ShowPanels = false
+	f.pf.Executing = true
+	pty = &mockPty{}
+	f.pf.Pty = pty
+	x1, y1, x2, y2 := f.pf.TermView.GetPosition()
+	return f, pty, (x1 + x2) / 2, (y1 + y2) / 2
+}
+
+func issue2162Drop(x, y int, allowed, suggested vtui.DropAction, paths ...string) *vtui.DragEvent {
+	return &vtui.DragEvent{
+		Phase: vtui.DragDrop, X: x, Y: y,
+		Allowed: allowed, Suggested: suggested,
+		Payload: vtui.DragPayload{Paths: paths},
+	}
+}
+
+func TestIssue2162_DropOnTerminalPastesQuotedPaths(t *testing.T) {
+	f, pty, x, y := newIssue2162Terminal(t)
+	path := filepath.Join(t.TempDir(), "a file's.txt")
+	paths := []string{f.source, path}
+
+	if got := f.pf.HandleDrag(issue2162Drop(x, y, vtui.DropCopy, vtui.DropCopy, paths...)); got != vtui.DropCopy {
+		t.Fatalf("drop on unbound terminal returned %s, want copy", got)
+	}
+	want := quoteDroppedPath(NormalizeExternalDropPath(paths[0])) + " " +
+		quoteDroppedPath(NormalizeExternalDropPath(paths[1]))
+	if got := pty.String(); got != want {
+		t.Fatalf("terminal paste %q, want %q", got, want)
+	}
+}
+
+func TestIssue2162_DropOnTerminalBracketedPaste(t *testing.T) {
+	f, pty, x, y := newIssue2162Terminal(t)
+	f.pf.TermView.BracketedPasteMode = true
+	path := filepath.Join(t.TempDir(), "a file's.txt")
+	paths := []string{f.source, path}
+
+	if got := f.pf.HandleDrag(issue2162Drop(x, y, vtui.DropCopy|vtui.DropMove, vtui.DropMove, paths...)); got != vtui.DropCopy {
+		t.Fatalf("drop on unbound terminal returned %s, want copy", got)
+	}
+	want := "\x1b[200~" + quoteDroppedPath(NormalizeExternalDropPath(paths[0])) + " " +
+		quoteDroppedPath(NormalizeExternalDropPath(paths[1])) + "\x1b[201~"
+	if got := pty.String(); got != want {
+		t.Fatalf("terminal paste %q, want %q", got, want)
+	}
+}
+
+// The terminal never answers "move": the source would delete the originals
+// after a mere text paste.
+func TestIssue2162_DropOnTerminalConvertsMoveToCopy(t *testing.T) {
+	f, pty, x, y := newIssue2162Terminal(t)
+
+	hover := issue2162Drop(x, y, vtui.DropMove, vtui.DropMove, f.source)
+	hover.Phase = vtui.DragOver
+	if got := f.pf.HandleDrag(hover); got != vtui.DropCopy {
+		t.Fatalf("hover with a move-only source returned %s, want copy", got)
+	}
+	if got := f.pf.HandleDrag(issue2162Drop(x, y, vtui.DropMove, vtui.DropMove, f.source)); got != vtui.DropCopy {
+		t.Fatalf("drop with a move-only source returned %s, want copy", got)
+	}
+	if want := quoteDroppedPath(NormalizeExternalDropPath(f.source)); pty.String() != want {
+		t.Fatalf("terminal paste %q, want %q", pty.String(), want)
+	}
+}
+
+func TestIssue2162_DropOnTerminalWithoutPTYDoesNotPanic(t *testing.T) {
+	f, _, x, y := newIssue2162Terminal(t)
+	f.pf.Pty = nil
+
+	if got := f.pf.HandleDrag(issue2162Drop(x, y, vtui.DropCopy, vtui.DropCopy, f.source)); got == vtui.DropMove {
+		t.Fatalf("drop without a PTY returned %s", got)
+	}
+}
+
+func TestIssue2162_DropOverVisiblePanelDoesNotPasteToTerminal(t *testing.T) {
+	f, pty, _, _ := newIssue2162Terminal(t)
+	f.pf.ShowPanels = true
+	x1, y1, x2, y2 := f.fsp.GetPosition()
+
+	f.pf.HandleDrag(issue2162Drop((x1+x2)/2, (y1+y2)/2, vtui.DropCopy, vtui.DropCopy, f.source))
+	if got := pty.String(); got != "" {
+		t.Fatalf("a drop over the panel reached the terminal: %q", got)
+	}
+}
+
+// A program bound for drops gets the files itself; nothing is typed into the
+// PTY.
+func TestIssue2162_DropOnTerminalWithBoundProgramTakesPrecedence(t *testing.T) {
+	f, pty, x, y := newIssue2162Terminal(t)
+	replies := &mockPty{}
+	parser := terminal.NewAnsiParser(f.pf.TermView, replies)
+	stack, err := far2ldnd.EncodeRequest(5, &far2ldnd.BindRequest{
+		Version: 1, Enable: true, Binding: far2ldnd.ID{0xa0, 0xa1}, MaxFrame: 65536, MaxChunk: 32768, Window: 4, WantedFeatures: 3,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parser.Process([]byte(far2ldnd.Frame(far2ldnd.FrameRequest, stack, far2ldnd.BEL)))
+	deadline := time.Now().Add(5 * time.Second)
+	for !f.pf.TermView.DropBound() && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !f.pf.TermView.DropBound() {
+		t.Fatal("the program did not bind")
+	}
+	pty.Reset()
+
+	if got := f.pf.HandleDrag(issue2162Drop(x, y, vtui.DropCopy|vtui.DropMove, vtui.DropMove, f.source)); got != vtui.DropCopy {
+		t.Fatalf("drop on a bound terminal returned %s, want copy", got)
+	}
+	if got := pty.String(); strings.Contains(got, filepath.Base(f.source)) {
+		t.Fatalf("paths were typed into the PTY of a program that takes drops: %q", got)
 	}
 }
 
