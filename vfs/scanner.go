@@ -262,7 +262,7 @@ func scanRecursive(ctx context.Context, v VFS, currentPath string, item VFSItem,
 	// target. Only fires when the caller opted out of the historical
 	// follow-through — copy/move pre-scans still recurse because the
 	// actual copy path recurses.
-	if item.IsSymlink && !opts.FollowSymlinkDirs && !(depth == 0 && opts.FollowRootSymlinkDirs) {
+	if item.IsSymlink && !opts.FollowSymlinkDirs && (depth != 0 || !opts.FollowRootSymlinkDirs) {
 		stats.Files++
 		if item.Size == 0 && !item.SizeKnown {
 			stats.UnknownSizeFiles++
