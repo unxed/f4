@@ -23,6 +23,39 @@ type panelDirWatch struct {
 	path    string
 	watcher *dirwatch.Watcher
 	opts    dirwatch.Options
+	// post hands a task to the UI goroutine. The UI goroutine stores it on
+	// every sync, and the watcher goroutine reads it under mu, so the watcher
+	// never reads the global vtui.FrameManager itself: a test that swaps the
+	// manager while a watcher is still alive would otherwise race with it.
+	post func(func())
+}
+
+// setPoster records where watcher callbacks post their UI tasks. It must be
+// called on the UI goroutine, the one that may read vtui.FrameManager.
+func (pd *panelDirWatch) setPoster(post func(func())) {
+	pd.mu.Lock()
+	pd.post = post
+	pd.mu.Unlock()
+}
+
+// postTask hands task to the UI goroutine; it is safe on a watcher goroutine.
+func (pd *panelDirWatch) postTask(task func()) {
+	pd.mu.Lock()
+	post := pd.post
+	pd.mu.Unlock()
+	if post != nil {
+		post(task)
+	}
+}
+
+// uiTaskPoster returns the task poster of the current frame manager, or nil
+// when there is none. Call it on the UI goroutine only.
+func uiTaskPoster() func(func()) {
+	frames := vtui.FrameManager
+	if frames == nil {
+		return nil
+	}
+	return frames.PostTask
 }
 
 // watchedPath returns the local directory fsp shows, or "" when there is
@@ -86,21 +119,19 @@ func (pf *PanelsFrame) syncDirWatches() {
 	if pf.Closed {
 		return
 	}
+	post := uiTaskPoster()
 	for i := range pf.dirWatch {
 		fsp, _ := pf.Panels[i].(*FileSystemPanel)
 		i := i
+		pf.dirWatch[i].setPoster(post)
 		pf.dirWatch[i].sync(fsp, func() { pf.dirChanged(i) })
 	}
 }
 
 // dirChanged runs on a watcher goroutine: it hands the reload over to the UI
-// goroutine.
+// goroutine. It must not read vtui.FrameManager: see panelDirWatch.post.
 func (pf *PanelsFrame) dirChanged(side int) {
-	frames := vtui.FrameManager
-	if frames == nil {
-		return
-	}
-	frames.PostTask(func() { pf.reloadWatched(side) })
+	pf.dirWatch[side].postTask(func() { pf.reloadWatched(side) })
 }
 
 // reloadWatched re-reads the panel's directory if it is still the one that

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -410,25 +411,30 @@ func TestPlayerSeeksOnThePlaybackBar(t *testing.T) {
 	old := config.App.PlayerBar
 	t.Cleanup(func() { config.App.PlayerBar = old })
 	for _, bar := range []bool{true, false} {
-		config.App.PlayerBar = bar
-		f := newPlayerFixture(t, "a.mp3")
-		f.press(playerKey(vtinput.VK_F5, 0))
-		f.press(playerKey(vtinput.VK_TAB, 0))
-		f.press(playerKey(vtinput.VK_RETURN, 0))
-		f.press(playerKey(vtinput.VK_HOME, vtinput.LeftCtrlPressed))
+		// A subtest of its own: the fixture swaps the global frame manager and
+		// restores it on cleanup, so two fixtures of one test would be torn
+		// down in the wrong order, the first one's watchers still running.
+		t.Run(fmt.Sprintf("bar=%v", bar), func(t *testing.T) {
+			config.App.PlayerBar = bar
+			f := newPlayerFixture(t, "a.mp3")
+			f.press(playerKey(vtinput.VK_F5, 0))
+			f.press(playerKey(vtinput.VK_TAB, 0))
+			f.press(playerKey(vtinput.VK_RETURN, 0))
+			f.press(playerKey(vtinput.VK_HOME, vtinput.LeftCtrlPressed))
 
-		f.press(playerKey(vtinput.VK_UP, 0)) // onto the bar
-		f.press(playerKey(vtinput.VK_RIGHT, 0))
-		f.press(playerKey(vtinput.VK_RIGHT, 0))
-		f.press(playerKey(vtinput.VK_LEFT, 0))
-		if got := f.audio.Position(); got != 5*time.Second {
-			t.Errorf("bar=%v: Right, Right, Left on the bar left the track at %s, want 5s", bar, got)
-		}
-		f.press(playerKey(vtinput.VK_DOWN, 0)) // back to the buttons
-		f.press(playerKey(vtinput.VK_RIGHT, 0))
-		if got := f.audio.Position(); got != 5*time.Second {
-			t.Errorf("bar=%v: Right on the buttons after the bar moved the track to %s", bar, got)
-		}
+			f.press(playerKey(vtinput.VK_UP, 0)) // onto the bar
+			f.press(playerKey(vtinput.VK_RIGHT, 0))
+			f.press(playerKey(vtinput.VK_RIGHT, 0))
+			f.press(playerKey(vtinput.VK_LEFT, 0))
+			if got := f.audio.Position(); got != 5*time.Second {
+				t.Errorf("bar=%v: Right, Right, Left on the bar left the track at %s, want 5s", bar, got)
+			}
+			f.press(playerKey(vtinput.VK_DOWN, 0)) // back to the buttons
+			f.press(playerKey(vtinput.VK_RIGHT, 0))
+			if got := f.audio.Position(); got != 5*time.Second {
+				t.Errorf("bar=%v: Right on the buttons after the bar moved the track to %s", bar, got)
+			}
+		})
 	}
 }
 
