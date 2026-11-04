@@ -50,27 +50,30 @@ type calendarDay struct {
 
 // calendarWeekRow is one row (week) of the grid. It implements
 // vtui.TableRow (GetCellText) and vtui.CellColorableRow (GetCellAttr, for
-// the "today" highlight).
-type calendarWeekRow [7]calendarDay
+// the "today" highlight). todayIdx is the palette index used for today's
+// cell, taken from the embedding table's ColorHighlightIdx so the colour
+// follows the active theme instead of a hardcoded one.
+type calendarWeekRow struct {
+	days     [7]calendarDay
+	todayIdx int
+}
 
 func (r calendarWeekRow) GetCellText(col int) string {
-	d := r[col]
+	d := r.days[col]
 	if d.day == 0 {
 		return ""
 	}
 	return fmt.Sprintf("%d", d.day)
 }
 
-// GetCellAttr highlights today's cell with the same accent color quick
-// search uses to highlight a match (ColMenuHighlight, vtui.NewTable's own
-// default for ColorHighlightIdx). It does not special-case the cursor
-// already sitting on today -- defaultAttr already reflects cursor/selection
-// state, and the highlight simply wins there too; a deliberate
-// simplification worth revisiting if it turns out to read as "no visible
-// cursor" in practice.
+// GetCellAttr highlights today's cell with the table's own highlight colour
+// (ColorHighlightIdx), which the active theme can override, so the calendar
+// never paints a colour the theme did not choose. It does not special-case
+// the cursor already sitting on today -- defaultAttr already reflects
+// cursor/selection state, and the highlight simply wins there too.
 func (r calendarWeekRow) GetCellAttr(col int, defaultAttr uint64) uint64 {
-	if r[col].isToday {
-		return vtui.Palette[vtui.ColMenuHighlight]
+	if r.days[col].isToday {
+		return vtui.Palette[r.todayIdx]
 	}
 	return defaultAttr
 }
@@ -93,7 +96,7 @@ func calendarColumns() []vtui.TableColumn {
 // buildCalendarWeeks lays year/month out into calendarWeeks Monday-first
 // rows, blank-padding the days before the 1st and after the month's last
 // day so every month always produces exactly calendarWeeks rows.
-func buildCalendarWeeks(year int, month time.Month) []vtui.TableRow {
+func buildCalendarWeeks(year int, month time.Month, todayIdx int) []vtui.TableRow {
 	first := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
 	// time.Weekday is Sunday=0..Saturday=6; +6 %7 rotates it to
 	// Monday=0..Sunday=6, how many blank cells precede day 1.
@@ -105,10 +108,10 @@ func buildCalendarWeeks(year int, month time.Month) []vtui.TableRow {
 	rows := make([]vtui.TableRow, calendarWeeks)
 	day := 1 - startOffset
 	for w := 0; w < calendarWeeks; w++ {
-		var row calendarWeekRow
+		row := calendarWeekRow{todayIdx: todayIdx}
 		for c := 0; c < 7; c++ {
 			if day >= 1 && day <= daysInMonth {
-				row[c] = calendarDay{day: day, isToday: isCurrentMonth && day == now.Day()}
+				row.days[c] = calendarDay{day: day, isToday: isCurrentMonth && day == now.Day()}
 			}
 			day++
 		}
@@ -171,6 +174,11 @@ func showCalendarDialog() {
 	table := &calendarTable{Table: vtui.NewTable(0, 0, gridWidth, 1+calendarWeeks, calendarColumns())}
 	table.ShowHeader = true
 	table.CellSelection = true
+	// Today's cell is a highlight inside a table, not a menu match, so it must
+	// follow the table selection colour: themes tune table colours separately
+	// from menu colours (ColMenuHighlight, the vtui.NewTable default, leaks the
+	// menu's cyan background into the grid).
+	table.ColorHighlightIdx = vtui.ColTableSelectedText
 
 	btnInsert := vtui.NewButton(0, 0, i18n.Msg("Calendar.BtnInsert"))
 	btnInsert.IsDefault = true
@@ -178,7 +186,7 @@ func showCalendarDialog() {
 
 	refresh := func() {
 		lblMonth.SetText(fmt.Sprintf("%s %d", i18n.Msg(fmt.Sprintf("Group.Month%d", int(month))), year))
-		table.SetRows(buildCalendarWeeks(year, month))
+		table.SetRows(buildCalendarWeeks(year, month, table.ColorHighlightIdx))
 	}
 
 	// clampSelection walks the cursor backward (same weekday column, one
@@ -192,7 +200,7 @@ func showCalendarDialog() {
 				return
 			}
 			row, ok := table.Rows[idx].(calendarWeekRow)
-			if !ok || row[table.SelectCol].day != 0 {
+			if !ok || row.days[table.SelectCol].day != 0 {
 				return
 			}
 			if !table.MoveSelection(-1) {
@@ -208,7 +216,7 @@ func showCalendarDialog() {
 				continue
 			}
 			for c := 0; c < 7; c++ {
-				if row[c].isToday {
+				if row.days[c].isToday {
 					table.SelectPos, table.SelectCol = w, c
 					return
 				}
@@ -268,7 +276,7 @@ func showCalendarDialog() {
 		var day int
 		if idx >= 0 && idx < len(table.Rows) {
 			if row, ok := table.Rows[idx].(calendarWeekRow); ok {
-				day = row[table.SelectCol].day
+				day = row.days[table.SelectCol].day
 			}
 		}
 		dlg.Close()
