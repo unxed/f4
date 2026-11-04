@@ -99,6 +99,29 @@ func TestTerminalView_Far2lExtensionsTurnOffWhenCommandEnds(t *testing.T) {
 	}
 }
 
+func TestTerminalView_Far2lCompactInputNegotiation(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	defer tv.Close()
+	tv.HandleFar2lAPC("far2l1")
+
+	request := vtinput.Far2lStack{}
+	request.PushU64(far2lFeatCompactInput)
+	request.PushU8('x')
+	request.PushU8(0)
+	tv.ProcessFar2lInteract(request)
+	if got := string(tv.Far2lInputEvent(&vtinput.InputEvent{
+		Type: vtinput.KeyEventType, KeyDown: true, Char: 'a', VirtualKeyCode: 0x41,
+		VirtualScanCode: 0x1e, RepeatCount: 1,
+	})); got != "\x1b_f2lQQAAAGEAQw==\x07" {
+		t.Fatalf("negotiated event = %q, want compact key event", got)
+	}
+
+	tv.HandleFar2lAPC("far2l0")
+	if got := tv.Far2lInputEvent(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true}); got != nil {
+		t.Fatalf("event after far2l0 = %q, want nil", got)
+	}
+}
+
 func TestTerminalView_HandleFar2lAPC_Garbage(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	defer tv.Close()

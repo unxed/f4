@@ -3176,6 +3176,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// Raw input mode check at the very top. If an interactive AltScreen app is active (e.g. mc, htop),
 	// we forward all non-global keys to terminal.PTY.
 	if !pf.ShowPanels && pf.TermView.OnAltScreen() {
+		if active := pf.GetActivePTY(); active != nil {
+			if event := pf.TermView.Far2lInputEvent(e); len(event) != 0 {
+				_, _ = pf.WritePTY(active, event)
+				return true
+			}
+		}
 		if e.KeyDown || pf.TermView.Win32InputMode || pf.TermView.KittyFlags.Load() != 0 {
 			active := pf.GetActivePTY()
 			if active != nil {
@@ -3373,6 +3379,12 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// and for any interactive shell session when host console mode is active.
 	// We forward text and navigation to term.PTY, but let global shortcuts (Ctrl+Alt+Z) fall through.
 	if !pf.ShowPanels && (pf.IsPtyBusy() || pf.ShellMode == terminal.ShellModeHost) {
+		if active := pf.GetActivePTY(); active != nil {
+			if event := pf.TermView.Far2lInputEvent(e); len(event) != 0 {
+				_, _ = pf.WritePTY(active, event)
+				return true
+			}
+		}
 		if e.KeyDown || pf.TermView.Win32InputMode || pf.TermView.KittyFlags.Load() != 0 {
 			active := pf.GetActivePTY()
 			if active != nil {
@@ -4303,6 +4315,15 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 	}
 	// If panels are hidden, route relevant mouse events to term.PTY immediately
 	if !pf.ShowPanels {
+		active := pf.GetActivePTY()
+		if active != nil {
+			if event := pf.TermView.Far2lInputEvent(keymap.RebaseTerminalMouseEvent(
+				e, pf.TermView.X1, pf.TermView.Y1, pf.TermView.Width, pf.TermView.Height,
+			)); len(event) != 0 {
+				_, _ = pf.WritePTY(active, event)
+				return true
+			}
+		}
 		mx, my := int(e.MouseX), int(e.MouseY)
 		if pf.TermView != nil && e.WheelDirection == 0 {
 			if changed := pf.TermView.UpdateURLHover(mx, my); changed {
@@ -4315,7 +4336,6 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 				}
 			}
 		}
-		active := pf.GetActivePTY()
 		if pf.TermView.MouseTrackingMode == 0 && e.Type == vtinput.MouseEventType &&
 			e.WheelDirection == 0 && e.ButtonState == 0 {
 			pf.terminalMouseButton = 0

@@ -86,6 +86,9 @@ type TerminalView struct {
 	// requests and will gate far2l input encoding. It is atomic because the ANSI
 	// parser and input handling run on different goroutines.
 	far2lExtensionsOn atomic.Bool
+	// far2lCompactInput is negotiated by the child's far2l:x request and has
+	// the same parser/input-goroutine ownership as far2lExtensionsOn.
+	far2lCompactInput atomic.Bool
 	// kittyBeforeCommand and kittyCommandRunning scope the shell's own kitty
 	// flags to its prompt: they hold the flags in force when a command started
 	// (OSC 133;C) so that the command runs with none and the shell gets them
@@ -1908,6 +1911,7 @@ func (tv *TerminalView) ResetKeyboardProtocols() {
 	tv.KittyFlags.Store(0)
 	tv.kittyCommandRunning.Store(false)
 	tv.far2lExtensionsOn.Store(false)
+	tv.far2lCompactInput.Store(false)
 	tv.ApplicationCursorKeys = false
 }
 
@@ -1972,6 +1976,7 @@ func (tv *TerminalView) HandleFar2lAPC(s string) {
 		}
 	} else if s == "far2l0" {
 		tv.far2lExtensionsOn.Store(false)
+		tv.far2lCompactInput.Store(false)
 		// Switching the extensions off revokes every drop offer (§ 12 of
 		// the DnD specification).
 		tv.dndReset()
@@ -2325,6 +2330,7 @@ func (tv *TerminalView) ProcessFar2lInteract(data []byte) {
 		reply.PushU8(1)
 	case 'x': // Extra features
 		feats := stk.PopU64()
+		tv.far2lCompactInput.Store(tv.far2lExtensionsOn.Load() && feats&far2lFeatCompactInput != 0)
 		if feats&2 != 0 { // FARTTY_FEAT_TERMINAL_SIZE
 			tv.SendFar2lTerminalSize()
 		}
