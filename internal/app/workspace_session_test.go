@@ -23,7 +23,7 @@ func TestWorkspaceSessionSerializationPreservesOrderNumbersAndActiveTab(t *testi
 		},
 		{
 			Number: 1, ActivePanel: 1, WidePanel: 1,
-			ShowPanels: true, ShowLeft: false, ShowRight: true,
+			ShowPanels: true, ShowLeft: false, ShowRight: true, TerminalOnly: true,
 			Left:  panel.PanelSessionState{Path: "C:/short", ViewMode: int(panel.ViewModeMedium), SortMode: int(panel.SortExt)},
 			Right: panel.PanelSessionState{Path: "D:/long", ViewMode: int(panel.ViewModeBrief), SortMode: int(panel.SortSize)},
 		},
@@ -152,9 +152,9 @@ func TestApplyWorkspaceSessionInitializesFreshPanelsFrame(t *testing.T) {
 	state := panel.WorkspaceSessionState{
 		ActivePanel: 0,
 		WidePanel:   -1,
-		ShowPanels:  true,
-		ShowLeft:    true,
-		ShowRight:   true,
+		ShowPanels:  false, TerminalOnly: true,
+		ShowLeft:  true,
+		ShowRight: true,
 		Left: panel.PanelSessionState{
 			ViewMode: int(panel.ViewModeBrief), SortMode: int(panel.SortExt), SortReverse: true,
 		},
@@ -162,6 +162,13 @@ func TestApplyWorkspaceSessionInitializesFreshPanelsFrame(t *testing.T) {
 			ViewMode: int(panel.ViewModeDetailed), SortMode: int(panel.SortTime),
 		},
 	}
+	var encoded strings.Builder
+	panel.WriteWorkspaceSessions(&encoded, []panel.WorkspaceSessionState{state}, 0)
+	states, _ := panel.LoadWorkspaceSessions(ini.Parse(strings.NewReader(encoded.String())))
+	if len(states) != 1 {
+		t.Fatalf("restored %d workspace states, want 1", len(states))
+	}
+	state = states[0]
 
 	// Background workspaces are restored immediately after construction,
 	// before SetupUI has explicitly resized them.
@@ -174,6 +181,9 @@ func TestApplyWorkspaceSessionInitializesFreshPanelsFrame(t *testing.T) {
 	}
 	if pf.ActiveIdx != 0 {
 		t.Fatalf("active panel = %d, want 0", pf.ActiveIdx)
+	}
+	if !pf.TerminalOnly || !pf.PanelsLocked() {
+		t.Fatal("terminal-only workspace state was not applied")
 	}
 	if left.ViewMode != panel.ViewModeBrief || left.SortMode != panel.SortExt || !left.SortReverse {
 		t.Fatalf("left panel state was not restored: view=%v sort=%v reverse=%v", left.ViewMode, left.SortMode, left.SortReverse)
