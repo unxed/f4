@@ -216,6 +216,9 @@ func testWinePosixTrashSelectsHomeTrashOnSameDevice(t *testing.T) {
 	trashHomeEnv = func(string) string { return "" }
 	trashHomeDir = func() (string, error) { return "/home/user", nil }
 
+	fake.seedDir("/home", 1, 1000, 0755)
+	fake.seedDir("/home/user", 1, 1000, 0755)
+	fake.seedDir("/home/user/docs", 1, 1000, 0755)
 	fake.seedDir("/home/user/.local/share/Trash", 1, 1000, privateTrashDirMode)
 	fake.seedFile("/home/user/docs/gone.txt", 1, 1000, 0600, []byte("bye"))
 
