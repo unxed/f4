@@ -497,6 +497,11 @@ func TestAnsiParser_OSC52_Malformed(t *testing.T) {
 	largeSeq := "\x1b]52;c;" + strings.Repeat("A", 10000) + "\x07"
 	p.Process([]byte(largeSeq))
 
+	// The valid payload above starts an asynchronous authorization request;
+	// it must not outlive the test and race with the next test replacing
+	// vtui.GlobalClipboardAccessManager.
+	p.waitOSC52()
+
 	// If we are here without panic, the test is passed.
 }
 
@@ -871,12 +876,16 @@ func TestAnsiParser_OSC52_Read_Security(t *testing.T) {
 func TestAnsiParser_OSC52_Write_Success(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	parser := NewAnsiParser(tv, nil)
+	oldAuth := vtui.GlobalClipboardAccessManager
+	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: true}
+	t.Cleanup(func() { vtui.GlobalClipboardAccessManager = oldAuth })
 
 	testStr := "Hello OSC 52"
 	b64 := base64.StdEncoding.EncodeToString([]byte(testStr))
 
 	// OSC 52 ; selection (c) ; data (b64) BEL
 	parser.Process([]byte(fmt.Sprintf("\x1b]52;c;%s\x07", b64)))
+	parser.waitOSC52()
 
 	for i := 0; i < 50; i++ {
 		if vtui.GetClipboard() == testStr {
@@ -888,6 +897,23 @@ func TestAnsiParser_OSC52_Write_Success(t *testing.T) {
 	got := vtui.GetClipboard()
 	if got != testStr {
 		t.Errorf("Expected clipboard to be %q, got %q", testStr, got)
+	}
+}
+
+func TestAnsiParser_OSC52_Write_Refused(t *testing.T) {
+	tv := NewTerminalView(80, 24)
+	parser := NewAnsiParser(tv, nil)
+	oldAuth := vtui.GlobalClipboardAccessManager
+	vtui.GlobalClipboardAccessManager = &mockClipAuthManager{authorized: false}
+	t.Cleanup(func() { vtui.GlobalClipboardAccessManager = oldAuth })
+
+	const original = "clipboard stays unchanged"
+	vtui.SetClipboard(original)
+	b64 := base64.StdEncoding.EncodeToString([]byte("untrusted write"))
+	parser.Process([]byte(fmt.Sprintf("\x1b]52;c;%s\x07", b64)))
+	parser.waitOSC52()
+	if got := vtui.GetClipboard(); got != original {
+		t.Fatalf("denied OSC 52 write changed clipboard to %q", got)
 	}
 }
 func TestAnsiParser_Excision_UTF8_Safety(t *testing.T) {

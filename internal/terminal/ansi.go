@@ -1132,7 +1132,17 @@ func (p *AnsiParser) handleOSC() {
 			} else {
 				decoded, err := base64.StdEncoding.DecodeString(subparts[1])
 				if err == nil {
-					SetF4Clipboard(string(decoded))
+					p.osc52WG.Add(1)
+					go func(text string) {
+						defer p.osc52WG.Done()
+						if vtui.GlobalClipboardAccessManager == nil {
+							return
+						}
+						auth := vtui.GlobalClipboardAccessManager.Authorize("Terminal_OSC52_Write")
+						if auth == 1 || auth == 2 {
+							SetF4Clipboard(text)
+						}
+					}(string(decoded))
 				}
 			}
 		}
