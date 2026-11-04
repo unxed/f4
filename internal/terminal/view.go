@@ -68,9 +68,12 @@ type TerminalView struct {
 	// Скроллинг истории (визуальный ряд)
 	ScrollTopRow int
 
-	Title                 string
-	Win32InputMode        bool
-	BracketedPasteMode    bool
+	Title              string
+	Win32InputMode     bool
+	BracketedPasteMode bool
+	// FocusReportingMode is DECSET 1004: the program wants CSI I / CSI O when
+	// the window gains / loses focus (FocusReport).
+	FocusReportingMode    bool
 	ApplicationCursorKeys bool
 	// KittyFlags is written by the ansi-parsing goroutine (handleCSI in
 	// ansi.go, on the local shell's PTY read loop -- see InitPTY in
@@ -1908,6 +1911,7 @@ func (tv *TerminalView) ResetKeyboardProtocols() {
 	tv.mu.Lock()
 	defer tv.mu.Unlock()
 	tv.Win32InputMode = false
+	tv.FocusReportingMode = false
 	tv.KittyFlags.Store(0)
 	tv.kittyCommandRunning.Store(false)
 	tv.far2lExtensionsOn.Store(false)

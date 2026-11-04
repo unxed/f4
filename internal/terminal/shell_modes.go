@@ -9,6 +9,7 @@ package terminal
 
 type shellInputModes struct {
 	bracketedPaste bool
+	focusReporting bool
 	mouseSGR       bool
 	win32Input     bool
 	mouseTracking  int
@@ -22,6 +23,7 @@ func (tv *TerminalView) saveShellModes() {
 	}
 	tv.shellModes = shellInputModes{
 		bracketedPaste: tv.BracketedPasteMode,
+		focusReporting: tv.FocusReportingMode,
 		mouseSGR:       tv.MouseSGRMode,
 		win32Input:     tv.Win32InputMode,
 		mouseTracking:  tv.MouseTrackingMode,
@@ -37,6 +39,7 @@ func (tv *TerminalView) restoreShellModes() {
 	}
 	tv.shellModesPending = false
 	tv.BracketedPasteMode = tv.shellModes.bracketedPaste
+	tv.FocusReportingMode = tv.shellModes.focusReporting
 	tv.MouseSGRMode = tv.shellModes.mouseSGR
 	tv.Win32InputMode = tv.shellModes.win32Input
 	tv.MouseTrackingMode = tv.shellModes.mouseTracking

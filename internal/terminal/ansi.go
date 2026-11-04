@@ -706,6 +706,7 @@ func (p *AnsiParser) handleEsc(cmd byte) {
 		p.term.NextLine()
 	case 'c': // RIS - Reset to Initial State
 		p.term.ResetBuffer(p.term.Width, p.term.Height)
+		p.term.FocusReportingMode = false
 	case '=', '>':
 		// Application/Numeric Keypad Mode - пока просто поглощаем
 	}
@@ -840,6 +841,8 @@ func (p *AnsiParser) handleCSI(cmd byte) {
 				p.term.Win32InputMode = isSet
 			case "2004":
 				p.term.BracketedPasteMode = isSet
+			case "1004":
+				p.term.FocusReportingMode = isSet
 			}
 		}
 	case 'L': // Insert blank lines
@@ -1037,6 +1040,12 @@ func (p *AnsiParser) handleDECRQM(args []int) {
 			}
 		case 2004:
 			if p.term.BracketedPasteMode {
+				state = 1
+			} else {
+				state = 2
+			}
+		case 1004:
+			if p.term.FocusReportingMode {
 				state = 1
 			} else {
 				state = 2

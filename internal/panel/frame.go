@@ -3282,6 +3282,14 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 			pf.CmdLine.SetFocus(e.SetFocus)
 		}
 		pf.TermView.SetFocus(e.SetFocus)
+		// A program that asked for CSI ? 1004 h hears of the window's focus.
+		if !pf.ShowPanels {
+			if rep := pf.TermView.FocusReport(e.SetFocus); rep != nil {
+				if pty := pf.GetActivePTY(); pty != nil {
+					_, _ = pf.WritePTY(pty, rep)
+				}
+			}
+		}
 		return true
 	}
 
