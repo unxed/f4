@@ -103,6 +103,13 @@ func TestTerminalView_Far2lCompactInputNegotiation(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	defer tv.Close()
 	tv.HandleFar2lAPC("far2l1")
+	mouse := &vtinput.InputEvent{
+		Type: vtinput.MouseEventType, MouseX: 10, MouseY: 5,
+		ButtonState: vtinput.FromLeft1stButtonPressed,
+	}
+	if got, want := string(tv.Far2lInputEvent(mouse)), "\x1b_f2lCgAFAAEAAAAAAAAAAAAAAE0=\x07"; got != want {
+		t.Fatalf("mouse before compact negotiation = %q, want full event %q", got, want)
+	}
 
 	request := vtinput.Far2lStack{}
 	request.PushU64(far2lFeatCompactInput)
@@ -114,6 +121,9 @@ func TestTerminalView_Far2lCompactInputNegotiation(t *testing.T) {
 		VirtualScanCode: 0x1e, RepeatCount: 1,
 	})); got != "\x1b_f2lQQAAYQBD\x07" {
 		t.Fatalf("negotiated event = %q, want compact key event", got)
+	}
+	if got, want := string(tv.Far2lInputEvent(mouse)), "\x1b_f2lCgAFAAEAAABt\x07"; got != want {
+		t.Fatalf("negotiated mouse event = %q, want compact event %q", got, want)
 	}
 
 	tv.HandleFar2lAPC("far2l0")
