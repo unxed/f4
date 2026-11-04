@@ -22,7 +22,7 @@ func far2lInputEvent(e *vtinput.InputEvent) []byte {
 		stack.PushU16(e.VirtualKeyCode)
 		stack.PushU16(e.VirtualScanCode)
 		stack.PushU32(uint32(e.ControlKeyState))
-		stack.PushU32(uint32(e.Char))
+		stack.PushU32(uint32(e.Char)) // #nosec G115 -- rune is int32; encoding its bit pattern as the protocol's u32 preserves every value
 		repeat := e.RepeatCount
 		if repeat == 0 {
 			repeat = 1
@@ -33,8 +33,8 @@ func far2lInputEvent(e *vtinput.InputEvent) []byte {
 			code = 'K'
 		}
 	case vtinput.MouseEventType:
-		stack.PushU16(uint16(e.MouseX))
-		stack.PushU16(uint16(e.MouseY))
+		stack.PushU16(uint16(e.MouseX)) // #nosec G115 -- mouse coordinates are signed 16-bit values serialized as their u16 wire bit patterns
+		stack.PushU16(uint16(e.MouseY)) // #nosec G115 -- mouse coordinates are signed 16-bit values serialized as their u16 wire bit patterns
 		stack.PushU32(e.ButtonState)
 		stack.PushU32(uint32(e.ControlKeyState))
 		stack.PushU32(e.MouseEventFlags)
