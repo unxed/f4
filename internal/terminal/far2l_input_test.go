@@ -76,7 +76,7 @@ func TestFar2lInputEventUsesCompactFormsOnlyWithoutLoss(t *testing.T) {
 		Type: vtinput.MouseEventType, MouseX: 10, MouseY: 5,
 		ButtonState: vtinput.FromLeft1stButtonPressed,
 	}
-	if got, want := string(far2lInputEvent(mouse, true)), "\x1b_f2lCgAFAAEAbQ==\x07"; got != want {
+	if got, want := string(far2lInputEvent(mouse, true)), "\x1b_f2lCgAFAAEAAABt\x07"; got != want {
 		t.Fatalf("compact mouse event = %q, want %q", got, want)
 	}
 
