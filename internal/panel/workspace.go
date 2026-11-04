@@ -29,6 +29,7 @@ type WorkspaceSessionState struct {
 	Left, Right                     PanelSessionState
 	ActivePanel, WidePanel          int
 	ShowPanels, ShowLeft, ShowRight bool
+	TerminalOnly                    bool
 }
 
 var (
@@ -98,11 +99,12 @@ func CaptureWorkspaceSession(pf *PanelsFrame) WorkspaceSessionState {
 	}
 
 	state := WorkspaceSessionState{
-		ActivePanel: activePanel,
-		WidePanel:   -1,
-		ShowPanels:  pf.ShowPanels,
-		ShowLeft:    pf.ShowLeftPanel,
-		ShowRight:   pf.ShowRightPanel,
+		ActivePanel:  activePanel,
+		WidePanel:    -1,
+		ShowPanels:   pf.ShowPanels,
+		ShowLeft:     pf.ShowLeftPanel,
+		ShowRight:    pf.ShowRightPanel,
+		TerminalOnly: pf.TerminalOnly,
 	}
 	if pf.Wide {
 		if pf.WidePanel >= 0 && pf.WidePanel < 2 && !IsAIPanel(pf.Panels[pf.WidePanel]) {
@@ -202,12 +204,13 @@ func LoadWorkspaceSessions(ini *ini.File) ([]WorkspaceSessionState, int) {
 		leftSection := section + "/Left"
 		rightSection := section + "/Right"
 		state := WorkspaceSessionState{
-			Number:      parseSessionInt(ini, section, "Number", i+1),
-			ActivePanel: parseSessionInt(ini, section, "ActivePanel", 1),
-			WidePanel:   parseSessionInt(ini, section, "WidePanel", -1),
-			ShowPanels:  ini.GetString(section, "ShowPanels", "1") == "1",
-			ShowLeft:    ini.GetString(section, "ShowLeft", "1") == "1",
-			ShowRight:   ini.GetString(section, "ShowRight", "1") == "1",
+			Number:       parseSessionInt(ini, section, "Number", i+1),
+			ActivePanel:  parseSessionInt(ini, section, "ActivePanel", 1),
+			WidePanel:    parseSessionInt(ini, section, "WidePanel", -1),
+			ShowPanels:   ini.GetString(section, "ShowPanels", "1") == "1",
+			ShowLeft:     ini.GetString(section, "ShowLeft", "1") == "1",
+			ShowRight:    ini.GetString(section, "ShowRight", "1") == "1",
+			TerminalOnly: ini.GetString(section, "TerminalOnly", "0") == "1",
 			Left: PanelSessionState{
 				Path: ini.GetString(leftSection, "Folder", ""), Cursor: ini.GetString(leftSection, "CurFile", ""),
 				ViewMode:               parseSessionInt(ini, leftSection, "ViewMode", int(ViewModeMedium)),
@@ -299,8 +302,9 @@ func WriteWorkspaceSessions(sb *strings.Builder, states []WorkspaceSessionState,
 		section := fmt.Sprintf("Workspace/%d", i)
 		fmt.Fprintf(sb, "\n[%s]\n", section)
 		fmt.Fprintf(sb, "Number = %d\nActivePanel = %d\nWidePanel = %d\n", state.Number, state.ActivePanel, state.WidePanel)
-		fmt.Fprintf(sb, "ShowPanels = %d\nShowLeft = %d\nShowRight = %d\n",
-			map[bool]int{true: 1}[state.ShowPanels], map[bool]int{true: 1}[state.ShowLeft], map[bool]int{true: 1}[state.ShowRight])
+		fmt.Fprintf(sb, "ShowPanels = %d\nShowLeft = %d\nShowRight = %d\nTerminalOnly = %d\n",
+			map[bool]int{true: 1}[state.ShowPanels], map[bool]int{true: 1}[state.ShowLeft],
+			map[bool]int{true: 1}[state.ShowRight], map[bool]int{true: 1}[state.TerminalOnly])
 		writePanelSession(sb, section+"/Left", state.Left)
 		writePanelSession(sb, section+"/Right", state.Right)
 	}
@@ -416,8 +420,12 @@ func ApplyWorkspaceSession(pf *PanelsFrame, state WorkspaceSessionState, width, 
 		pf.ActiveIdx = 1
 	}
 	pf.ShowPanels, pf.ShowLeftPanel, pf.ShowRightPanel = state.ShowPanels, state.ShowLeft, state.ShowRight
+	pf.TerminalOnly = state.TerminalOnly
+	if pf.TerminalOnly {
+		pf.ShowPanels = false
+	}
 	pf.Wide, pf.WidePanel = false, -1
-	if state.WidePanel == 0 || state.WidePanel == 1 {
+	if !pf.TerminalOnly && (state.WidePanel == 0 || state.WidePanel == 1) {
 		pf.Wide, pf.WidePanel, pf.ActiveIdx, pf.ShowPanels = true, state.WidePanel, state.WidePanel, true
 	}
 	pf.ResizeConsole(width, height)
