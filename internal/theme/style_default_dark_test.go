@@ -102,3 +102,34 @@ func TestDefaultDarkStyle_ViewerScrollbarAndAddressesShareTheTextBackground(t *t
 		}
 	}
 }
+
+// The editor used to sit on the far2l blue file background (#3465a4) while
+// the panels were dark grey: the editor text, scrollbar and syntax slots must
+// all follow the panel surface (#2e3436) so the editor and viewer look like one
+// product rather than two (#2132).
+func TestDefaultDarkStyle_EditorSharesThePanelBackground(t *testing.T) {
+	oldCfg := config.App
+	config.App.EnforceColorCorrection = false
+	defer func() { config.App = oldCfg }()
+
+	if err := ApplyColorStyle("Default Dark"); err != nil {
+		t.Fatalf("Failed to apply Default Dark style: %v", err)
+	}
+
+	cases := []struct {
+		name  string
+		index int
+	}{
+		{"Editor.Text", ColEditorText},
+		{"Editor.Scrollbar", ColEditorScrollbar},
+		{"Editor.WrapMark", ColEditorWrapMark},
+		{"Editor.Syntax.Comment", ColEditorSyntaxComment},
+		{"Editor.Syntax.Keyword", ColEditorSyntaxKeyword},
+		{"Editor.Syntax.String", ColEditorSyntaxString},
+	}
+	for _, tc := range cases {
+		if _, bg := GetColorRGBBoth(vtui.Palette[tc.index]); bg != 0x2E3436 {
+			t.Errorf("%s is on #%06x, want the panel background #2e3436", tc.name, bg)
+		}
+	}
+}
