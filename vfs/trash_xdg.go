@@ -67,7 +67,6 @@ var (
 	trashMkdirAll        = hostfs.MkdirAll
 	trashChmod           = hostfs.Chmod
 	trashRemove          = hostfs.Remove
-	trashReadlink        = hostfs.Readlink
 	trashRenameNoReplace = renameNoReplace
 
 	trashGetuid         = defaultTrashGetuid
@@ -88,10 +87,7 @@ type freedesktopTrash struct {
 // It never invokes sudo and never falls back to a cross-device copy or
 // Remove.
 func moveToFreedesktopTrash(ctx context.Context, source string) error {
-	source, err := resolveTrashSource(posixAbsClean(source))
-	if err != nil {
-		return err
-	}
+	source = posixAbsClean(source)
 	sourceInfo, err := trashLstat(source)
 	if err != nil {
 		return err
@@ -133,69 +129,6 @@ func moveToFreedesktopTrash(ctx context.Context, source string) error {
 		return err
 	}
 	return moveIntoFreedesktopTrash(ctx, source, volumeTrash)
-}
-
-// maxTrashSymlinkHops bounds the symbolic links followed while resolving the
-// directory of an item, like the kernel's own limit against loops.
-const maxTrashSymlinkHops = 40
-
-// resolveTrashSource returns source with every symbolic link in its directory
-// part resolved to the real path, keeping the last component as it is: the
-// item itself may be a symlink and then the link, not its target, is trashed.
-// The volume (mount root) of an item is found by walking up its path, and
-// that walk only means something along the real path: for
-// ~/LINKS/000 -> /media/x/000 the logical parent ~/LINKS belongs to the home
-// filesystem, so the walk stopped at the symlink and put .Trash-$uid into the
-// linked directory, where no desktop looks for it (unxed/f4#2237).
-func resolveTrashSource(source string) (string, error) {
-	dir, base := stdpath.Split(source)
-	if base == "" {
-		return source, nil
-	}
-	real, err := resolveTrashDir(stdpath.Clean(dir))
-	if err != nil {
-		return "", err
-	}
-	return stdpath.Join(real, base), nil
-}
-
-func resolveTrashDir(dir string) (string, error) {
-	resolved := "/"
-	rest := strings.Split(strings.TrimPrefix(dir, "/"), "/")
-	hops := 0
-	for len(rest) > 0 {
-		part := rest[0]
-		rest = rest[1:]
-		if part == "" || part == "." {
-			continue
-		}
-		if part == ".." {
-			resolved = stdpath.Dir(resolved)
-			continue
-		}
-		next := stdpath.Join(resolved, part)
-		info, err := trashLstat(next)
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink == 0 {
-			resolved = next
-			continue
-		}
-		hops++
-		if hops > maxTrashSymlinkHops {
-			return "", fmt.Errorf("too many levels of symbolic links: %s", dir)
-		}
-		target, err := trashReadlink(next)
-		if err != nil {
-			return "", err
-		}
-		if stdpath.IsAbs(target) {
-			resolved = "/"
-		}
-		rest = append(strings.Split(strings.TrimPrefix(target, "/"), "/"), rest...)
-	}
-	return resolved, nil
 }
 
 func freedesktopHomeTrashRoot() (string, error) {
