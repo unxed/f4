@@ -62,7 +62,7 @@ func executable() (string, error) {
 		return p, nil
 	}
 	if !universalBuild() {
-		return os.Executable()
+		return startupExecutable()
 	}
 	if p, ok := recordedExecutable(os.Getenv(GoffiUniversalExe)); ok {
 		return p, nil

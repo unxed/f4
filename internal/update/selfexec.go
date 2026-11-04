@@ -75,3 +75,22 @@ func linkerArgv(argv0, image string, args []string) []string {
 	argv = append(argv, argv0, image)
 	return append(argv, args...)
 }
+
+// snapshotExecutable asks lookup once, now, and answers with that from then
+// on.
+//
+// Where the running binary lives is settled when the process starts. Asking
+// the system again later is not the same question: Linux names the running
+// file by /proc/self/exe, which follows the file when it is renamed. An update
+// moves f4 to f4.old to write the new build, and deletes it afterwards, so a
+// path asked for after Install is the .old that is gone -- on Termux
+// "lstat .../share/f4/f4.old: no such file or directory" out of the start check
+// and then out of the rollback as well (#2248). The target of an update is
+// the file the process was started from, wherever the file has gone since.
+func snapshotExecutable(lookup func() (string, error)) func() (string, error) {
+	path, err := lookup()
+	return func() (string, error) { return path, err }
+}
+
+// startupExecutable is os.Executable as it was when the process started.
+var startupExecutable = snapshotExecutable(os.Executable)

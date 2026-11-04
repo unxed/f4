@@ -33,7 +33,7 @@ func executable() (string, error) {
 	if p, ok := systemLinkerExecutable(); ok {
 		return p, nil
 	}
-	return os.Executable()
+	return startupExecutable()
 }
 
 // selfExecEnv is the environment for a copy of this process, which is ours.
