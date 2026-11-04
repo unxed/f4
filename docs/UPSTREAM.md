@@ -63,7 +63,7 @@ Checked on 2026-09-25 for every open PR in the tables below:
 | [godesktop/xkb-go](#godesktopxkb-go) | unxed/xkb-go `main` | 0 | 2 | 0 | nothing |
 | [neurlang/wayland](#neurlangwayland) | unxed/wayland | 2 | 1 | 0 | nothing |
 | [nwaples/rardecode](#nwaplesrardecode) | unxed/rardecode (branches only) | 0 | 3 | 0 | nothing |
-| [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu; sogonov/gg `f4/memory-v0.52` | 2 | 2 | 0 | nothing |
+| [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu; sogonov/gg `f4/memory-v0.52` | 2 | 3 | 0 | nothing |
 | [unxed/vtui](#unxedvtui) | sogonov/vtui `f4/memory-cpu` | 0 | 3 + 1 issue | 0 | nothing |
 | [alecthomas/chroma](#alecthomaschroma) | unxed/chroma | 1 | 0 | 0 | nothing |
 | [korli/go](#korligo-go-for-haiku) (Go for Haiku) | unxed/go | 0 | 0 | 0 | nothing |
@@ -225,8 +225,15 @@ branches of unxed/rardecode and are offered upstream.
 | --- | --- | --- |
 | [gogpu/gg#332](https://github.com/gogpu/gg/pull/332) | HiDPI: scale damage rectangles to physical pixels | Merged 2026-05-19 |
 | [gogpu/gogpu#435](https://github.com/gogpu/gogpu/pull/435) | Drag and drop under X11 | Merged 2026-08-07 |
+| [gogpu/gogpu#502](https://github.com/gogpu/gogpu/pull/502) | macOS: update the Metal layer contents scale when a window moves between displays | Open; backported in [unxed/gogpu#1](https://github.com/unxed/gogpu/pull/1) |
 | [gogpu/gg#546](https://github.com/gogpu/gg/pull/546) | `FontSource` parses its own copy of the data and keeps one: `NewFontSource` parsed the caller's slice (reusing it broke the font) while keeping an unread copy, so every font took twice its file size; `NewFontSourceFromFile` no longer copies | Open since 2026-10-25, CI awaiting approval |
 | [gogpu/gg#547](https://github.com/gogpu/gg/pull/547) | `SetAcceleratorMaxSampleCount` / `SampleCountAware`: an opt-in MSAA cap; 1 turns off the 4x color and depth/stencil targets, about 120 MB of GPU memory for a 2060x1638 window | Open since 2026-10-25, CI awaiting approval |
+
+f4 pins `github.com/unxed/gogpu v0.53.1-drag.1-altgr.2` on
+`vtui207-text-and-drag`: the existing drag/native-input changes plus the
+macOS display-scale backport above. The replace is repeated in the Android,
+iOS and CloudFox modules. Keep it until an upstream release contains both
+the required drag callbacks and the display-scale fix.
 
 gg's `main` already requires gpucontext v0.31 and gputypes v0.8, which f4 and
 gogpu v0.53 do not use yet, so f4 takes both PRs on top of v0.52.5:
