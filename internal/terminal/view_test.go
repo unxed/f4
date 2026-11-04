@@ -112,7 +112,7 @@ func TestTerminalView_Far2lCompactInputNegotiation(t *testing.T) {
 	if got := string(tv.Far2lInputEvent(&vtinput.InputEvent{
 		Type: vtinput.KeyEventType, KeyDown: true, Char: 'a', VirtualKeyCode: 0x41,
 		VirtualScanCode: 0x1e, RepeatCount: 1,
-	})); got != "\x1b_f2lQQAAAGEAQw==\x07" {
+	})); got != "\x1b_f2lQQAAYQBD\x07" {
 		t.Fatalf("negotiated event = %q, want compact key event", got)
 	}
 

@@ -31,6 +31,9 @@ func far2lInputEvent(e *vtinput.InputEvent, compactInput bool) []byte {
 			stack.PushU16(uint16(e.ControlKeyState)) // #nosec G115 -- compact form selected only when the state fits in 16 bits
 			stack.PushU16(uint16(e.Char))            // #nosec G115 -- compact form selected only for non-negative characters below 0x10000
 			code = 'c'
+			if e.KeyDown {
+				code = 'C'
+			}
 		} else {
 			stack.PushU16(repeat)
 			stack.PushU16(e.VirtualKeyCode)

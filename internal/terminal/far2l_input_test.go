@@ -63,7 +63,7 @@ func TestFar2lInputEventUsesCompactFormsOnlyWithoutLoss(t *testing.T) {
 		ControlKeyState: vtinput.NoKeyPressed,
 		VirtualKeyCode:  0x41, VirtualScanCode: 0x1e, RepeatCount: 1,
 	}
-	if got, want := string(far2lInputEvent(key, true)), "\x1b_f2lQQAAAGEAQw==\x07"; got != want {
+	if got, want := string(far2lInputEvent(key, true)), "\x1b_f2lQQAAYQBD\x07"; got != want {
 		t.Fatalf("compact key event = %q, want %q", got, want)
 	}
 
