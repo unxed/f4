@@ -40,7 +40,7 @@ func TestBuildCalendarWeeksLayout(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			rows := buildCalendarWeeks(tc.year, tc.month)
+			rows := buildCalendarWeeks(tc.year, tc.month, vtui.ColMenuHighlight)
 			if len(rows) != calendarWeeks {
 				t.Fatalf("len(rows) = %d, want %d", len(rows), calendarWeeks)
 			}
@@ -51,7 +51,7 @@ func TestBuildCalendarWeeksLayout(t *testing.T) {
 				if !ok {
 					t.Fatalf("row type = %T, want calendarWeekRow", r)
 				}
-				flat = append(flat, row[:]...)
+				flat = append(flat, row.days[:]...)
 			}
 			if len(flat) != calendarWeeks*7 {
 				t.Fatalf("flattened cell count = %d, want %d", len(flat), calendarWeeks*7)
@@ -109,11 +109,11 @@ func TestBuildCalendarWeeksLayout(t *testing.T) {
 func TestBuildCalendarWeeksMarksToday(t *testing.T) {
 	now := time.Now()
 
-	rows := buildCalendarWeeks(now.Year(), now.Month())
+	rows := buildCalendarWeeks(now.Year(), now.Month(), vtui.ColMenuHighlight)
 	todayCells := 0
 	for _, r := range rows {
 		row := r.(calendarWeekRow)
-		for _, d := range row {
+		for _, d := range row.days {
 			if d.isToday {
 				todayCells++
 				if d.day != now.Day() {
@@ -134,10 +134,10 @@ func TestBuildCalendarWeeksMarksToday(t *testing.T) {
 		prevMonth = time.December
 		prevYear--
 	}
-	rows = buildCalendarWeeks(prevYear, prevMonth)
+	rows = buildCalendarWeeks(prevYear, prevMonth, vtui.ColMenuHighlight)
 	for _, r := range rows {
 		row := r.(calendarWeekRow)
-		for _, d := range row {
+		for _, d := range row.days {
 			if d.isToday {
 				t.Fatalf("previous month has an isToday cell (day %d), want none", d.day)
 			}
@@ -147,9 +147,9 @@ func TestBuildCalendarWeeksMarksToday(t *testing.T) {
 
 func TestCalendarWeekRowGetCellText(t *testing.T) {
 	var row calendarWeekRow
-	row[0] = calendarDay{day: 0}
-	row[1] = calendarDay{day: 7}
-	row[6] = calendarDay{day: 31}
+	row.days[0] = calendarDay{day: 0}
+	row.days[1] = calendarDay{day: 7}
+	row.days[6] = calendarDay{day: 31}
 
 	if got := row.GetCellText(0); got != "" {
 		t.Fatalf("blank cell text = %q, want empty", got)
@@ -163,17 +163,60 @@ func TestCalendarWeekRowGetCellText(t *testing.T) {
 }
 
 func TestCalendarWeekRowGetCellAttr(t *testing.T) {
-	var row calendarWeekRow
-	row[0] = calendarDay{day: 5, isToday: true}
-	row[1] = calendarDay{day: 6, isToday: false}
+	row := calendarWeekRow{todayIdx: vtui.ColTableSelectedText}
+	row.days[0] = calendarDay{day: 5, isToday: true}
+	row.days[1] = calendarDay{day: 6, isToday: false}
 
 	const sentinel = uint64(0xdeadbeef)
-	if got := row.GetCellAttr(0, sentinel); got != vtui.Palette[vtui.ColMenuHighlight] {
-		t.Fatalf("today cell attr = %#x, want the highlight color %#x", got, vtui.Palette[vtui.ColMenuHighlight])
+	if got := row.GetCellAttr(0, sentinel); got != vtui.Palette[vtui.ColTableSelectedText] {
+		t.Fatalf("today cell attr = %#x, want the highlight color %#x", got, vtui.Palette[vtui.ColTableSelectedText])
 	}
 	if got := row.GetCellAttr(1, sentinel); got != sentinel {
 		t.Fatalf("non-today cell attr = %#x, want the passed-through default %#x", got, sentinel)
 	}
+}
+
+func TestCalendarDialogUsesThemeHighlight(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.SetDefaultPalette()
+	defer vtui.SetDefaultPalette()
+
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(80, 25)
+	vtui.FrameManager.Init(scr)
+
+	// A theme that overrides the table selection colour: the today cell must
+	// render in this colour, proving the calendar takes the palette index from
+	// the table rather than hardcoding one. Set after Init, which may reset the
+	// palette.
+	custom := vtui.SetRGBBoth(0, 0xFF00FF, 0x00FF00)
+	vtui.Palette[vtui.ColTableSelectedText] = custom
+
+	now := time.Now()
+	dlg, table, _, _, _ := openCalendarDialogForTest(t)
+	t.Cleanup(func() { vtui.FrameManager.RemoveFrame(dlg) })
+
+	if table.ColorHighlightIdx != vtui.ColTableSelectedText {
+		t.Fatalf("table.ColorHighlightIdx = %d, want %d", table.ColorHighlightIdx, vtui.ColTableSelectedText)
+	}
+	if got := vtui.Palette[table.ColorHighlightIdx]; got != custom {
+		t.Fatalf("theme highlight = %#x, want the custom colour %#x", got, custom)
+	}
+
+	rows := buildCalendarWeeks(now.Year(), now.Month(), table.ColorHighlightIdx)
+	for _, r := range rows {
+		row := r.(calendarWeekRow)
+		for c, d := range row.days {
+			if !d.isToday {
+				continue
+			}
+			if got := row.GetCellAttr(c, 0); got != custom {
+				t.Fatalf("today cell attr = %#x, want the theme highlight %#x", got, custom)
+			}
+			return
+		}
+	}
+	t.Fatal("calendar grid has no today cell")
 }
 
 func TestCalendarColumns(t *testing.T) {
@@ -348,7 +391,7 @@ func TestCalendarDialogMonthYearNavigation(t *testing.T) {
 		if !ok {
 			continue
 		}
-		for _, d := range row {
+		for _, d := range row.days {
 			if d.isToday {
 				todayCount++
 				if d.day != now.Day() {
@@ -420,7 +463,7 @@ func TestCalendarDialogClampsSelectionAcrossMonths(t *testing.T) {
 	targetRow, targetCol := -1, -1
 	for r, item := range table.Rows {
 		row := item.(calendarWeekRow)
-		for c, d := range row {
+		for c, d := range row.days {
 			if d.day == 31 {
 				targetRow, targetCol = r, c
 			}
@@ -449,11 +492,11 @@ func TestCalendarDialogClampsSelectionAcrossMonths(t *testing.T) {
 	}
 	idx := table.RowAt(table.SelectPos)
 	row := table.Rows[idx].(calendarWeekRow)
-	if row[table.SelectCol].day == 0 {
+	if row.days[table.SelectCol].day == 0 {
 		t.Fatalf("clampSelection left the cursor on a blank cell (row %d col %d)", table.SelectPos, table.SelectCol)
 	}
-	if table.SelectPos != 4 || row[table.SelectCol].day != 28 {
-		t.Fatalf("clamped selection = row %d day %d, want row 4 day 28", table.SelectPos, row[table.SelectCol].day)
+	if table.SelectPos != 4 || row.days[table.SelectCol].day != 28 {
+		t.Fatalf("clamped selection = row %d day %d, want row 4 day 28", table.SelectPos, row.days[table.SelectCol].day)
 	}
 }
 
@@ -467,7 +510,7 @@ func findBlankCell(t *testing.T, table *calendarTable) (int, int) {
 		if !ok {
 			continue
 		}
-		for c, d := range row {
+		for c, d := range row.days {
 			if d.day == 0 {
 				return r, c
 			}
