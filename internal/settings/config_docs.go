@@ -80,7 +80,7 @@ var configOptionExtraDocs = map[string]string{
 		"when none of its paths is or lies under a path of a running operation. 0 makes it wait its turn.",
 	"Panel.CopyThreads": "How many files a copy between two local disks works on at once, 1 to 16 (f4#1894). 1, the default, copies one file at a time, as always. " +
 		"The multi-threaded engine is being built in steps: until it is connected, values above 1 change nothing.",
-	"Panel.DriveMenuOptions": "The drive menu options as a bit mask, one bit per option of Settings Center, Drive chooser. Bits:",
+	"Panel.DriveMenuOptions": "The drive menu options as a bit mask, one bit per option of Settings Center, Drive chooser; the final bit hides the Links section so old settings keep showing it:",
 	"Panel.ConsoleOverlayUI": "The older form of the console style, read only while ConsoleMode is \"host\": 1 is the host console with f4's overlay, 0 without it. " +
 		"ConsoleMode now names the style itself: own, far or mc.",
 	"Panel.PluginDefaultHotkeysOff": "Hotkeys a plugin brings with it (Shift+F1 for Add to archive, say) that were removed with F4 and Del in the plugin menu, as a semicolon-separated list such as ShiftF1;ShiftF2. " +
@@ -92,7 +92,7 @@ var configOptionExtraDocs = map[string]string{
 	"Panel.DropOnFolder": "Where files dragged in from another application go when they are dropped over a folder and f4 could not highlight that folder while they were dragged " +
 		"(macOS and Wayland until gogpu reports a drag in progress, gogpu on Windows, 32-bit Windows, far2l). current, the default: into the folder the panel shows; " +
 		"folder: into the folder under the pointer; ask: ask which of the two. Where f4 can follow the drag (Windows, X11), the highlighted folder is where the files go.",
-	"Panel.PlayerKeyHints": "1 while the audio player (Ctrl+Shift+M) shows its keys on its buttons and in its bottom border. " +
+	"Panel.PlayerKeyHints": "1 while the audio player (Ctrl+Shift+M) shows its keys under its buttons and in its bottom border. " +
 		"H in the player turns it on and off; 0, the default, shows only how to see them.",
 	"Panel.VimHotkeys": "Kept for older f4 versions and shared settings files: 1 while NavigationMode is vim. " +
 		"f4 reads it only when NavigationMode is missing.",

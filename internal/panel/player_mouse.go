@@ -12,10 +12,12 @@ import (
 // the playback bar; the slider and the bar follow a drag. A click on a
 // playlist row puts the cursor there, a click on ▸ or ▾ folds or unfolds the
 // folder, and a double click plays the track or folds the folder. The wheel
-// scrolls the playlist, and over the slider turns the volume.
+// scrolls the playlist, and over the slider turns the volume. A click on [-]
+// in the top right corner closes the player and leaves the music playing.
 
 // playerLayout is where Show put what the mouse can hit.
 type playerLayout struct {
+	hideX      int                     // the first of the 3 cells of the button on the top border; 0 with none
 	barY       int                     // the row of the playback bar, or of the clock with it off
 	barX, barW int                     // the cells of the bar; barW is 0 with no bar to click
 	buttonsY   int                     // the row of the buttons
@@ -60,6 +62,25 @@ func (pp *PlayerPanel) ProcessMouse(e *vtinput.InputEvent) bool {
 		vtui.FrameManager.Redraw()
 	}
 	return true
+}
+
+// playerHideClick: a left click on the button in the top right corner of a
+// player in the panels closes it without asking and leaves the music playing
+// (closePlayer). The button is on the top row of the panels, where a click
+// opens the main menu otherwise, so ProcessMouse asks this first.
+func (pf *PanelsFrame) playerHideClick(e *vtinput.InputEvent, mx, my int) bool {
+	if !vtui.IsMousePress(e) || e.ButtonState != vtinput.FromLeft1stButtonPressed {
+		return false
+	}
+	i := pf.hitAltPanel(mx, my)
+	if i < 0 {
+		return false
+	}
+	pp, ok := pf.AltPanels[i].(*PlayerPanel)
+	if !ok || pp.layout.hideX == 0 || my != pp.Y1 || mx < pp.layout.hideX || mx >= pp.layout.hideX+3 {
+		return false
+	}
+	return pf.closePlayer(pp)
 }
 
 func (pp *PlayerPanel) mousePress(mx, my int, double bool) {

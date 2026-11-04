@@ -134,8 +134,8 @@ func (c *settingsCenter) addCollections(category string) {
 				table.TopPos = 0
 			}
 			r := &settingsRow{field: meta, session: s, control: table, controlHeight: listHeight, match: true}
-			if n := len(c.page.rows); category == driveBookmarksPage && n > 0 && !c.page.rows[n-1].heading {
-				// A blank line between "Show Bookmarks" and the list (f4#1148).
+			if n := len(c.page.rows); (category == driveBookmarksPage || category == driveLinksPage) && n > 0 && !c.page.rows[n-1].heading {
+				// A blank line between a section switch and its list (f4#1148).
 				r.padTop = 1
 			}
 			c.page.AddItem(table)

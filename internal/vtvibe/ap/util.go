@@ -133,6 +133,59 @@ func indentWidth(line string) int {
 	return len(leadingWhitespace(line))
 }
 
+// indentedBlock is normalizeBlock that keeps each line's leading whitespace:
+// blank lines are dropped and trailing whitespace is trimmed, indentation is
+// compared exactly.
+func indentedBlock(text string) string {
+	var kept []string
+	for _, l := range splitLinesUniversal(text) {
+		if strings.TrimSpace(l) != "" {
+			kept = append(kept, strings.TrimRight(l, " \t\r\f\v"))
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// whitespaceOnlyReplacement decides a REPLACE whose content equals the
+// matched region up to whitespace (port of upstream ap's
+// whitespace_only_replacement).
+//
+// normalizeBlock ignores indentation, so on its own it cannot tell an
+// already-applied REPLACE from one whose whole point IS the indentation (a
+// dedent or indent of a block). It returns ok=false when the region already
+// reads as the patch wants it (skip as already applied), otherwise the exact
+// text to write in place of the region.
+//
+// old is the patch's own snippet when it covers the whole region, else nil.
+func whitespaceOnlyReplacement(region string, old *string, newContent string, reindent func(string) string) (string, bool) {
+	if old != nil && indentedBlock(*old) == indentedBlock(newContent) {
+		// The patch itself changes nothing (old == new, even indentation-wise).
+		return "", false
+	}
+	oldIndented := false
+	if old != nil {
+		for _, l := range splitLinesUniversal(*old) {
+			if strings.TrimSpace(l) != "" {
+				oldIndented = leadingWhitespace(l) != ""
+				break
+			}
+		}
+	}
+	target := newContent
+	if !oldIndented {
+		// The model dropped the base indentation (or gave no full old
+		// text): restore it as for any other REPLACE.
+		target = reindent(newContent)
+	}
+	// Otherwise the old text was written WITH its indentation, so a content
+	// indented differently is the intended change; re-indenting it would undo
+	// the very edit requested.
+	if indentedBlock(region) == indentedBlock(target) {
+		return "", false
+	}
+	return target, true
+}
+
 // isSpaceByte reports whether b is whitespace as Python's \s treats it
 // (excluding '\n', which never appears inside a single already-split line).
 func isSpaceByte(b byte) bool {

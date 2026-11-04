@@ -341,6 +341,10 @@ type PanelsFrame struct {
 	// managedExecSawBusy is set once PTY.IsBusy() has read true since arming:
 	// only then does a false reading mean "stopped" and not "not started yet".
 	managedExecSawBusy bool
+	// managedExecPollStop stops the ticker that keeps frames coming while a
+	// command runs (startManagedExecPoll); nil when it is not running. UI
+	// thread only.
+	managedExecPollStop chan struct{}
 
 	MenuBar *vtui.MenuBar
 	CmdLine *cmdline.CommandLine
@@ -1880,6 +1884,7 @@ func (pf *PanelsFrame) Close() {
 	if pf.terminalRedraw != nil {
 		pf.terminalRedraw.Stop()
 	}
+	pf.stopManagedExecPoll()
 	pf.CmdSession.close()
 	if pf.ShellMode == terminal.ShellModeHost && pf.IsHostConsoleActive() {
 		pf.LeaveHostConsole()
@@ -2508,6 +2513,59 @@ func (pf *PanelsFrame) armManagedExecDebounce() {
 	pf.managedExecStartedAt = time.Now()
 	pf.managedExecIdleStreak = 0
 	pf.managedExecSawBusy = false
+	pf.startManagedExecPoll()
+}
+
+// managedExecPollEvery is how often, while a command runs, the panels ask
+// for a frame of their own, so that pollManagedExecutionDebounce keeps
+// reading IsBusy() when nothing else draws: a stopped job prints nothing
+// more, and an idle window redraws on no timer (the GUI's 250 ms idle
+// redraw is gone with vtui#253, and the TTY never had one).
+const managedExecPollEvery = 250 * time.Millisecond
+
+// managedExecFrameRequest returns what the poll ticker calls to ask for a
+// frame. It reads vtui.FrameManager here, on the goroutine that starts the
+// ticker: the ticker outlives that call, and reading the global from it
+// races whatever reassigns it meanwhile. A variable so that tests count the
+// requests.
+var managedExecFrameRequest = func() func() {
+	fm := vtui.FrameManager
+	return func() {
+		if fm != nil {
+			fm.Redraw()
+		}
+	}
+}
+
+// startManagedExecPoll starts the ticker behind managedExecPollEvery unless
+// it is running. pollManagedExecutionDebounce stops it once the execution is
+// over, by whatever path that happened; Close stops it too.
+func (pf *PanelsFrame) startManagedExecPoll() {
+	if pf.managedExecPollStop != nil {
+		return
+	}
+	stop := make(chan struct{})
+	pf.managedExecPollStop = stop
+	requestFrame := managedExecFrameRequest()
+	go func() {
+		tick := time.NewTicker(managedExecPollEvery)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+				requestFrame()
+			}
+		}
+	}()
+}
+
+func (pf *PanelsFrame) stopManagedExecPoll() {
+	if pf.managedExecPollStop != nil {
+		close(pf.managedExecPollStop)
+		pf.managedExecPollStop = nil
+	}
 }
 
 // pollManagedExecutionDebounce is #1603's backstop for job-control stops
@@ -2540,6 +2598,7 @@ func (pf *PanelsFrame) armManagedExecDebounce() {
 func (pf *PanelsFrame) pollManagedExecutionDebounce() {
 	if !pf.Executing {
 		pf.managedExecIdleStreak = 0
+		pf.stopManagedExecPoll()
 		return
 	}
 	active := pf.GetActivePTY()
@@ -2953,9 +3012,8 @@ func (pf *PanelsFrame) commandLineOwnsSelection(e *vtinput.InputEvent) bool {
 }
 
 // VetoActionKey reports modal input states in which the panels must see
-// the key before the global hotkey dispatcher. During fast find,
-// printable characters and the gray selection keys belong to the
-// panel's own search input.
+// the key before the global hotkey dispatcher. During fast find, the keys
+// the search keeps belong to the panel's own search input.
 func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if e.Type != vtinput.KeyEventType || !e.KeyDown {
 		return false
@@ -3023,37 +3081,10 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 		}
 		return false
 	}
-	ctrl := (e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed)) != 0
-	alt := (e.ControlKeyState & (vtinput.LeftAltPressed | vtinput.RightAltPressed)) != 0
-	shift := (e.ControlKeyState & vtinput.ShiftPressed) != 0
-	if e.Char != 0 && !ctrl && !alt {
-		return true
-	}
-	// Fast Find owns plain Esc, plain Delete, plain F2 (search mode toggle) and
-	// Ctrl+Enter; the filter must not turn them into Panel.Toggle,
-	// Panel.UserMenu or Panel.InsertFileName.
-	if e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift {
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift {
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift {
-		return true
-	}
-	if e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt {
-		return true
-	}
-	// Ctrl+E flips the filter's exact-match option; it is the command line's
-	// history key elsewhere.
-	if e.VirtualKeyCode == vtinput.VK_E && ctrl && !alt && !shift && fsp.autoFilterMode {
-		return true
-	}
-	switch e.VirtualKeyCode {
-	case vtinput.VK_ADD, vtinput.VK_SUBTRACT, vtinput.VK_MULTIPLY:
-		return true
-	}
-	return false
+	// The open search keeps its keys from the hotkey table: Esc must not
+	// become Panel.Toggle, F2 Panel.UserMenu, Ctrl+Enter
+	// Panel.InsertFileName (fastfind_keys.go).
+	return fsp.fastFindKeeps(e)
 }
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
@@ -3189,16 +3220,19 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	// Fast Find owns Esc, Delete, F2 and Ctrl+Enter before in-frame hotkeys and
-	// command-line handling. Delegate them to the panel's normal handler.
-	if pf.ShowPanels && e.KeyDown {
+	// The open quick search or autofilter has the first say on a key, ahead
+	// of the frame's own keys and the command line's (fastfind_keys.go,
+	// #2186): it takes the keys that edit it, and any other key closes it
+	// and goes on as if it had never been open. The key router has already
+	// closed it for such a key; this covers the events that do not pass the
+	// router, a key-bar click or a macro's keys.
+	if pf.ShowPanels {
 		if fsp := pf.GetActivePanel(); fsp != nil && fsp.FastFindMode {
-			isFindEnter := e.VirtualKeyCode == vtinput.VK_RETURN && ctrl && !alt
-			isFindModeToggle := e.VirtualKeyCode == vtinput.VK_F2 && !ctrl && !alt && !shift
-			plainEscape := e.VirtualKeyCode == vtinput.VK_ESCAPE && !ctrl && !alt && !shift
-			plainDelete := e.VirtualKeyCode == vtinput.VK_DELETE && !ctrl && !alt && !shift
-			if plainEscape || plainDelete || isFindEnter || isFindModeToggle {
+			if fsp.fastFindKeeps(e) {
 				return fsp.ProcessKey(e)
+			}
+			if fsp.fastFindClosesOn(e) && pf.CancelFastFind() && vtui.FrameManager != nil {
+				vtui.FrameManager.Redraw()
 			}
 		}
 	}
@@ -4368,7 +4402,7 @@ func (pf *PanelsFrame) ProcessMouse(e *vtinput.InputEvent) bool {
 		}
 	}
 
-	if pf.openMenuBarFromClick(e, my) {
+	if pf.playerHideClick(e, mx, my) || pf.openMenuBarFromClick(e, my) {
 		return true
 	}
 
@@ -5524,24 +5558,29 @@ type altPanelCloseAsker interface {
 func (pf *PanelsFrame) closeAltPanelAsking(slot int, then func()) {
 	a := pf.AltPanels[slot]
 	proceed := func() {
-		if pf.AltPanels[slot] != a {
-			return // closed or replaced while the question was open
+		if pf.AltPanels[slot] == a { // not closed or replaced while the question was open
+			pf.closeAltPanel(slot, then)
 		}
-		if c, ok := a.(interface{ Close() }); ok {
-			c.Close()
-		}
-		pf.AltPanels[slot] = nil
-		if then != nil {
-			then()
-		}
-		pf.ResizeConsole(pf.LastW, pf.LastH)
-		vtui.FrameManager.HardRefresh()
 	}
 	if asker, ok := a.(altPanelCloseAsker); ok {
 		asker.AskClose(proceed)
 		return
 	}
 	proceed()
+}
+
+// closeAltPanel closes the alternative panel in slot without asking, and does
+// then after it.
+func (pf *PanelsFrame) closeAltPanel(slot int, then func()) {
+	if c, ok := pf.AltPanels[slot].(interface{ Close() }); ok {
+		c.Close()
+	}
+	pf.AltPanels[slot] = nil
+	if then != nil {
+		then()
+	}
+	pf.ResizeConsole(pf.LastW, pf.LastH)
+	vtui.FrameManager.HardRefresh()
 }
 
 func (pf *PanelsFrame) RefreshAll() {
@@ -6913,19 +6952,21 @@ func (pf *PanelsFrame) showDriveMenuAt(panelIdx, selectPos int) {
 	}
 	// The caption sits in the rule itself, as the menu title does, and
 	// takes no row of its own (#1148).
-	menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Links")})
-	for index, bookmark := range driveBookmarks {
-		bookmark := bookmark
-		driveBookmarkRows[menu.GetItemCount()] = index
-		menu.AddItem(vtui.MenuItem{
-			Text: DriveBookmarkMenuText(bookmark),
-			// The global hot key stands at the right edge, as a menu shows
-			// the key of a command (f4#2171).
-			Shortcut: keymap.FormatKeyForUI(strings.TrimSpace(bookmark.GlobalHotkey)),
-			UserData: func(fsp *FileSystemPanel) {
-				pf.NavigateToBookmark(fsp, Bookmark{Path: bookmark.Path})
-			},
-		})
+	if !driveMenuOptionEnabled(driveMenuOptions, config.DriveMenuHideLinks) {
+		menu.AddItem(vtui.MenuItem{Separator: true, Text: i18n.Msg("Drive.Links")})
+		for index, bookmark := range driveBookmarks {
+			bookmark := bookmark
+			driveBookmarkRows[menu.GetItemCount()] = index
+			menu.AddItem(vtui.MenuItem{
+				Text: DriveBookmarkMenuText(bookmark),
+				// The global hot key stands at the right edge, as a menu shows
+				// the key of a command (f4#2171).
+				Shortcut: keymap.FormatKeyForUI(strings.TrimSpace(bookmark.GlobalHotkey)),
+				UserData: func(fsp *FileSystemPanel) {
+					pf.NavigateToBookmark(fsp, Bookmark{Path: bookmark.Path})
+				},
+			})
+		}
 	}
 
 	// A moved row reopens the menu: the old menu is closed in the same task

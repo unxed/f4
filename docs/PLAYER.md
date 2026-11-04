@@ -108,6 +108,13 @@ the playlist. Each row keeps its arrows whatever plays: they used to seek on
 the buttons and in the playlist while a track was loaded, so the cursor could
 not get from Play to Stop then, nor fold a folder (#2185).
 
+The volume slider is the last stop of the control row, past Next, and Left
+and Right turn the volume there; Up and Down lead off it as off a button.
+The row is entered from the bar or the playlist on the button it was left
+on, and on Next when it was left on the slider (`toButtons`): it remembered
+the slider, so coming back put the cursor where no arrow could reach a
+button again (#2185).
+
 | Cursor on        | Key            | Action                                |
 |------------------|----------------|---------------------------------------|
 | playback bar     | Left / Right   | seek 5 s back / forward               |
@@ -135,12 +142,16 @@ not get from Play to Stop then, nor fold a folder (#2185).
 | anywhere         | 0 … 9          | jump to that tenth of the track (YouTube) |
 | anywhere         | + / −          | volume                                |
 | anywhere         | H              | show the keys on the player, or hide them |
+| anywhere         | I              | close the player, the music plays on in the background |
 | file panel       | Ctrl+Alt+Left/Right | seek 5 s without leaving the file panel |
 
 The keys are hidden by default, so the player is not a page of letters: its
-bottom border says "H: keys", and H puts the letters on the buttons and as
-many of the other keys as fit into the border, the way B flips the units of
-the info panel (`PlayerKeyHints`, remembered in settings.ini). The key bar
+bottom border says "H: keys", and H puts the key of each button on the line
+under it (`showButtonKeys`) and as many of the other keys as fit into the
+border, the way B flips the units of the info panel (`PlayerKeyHints`,
+remembered in settings.ini). The buttons themselves never change: the keys
+were inside them first, `[⇧P |<] [K >]`, and the row was a jumble that
+changed its width with the scheme (#2185). The key bar
 over a focused player names F7 (folder) and F8 (remove) and leaves the file
 keys, which do nothing there, blank.
 
@@ -197,6 +208,16 @@ or another alternative panel opened in its slot) asks first
 (`altPanelCloseAsker`): In the background, Stop, or Cancel and Esc, which
 keep it open. A player closed otherwise, with its workspace say, leaves the
 music playing without a question.
+
+The question comes every time, so the player can also be sent to the
+background without it (`PanelsFrame.closePlayer`, `Panel.Player.ToBackground`):
+I in the player, YouTube's key of its miniplayer, with either letter scheme,
+and `[-]` on its top border right by the top right corner, drawn while a
+track is loaded. With the player on the right those are the cells the ♪
+takes afterwards, so a click there sends it away and a second click brings
+it back. The top row of the panels opens the main menu on a click
+(`openMenuBarFromClick`, as far2l does), so `PanelsFrame.ProcessMouse` asks
+the button (`playerHideClick`) before the menu.
 
 In the background `DrawPlayerIndicator`, which the application calls after
 each frame next to the macro recording mark, puts ♪ (‖ when paused) in the

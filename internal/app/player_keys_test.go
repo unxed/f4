@@ -432,6 +432,48 @@ func TestPlayerSeeksOnThePlaybackBar(t *testing.T) {
 	}
 }
 
+// The volume slider is the last stop on the row of the buttons, where Left
+// and Right turn the volume. The row remembered it, so Down from the bar or
+// Up from the playlist came back onto the slider, Left there turned the volume
+// down, and no arrow reached a button again (#2185). Coming in from above or
+// below the cursor is on a button, the one next to the slider.
+func TestPlayerArrowsComeBackToTheButtonsFromTheVolumeSlider(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		away, back uint16
+	}{
+		{"from the bar", vtinput.VK_UP, vtinput.VK_DOWN},
+		{"from the playlist", vtinput.VK_DOWN, vtinput.VK_UP},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newPlayerFixture(t, "a.mp3")
+			f.press(playerKey(vtinput.VK_F5, 0))
+			f.press(playerKey(vtinput.VK_TAB, 0))
+			f.press(playerKey(vtinput.VK_RETURN, 0)) // a.mp3 plays
+			f.press(playerKey(vtinput.VK_HOME, vtinput.LeftCtrlPressed))
+			for range 4 { // Play, Pause, Stop, Next, the slider
+				f.press(playerKey(vtinput.VK_RIGHT, 0))
+			}
+			f.press(playerKey(vtinput.VK_LEFT, 0))
+			volume := f.audio.Volume()
+			if volume >= 0.8 {
+				t.Fatalf("Left on the slider left the volume at %v, want it under 0.8", volume)
+			}
+
+			f.press(playerKey(c.away, 0))
+			f.press(playerKey(c.back, 0))
+			f.press(playerKey(vtinput.VK_LEFT, 0)) // Next to Stop
+			if got := f.audio.Volume(); got != volume {
+				t.Errorf("Left after coming back turned the volume to %v, want the cursor on the buttons", got)
+			}
+			f.press(playerKey(vtinput.VK_RETURN, 0))
+			if got := f.audio.Path(); got != "" {
+				t.Errorf("Left and Enter after coming back did not press Stop: %q still loaded", got)
+			}
+		})
+	}
+}
+
 // In the playlist Left and Right seeked too while something played, and a
 // folder could not be folded then. They fold and unfold it whatever plays.
 func TestPlayerArrowsFoldAFolderWhileATrackPlays(t *testing.T) {

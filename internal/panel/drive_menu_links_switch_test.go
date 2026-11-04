@@ -61,4 +61,21 @@ func TestDriveMenuShowBookmarksOffKeepsTheLinks(t *testing.T) {
 	if !links || !link {
 		t.Fatalf("Show bookmarks off hid the Links too (caption %v, link %v)", links, link)
 	}
+
+	menu.Close()
+	config.App.DriveMenuOptions |= config.DriveMenuHideLinks
+	pf.ShowDriveMenu(0)
+	menu, ok = driveMenuFromFrame(vtui.FrameManager.GetTopFrame())
+	if !ok {
+		t.Fatal("no drive menu on top after hiding Links")
+	}
+	defer menu.Close()
+	for _, item := range menu.Items {
+		if item.Separator && item.Text == i18n.Msg("Drive.Links") {
+			t.Error("the Links section is shown with Show links off")
+		}
+		if strings.Contains(item.Text, "Projects") {
+			t.Errorf("named link is shown with Show links off: %q", item.Text)
+		}
+	}
 }

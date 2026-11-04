@@ -140,20 +140,38 @@ func (s *playerSession) tick() {
 		case <-s.stop:
 			return
 		case <-t.C:
-			if !s.Engine.IsLoaded() {
+			if !s.tickDue() {
 				continue
 			}
-			vtui.FrameManager.PostTask(func() {
-				if s.Engine.Finished() {
-					if !s.playRelative(+1) {
-						s.stopPlaying()
-					}
-				}
-				s.marquee++
-				vtui.FrameManager.Redraw()
-			})
+			vtui.FrameManager.PostTask(s.step)
 		}
 	}
+}
+
+// tickDue is whether a tick has anything to do: a track plays, or one has
+// just ended. A paused track repainted the whole window six times a second
+// although nothing on it moved.
+func (s *playerSession) tickDue() bool {
+	return s.Engine.IsPlaying() || s.Engine.Finished()
+}
+
+// step is a tick on the UI thread. It moves on from a track that ended, and
+// repaints a player that is in view; nothing else on the screen moves with
+// the music, so the music in the background or in an editor's screen
+// repaints nothing.
+func (s *playerSession) step() {
+	if s.Engine.Finished() {
+		if !s.playRelative(+1) {
+			s.stopPlaying()
+		}
+		vtui.FrameManager.Redraw()
+		return
+	}
+	if !s.Engine.IsPlaying() || !playerInView() {
+		return
+	}
+	s.marquee++
+	vtui.FrameManager.Redraw()
 }
 
 // ---- playlist file ----------------------------------------------------

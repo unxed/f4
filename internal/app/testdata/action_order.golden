@@ -365,6 +365,7 @@ CommandLine.SelectWordRight
 Panel.FastFind.Next
 Panel.FastFind.Previous
 Panel.FastFind.Anywhere
+Panel.FastFind.Clear
 Panel.AutoFilter.ToggleExact
 TempPanel.ShowOnPassive
 Panel.AltPanelCopy
@@ -397,6 +398,7 @@ Panel.Player.Activate
 Panel.Player.TogglePause
 Panel.Player.RemoveItem
 Panel.Player.ToggleKeyHints
+Panel.Player.ToBackground
 Panel.Player.NewFolder
 Panel.Player.MoveItemUp
 Panel.Player.MoveItemDown

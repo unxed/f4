@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/unxed/vtui"
 )
@@ -38,12 +40,42 @@ func worktreeBranchAt(dir string) string {
 	}
 	return strings.TrimPrefix(ref, "ref: refs/heads/")
 }
-func drawWorktreeIdentity(scr *vtui.ScreenBuf) {
-	exe, err := os.Executable()
-	if err != nil {
-		return
+
+// worktreeBranchTTL is how long the branch label is drawn before .git and
+// HEAD are read again. drawWorktreeIdentity runs on every frame, and every
+// frame used to read both files (and, in a release build, fail to open
+// .git). A branch switch still shows within the TTL, on the next frame.
+const worktreeBranchTTL = 2 * time.Second
+
+// worktreeBranchCache is worktreeBranchAt for the executable's folder, read
+// at most once per worktreeBranchTTL. The folder itself is looked up once.
+type worktreeBranchCache struct {
+	mu     sync.Mutex
+	dir    string
+	at     time.Time
+	branch string
+}
+
+var worktreeIdentity worktreeBranchCache
+
+func (c *worktreeBranchCache) get(now time.Time) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.dir == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return ""
+		}
+		c.dir = filepath.Dir(exe)
 	}
-	branch := worktreeBranchAt(filepath.Dir(exe))
+	if c.at.IsZero() || now.Sub(c.at) >= worktreeBranchTTL || now.Before(c.at) {
+		c.branch, c.at = worktreeBranchAt(c.dir), now
+	}
+	return c.branch
+}
+
+func drawWorktreeIdentity(scr *vtui.ScreenBuf) {
+	branch := worktreeIdentity.get(time.Now())
 	if branch == "" {
 		return
 	}

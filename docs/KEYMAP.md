@@ -63,6 +63,26 @@ In the autofilter window (a lone Alt, or Panel.AutoFilter), `Ctrl+E` flips the
 does; the option is the same one as Settings > Panels > "Strict quick search"
 and is saved at once.
 
+An open quick search or autofilter has the first say on a key, ahead of the
+command line, the macros and the hotkey table (#2186). Its own keys are the
+characters, with or without Alt, `Backspace`, `Ctrl+Y` (erase the text), `F2`,
+`Ctrl+Enter`, `Ctrl+Shift+Enter`, `Esc` and `Del`; the autofilter also keeps
+the cursor keys and `Ins`, which walk and mark the rows it leaves. Any other
+key closes the box and then acts as if it had never been open, as in Far:
+`Enter` runs a command line that holds text, `Left` and `Right` move its
+cursor. A modifier key on its own does not close it, and neither does
+`Alt+F9`, which only maximizes the window.
+
+A character that leaves the search finding nothing is not added; it stands
+after the text for a moment in the colour of a failed search, so the key is
+seen to have been pressed. After a switch of the keyboard layout the search
+goes on: with Settings > Panels > "Quick search in the other layout" on (the
+default), a text that finds no name is tried in the other layout one
+character at a time, as far2l's `XLat.EnableForFastFileFind` does, so `Alt+F`
+and then the Russian layout's `щ` finds `foo`. The box keeps what was typed.
+With "Strict quick search" on, a text that finds a name as typed is searched
+only as typed.
+
 ## The file
 
 `keymap.ini` lives in the profile directory next to `hotkeys.ini`

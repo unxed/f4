@@ -106,6 +106,12 @@ func (pp *PlayerPanel) controlRows() int {
 
 const playerSeekStep = 5 * time.Second
 
+// playerHideSymbol is on the button that sends the player to the background,
+// drawn as a title button: [-], or with rounded glyphs in a window, " - ". A
+// minus, as on the minimize button of a window; ASCII, which every font has,
+// and in the middle of the cell, where the line of the border is.
+const playerHideSymbol = "-"
+
 // The rows above the playlist the cursor stops on: the buttons, and above
 // them the playback bar, where the arrows seek.
 const (
@@ -201,6 +207,20 @@ func (pp *PlayerPanel) AskClose(proceed func()) {
 	}
 }
 
+// closePlayer closes pp without the question AskClose asks: what it plays
+// goes on in the background, as after In background there, and with nothing
+// loaded the player just closes (#2185). I in the player, the button in its
+// top right corner and Panel.Player.ToBackground do it.
+func (pf *PanelsFrame) closePlayer(pp *PlayerPanel) bool {
+	for slot, a := range pf.AltPanels {
+		if p, ok := a.(*PlayerPanel); ok && p == pp {
+			pf.closeAltPanel(slot, nil)
+			return true
+		}
+	}
+	return false
+}
+
 // ---- playlist model ---------------------------------------------------
 
 func marshalPlaylist(root *playlistItem) ([]byte, error) {
@@ -280,7 +300,9 @@ func (pp *PlayerPanel) rebuildRows() {
 	}
 	walk(pp.root, 0)
 	if pp.cursor >= len(pp.rows) {
-		pp.cursor = len(pp.rows) - 1
+		if pp.cursor = len(pp.rows) - 1; pp.cursor < 0 {
+			pp.toButtons() // the playlist is empty now
+		}
 	}
 }
 
@@ -422,6 +444,7 @@ const (
 	PlayerSeekBack10
 	PlayerSeekForward10
 	PlayerToggleKeyHints
+	PlayerToBackground
 )
 
 // Do does cmd and reports whether it was one the player knows.
@@ -456,6 +479,10 @@ func (pp *PlayerPanel) Do(cmd PlayerCommand) bool {
 	case PlayerToggleKeyHints:
 		config.App.PlayerKeyHints = !config.App.PlayerKeyHints
 		config.RequestSaveConfig()
+	case PlayerToBackground:
+		if pf := FindPanelsFrameAnyScreen(); pf != nil {
+			pf.closePlayer(pp)
+		}
 	default:
 		return false
 	}
@@ -544,7 +571,8 @@ func (pp *PlayerPanel) globalKey(e *vtinput.InputEvent) bool {
 // letter scheme scheme. WinAmp: Z X C V B. YouTube: K play or pause, J and L
 // ten seconds back and forward, M mute, Shift+P and Shift+N the previous and
 // the next track. The two share no key, so both can be on. H, with either,
-// shows the keys on the player and hides them again.
+// shows the keys on the player and hides them again, and I, YouTube's key of
+// its miniplayer, closes the player and leaves the music playing.
 func playerKeyCommand(e *vtinput.InputEvent, scheme string) (PlayerCommand, bool) {
 	winamp := scheme != config.PlayerKeysYouTube
 	youtube := scheme != config.PlayerKeysWinAmp
@@ -552,6 +580,8 @@ func playerKeyCommand(e *vtinput.InputEvent, scheme string) (PlayerCommand, bool
 	switch letter := playerLetterKey(e); {
 	case letter == vtinput.VK_H:
 		return PlayerToggleKeyHints, true
+	case letter == vtinput.VK_I:
+		return PlayerToBackground, true
 	case winamp && letter == vtinput.VK_Z:
 		return PlayerPrevious, true
 	case winamp && letter == vtinput.VK_X:
@@ -615,9 +645,11 @@ func playerLetterKey(e *vtinput.InputEvent) uint16 {
 }
 
 // controlKey: on the buttons Left and Right go from one to the next, and on
-// the volume slider make it louder or quieter, whether a track is loaded or
-// not. They used to seek while one was, so nobody could get from Play to
-// Stop with the arrows while it played (#2185); seeking is on the bar above.
+// the volume slider, the last stop of the row, make it louder or quieter,
+// whether a track is loaded or not. They used to seek while one was, so
+// nobody could get from Play to Stop with the arrows while it played (#2185);
+// seeking is on the bar above. Up and Down leave the slider as they leave a
+// button, and come back to a button (toButtons).
 func (pp *PlayerPanel) controlKey(e *vtinput.InputEvent) bool {
 	switch e.VirtualKeyCode {
 	case vtinput.VK_LEFT:
@@ -654,6 +686,18 @@ func (pp *PlayerPanel) controlKey(e *vtinput.InputEvent) bool {
 	return true
 }
 
+// toButtons puts the cursor on the row of the buttons from the row above or
+// below. The row keeps the button it was on, but not the volume slider at its
+// end: Left and Right turn the volume there, so a row entered on the slider
+// let no arrow get to a button again (#2185). The cursor is then on Next, the
+// button beside the slider.
+func (pp *PlayerPanel) toButtons() {
+	pp.cursor = playerCursorButtons
+	if pp.button == playerBtnVolume {
+		pp.button = playerBtnNext
+	}
+}
+
 // barKey: the playback bar, or the clock with the bar off, is a row of the
 // cursor's own above the buttons, and Left and Right there move the track
 // five seconds. Up is the top of the column: nothing above, but the key is
@@ -665,7 +709,7 @@ func (pp *PlayerPanel) barKey(e *vtinput.InputEvent) bool {
 	case vtinput.VK_RIGHT:
 		pp.SeekBy(playerSeekStep)
 	case vtinput.VK_DOWN, vtinput.VK_NEXT:
-		pp.cursor = playerCursorButtons
+		pp.toButtons()
 	case vtinput.VK_UP, vtinput.VK_PRIOR:
 	case vtinput.VK_RETURN, vtinput.VK_SPACE:
 		pp.Do(PlayerPlayPause)
@@ -683,11 +727,7 @@ func (pp *PlayerPanel) barKey(e *vtinput.InputEvent) bool {
 // switching of Spaces and never lets them reach the terminal (#2185).
 func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl, shift bool) bool {
 	pp.rebuildRows()
-	if pp.cursor >= len(pp.rows) {
-		pp.cursor = len(pp.rows) - 1
-	}
-	if pp.cursor < 0 {
-		pp.cursor = playerCursorButtons
+	if pp.cursor < 0 { // the playlist is empty, and the cursor on the buttons
 		return pp.controlKey(e)
 	}
 	// Left and Right fold and unfold a folder, and Left takes a track to
@@ -704,7 +744,7 @@ func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl, shift bool) bool
 		if move {
 			pp.moveItem(it, -1)
 		} else if pp.cursor == 0 {
-			pp.cursor = playerCursorButtons
+			pp.toButtons()
 		} else {
 			pp.cursor--
 		}
@@ -720,7 +760,7 @@ func (pp *PlayerPanel) playlistKey(e *vtinput.InputEvent, ctrl, shift bool) bool
 		pp.cursor = min(len(pp.rows)-1, pp.cursor+page)
 	case vtinput.VK_HOME:
 		if ctrl {
-			pp.cursor = playerCursorButtons
+			pp.toButtons()
 		} else {
 			pp.cursor = 0
 		}
@@ -919,6 +959,14 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 	}
 	row := y + 1
 	pp.layout = playerLayout{barY: row}
+	// The button in the top right corner that closes the player and leaves
+	// the music playing, while there is music to leave. It is right by the
+	// corner, as the ♪ that marks the music then is (DrawPlayerIndicator):
+	// with the player on the right the two take the same cells.
+	if loaded && w >= 16 {
+		pp.layout.hideX = pp.X2 - 3
+		vtui.NewPainter(scr).DrawTitleButton(pp.layout.hideX, pp.Y1, playerHideSymbol, box)
+	}
 	if config.App.PlayerBar {
 		// Where the track is, on a bar between the two clocks, and the
 		// stream facts under it. While the bar is dragged its knob is where
@@ -967,17 +1015,9 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 		row += 2
 	}
 
-	// The last row: buttons and volume. While the keys are shown (H) each
-	// button carries the letter that presses it.
+	// The last row: buttons and volume.
 	by := row
 	labels := []string{"|<", " > ", "||", " # ", ">|"}
-	if config.App.PlayerKeyHints {
-		for i, key := range playerButtonKeys(config.App.PlayerKeys) {
-			if key != "" {
-				labels[i] = key + " " + strings.TrimSpace(labels[i])
-			}
-		}
-	}
 	bx := x
 	pp.layout.buttonsY = by
 	scr.FillRect(x, by, pp.X2-1, by, ' ', text)
@@ -1007,6 +1047,9 @@ func (pp *PlayerPanel) Show(scr *vtui.ScreenBuf) {
 	// Separator on the frame's own lines.
 	sep := "├" + strings.Repeat("─", w) + "┤"
 	scr.Write(pp.X1, by+1, vtui.StringToCharInfo(sep, box))
+	if config.App.PlayerKeyHints {
+		pp.showButtonKeys(scr, by+1, box)
+	}
 	pp.showKeyHints(scr, box)
 
 	// Playlist.
@@ -1078,7 +1121,7 @@ func playbackBarSpan(left, right string, w int) (start, width int) {
 }
 
 // showKeyHints writes on the bottom border how to see the player's keys, or,
-// while they are shown, the keys the buttons do not carry: as many as the
+// while they are shown, the keys that are not under the buttons: as many as the
 // border has room for, and always the one that hides them again. The full
 // list is too long for a panel, and a player that showed it all the time
 // would be a page of keys with a player in it (#2185).
@@ -1118,11 +1161,34 @@ func fitHints(hints []string, room int) string {
 	return strings.Join(append(shown, last), gap)
 }
 
-// playerButtonKeys are the letters the buttons carry while the keys are
-// shown: WinAmp's when they are on, else YouTube's, which has no stop.
+// showButtonKeys writes the key of each button on the line y under the
+// buttons, in the middle of the button, while the keys are shown (H). They
+// were inside the buttons, [⇧P |<] [K >], which turned the row into a jumble
+// of letters and arrows and changed its width (#2185). A key that does not
+// fit under its button, in a player too narrow for the row, is left out.
+func (pp *PlayerPanel) showButtonKeys(scr *vtui.ScreenBuf, y int, attr uint64) {
+	for i, key := range playerButtonKeys(config.App.PlayerKeys) {
+		b := pp.layout.buttons[i]
+		if key == "" || b[1] >= pp.X2 {
+			continue
+		}
+		width := b[1] - b[0] + 1
+		if key = " " + key + " "; runewidth.StringWidth(key) > width {
+			key = strings.TrimSpace(key)
+		}
+		if kw := runewidth.StringWidth(key); kw <= width {
+			scr.Write(b[0]+(width-kw)/2, y, vtui.StringToCharInfo(key, attr))
+		}
+	}
+}
+
+// playerButtonKeys are the keys under the buttons while the keys are shown:
+// WinAmp's when they are on, else YouTube's, which has no stop. The ⇧ stands
+// a cell apart from its letter: the fonts that have it draw it wider than a
+// cell, over the letter (Monaco, the GUI's font on macOS, has none, #2185).
 func playerButtonKeys(scheme string) [5]string {
 	if scheme == config.PlayerKeysYouTube {
-		return [5]string{"⇧P", "K", "K", "", "⇧N"}
+		return [5]string{"⇧ P", "K", "K", "", "⇧ N"}
 	}
 	return [5]string{"Z", "X", "C", "V", "B"}
 }

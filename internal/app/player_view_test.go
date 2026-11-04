@@ -83,9 +83,45 @@ func TestPlayerDrawsThePlaybackBar(t *testing.T) {
 	}
 }
 
+// keysUnderButtons is what the line under the buttons has under each of
+// them, the line itself left out, joined by "|": "-" under a button with
+// nothing.
+func (f *playerFixture) keysUnderButtons() string {
+	f.t.Helper()
+	rows := f.screenRows()
+	for i := 0; i+1 < len(rows); i++ {
+		at := strings.Index(rows[i], "[|<]")
+		if at < 0 {
+			continue
+		}
+		row, under := []rune(rows[i]), []rune(rows[i+1])
+		var keys []string
+		for x := len([]rune(rows[i][:at])); x < len(row) && len(keys) < 5; x++ {
+			if row[x] != '[' {
+				continue
+			}
+			end := x
+			for end < len(row)-1 && row[end] != ']' {
+				end++
+			}
+			key := strings.Trim(string(under[x:end+1]), "─ ")
+			if key == "" {
+				key = "-"
+			}
+			keys = append(keys, key)
+			x = end
+		}
+		return strings.Join(keys, "|")
+	}
+	f.t.Fatalf("no buttons on the player:\n%s", strings.Join(rows, "\n"))
+	return ""
+}
+
 // The letters of the player were nowhere to be seen (#2185). They stay out of
-// the way until H shows them: the bottom border says so, H puts the letters
-// on the buttons and the other keys in the border, H again takes them off.
+// the way until H shows them: the bottom border says so, H puts the key of
+// each button on the line under it and the other keys in the border, H again
+// takes them off. The buttons stay as they are: the keys were inside them
+// once, [⇧P |<] [K >], and the row was a jumble.
 func TestPlayerShowsItsKeysOnH(t *testing.T) {
 	oldHints, oldKeys := config.App.PlayerKeyHints, config.App.PlayerKeys
 	t.Cleanup(func() { config.App.PlayerKeyHints, config.App.PlayerKeys = oldHints, oldKeys })
@@ -94,7 +130,8 @@ func TestPlayerShowsItsKeysOnH(t *testing.T) {
 	f := newPlayerFixture(t)
 	f.press(playerKey(vtinput.VK_TAB, 0))
 	shows := func(text string) bool { return strings.Contains(strings.Join(f.screenRows(), "\n"), text) }
-	if !shows(i18n.Msg("Player.KeysHint")) || !shows("[|<]") || shows("[Z |<]") {
+	const buttons = "[|<] [ > ] [||] [ # ] [>|]"
+	if !shows(i18n.Msg("Player.KeysHint")) || !shows(buttons) || f.keysUnderButtons() != "-|-|-|-|-" {
 		t.Fatalf("with the keys hidden the player shows:\n%s", strings.Join(f.screenRows(), "\n"))
 	}
 
@@ -102,14 +139,29 @@ func TestPlayerShowsItsKeysOnH(t *testing.T) {
 	if !config.App.PlayerKeyHints {
 		t.Fatal("р (H) did not show the keys")
 	}
-	for _, want := range []string{"[Z |<]", "[X >]", "[C ||]", "[V #]", "[B >|]", "K play", "H hide"} {
+	if !shows(buttons) {
+		t.Errorf("with the keys shown the buttons are not as they were:\n%s", strings.Join(f.screenRows(), "\n"))
+	}
+	if got := f.keysUnderButtons(); got != "Z|X|C|V|B" {
+		t.Errorf("with the keys shown the buttons have %q under them, want Z|X|C|V|B", got)
+	}
+	for _, want := range []string{"K play", "H hide"} {
 		if !shows(want) {
 			t.Errorf("with the keys shown the player has no %q:\n%s", want, strings.Join(f.screenRows(), "\n"))
 		}
 	}
+	config.App.PlayerKeys = config.PlayerKeysYouTube
+	if !shows(buttons) {
+		t.Errorf("with YouTube's keys shown the buttons are not as they were:\n%s", strings.Join(f.screenRows(), "\n"))
+	}
+	// The ⇧ a cell apart from the letter, which it overlaps otherwise.
+	if got := f.keysUnderButtons(); got != "⇧ P|K|K|-|⇧ N" {
+		t.Errorf("with YouTube's keys the buttons have %q under them, want ⇧ P|K|K|-|⇧ N", got)
+	}
+	config.App.PlayerKeys = config.PlayerKeysBoth
 
 	f.press(playerChar(vtinput.VK_H, 'h'))
-	if config.App.PlayerKeyHints || shows("[Z |<]") {
+	if config.App.PlayerKeyHints || f.keysUnderButtons() != "-|-|-|-|-" {
 		t.Errorf("H again did not hide the keys:\n%s", strings.Join(f.screenRows(), "\n"))
 	}
 	if !f.pf.CmdLine.IsEmpty() {

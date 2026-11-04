@@ -1051,9 +1051,10 @@ and the other formats need ffmpeg.
   #Up, Down#                Move the cursor; Ctrl+Home goes to the buttons.
 
   #Left, Right#             On the bar: seek 5 seconds. On the buttons: the
-                          next button, or the volume on its slider. In the
-                          playlist: fold or unfold a folder; Left on a track
-                          goes to its folder.
+                          next button; past the last one is the volume
+                          slider, where they turn the volume, and Up or
+                          Down lead off it. In the playlist: fold or unfold
+                          a folder; Left on a track goes to its folder.
 
   #Enter, Space#            Press the button, play the track, fold or unfold
                           the folder; on the bar, play or pause.
@@ -1068,8 +1069,11 @@ and the other formats need ffmpeg.
 
   #Del, F8#                 Remove from the playlist; the file stays on disk.
 
-  #H#                       Show the keys on the buttons and in the bottom
+  #H#                       Show the keys under the buttons and in the bottom
                           border, or hide them.
+
+  #I#                       Close the player without asking and leave the
+                          music playing in the background.
 
  #Mouse#
 
@@ -1078,7 +1082,9 @@ and moves the track where it lands on the playback bar; the slider and the
 bar can be dragged, and the track goes where the bar is let go. In the
 playlist a click puts the cursor on a row, a click on ▸ or ▾ folds or
 unfolds a folder, and a double click plays a track or folds a folder. The
-wheel scrolls the playlist, and over the slider turns the volume.
+wheel scrolls the playlist, and over the slider turns the volume. While
+something plays, [-] in the top right corner of the player closes it and
+leaves the music playing.
 
  #Letter keys#
 
@@ -1107,7 +1113,8 @@ WinAmp's, YouTube's or both, the default. They work in any keyboard layout.
 
   Closing the player while music plays, with Ctrl+Shift+M or by opening
 another panel in its place, asks whether to go on playing in the
-background or to stop; Esc keeps the player open. In the background a ♪ in
+background or to stop; Esc keeps the player open. I in the player and [-]
+in its corner send it to the background without the question. There a ♪ in
 the top right corner of the screen says that music plays, ‖ that it is
 paused. A click on it, or Ctrl+Shift+M, opens the player again on what
 plays.

@@ -269,6 +269,19 @@ jobs:
           cmd/f4-gui-launcher/rsrc_windows_amd64.syso \
           cmd/f4-gui-launcher/rsrc_windows_arm64.syso
 
+    - name: Generate platform icon resources
+      # Windows and macOS cells need the .syso/.icns files generated locally
+      # because each matrix cell runs on a separate runner. The linux/amd64
+      # cell already ran this in "Verify generated application icons".
+      if: steps.affected.outputs.build == 'yes' && (matrix.goos == 'windows' || matrix.goos == 'darwin')
+      run: |
+        go generate ./cmd/f4
+        test -s cmd/f4-gui-launcher/rsrc_windows_amd64.syso
+        test -s cmd/f4-gui-launcher/rsrc_windows_arm64.syso
+        if [ "$GOOS" = "darwin" ]; then
+          test -s internal/gui/assets/icon/generated/f4.icns
+        fi
+
     - name: Build binaries
       if: steps.affected.outputs.build == 'yes'
       env:
@@ -337,6 +350,14 @@ jobs:
         BUILD_TAG_ARGS=()
         if [ -n "$BUILD_TAGS" ]; then
           BUILD_TAG_ARGS=(-tags "$BUILD_TAGS")
+        fi
+
+        # The launcher resource is generated, not committed.  Each matrix
+        # job starts from a fresh checkout, so the Linux verification job
+        # cannot supply it to this Windows build.
+        if [ "$GOOS" = "windows" ]; then
+          env -u GOOS -u GOARCH go generate ./cmd/f4
+          test -s "cmd/f4-gui-launcher/rsrc_windows_${GOARCH}.syso"
         fi
 
         # Build core
@@ -856,6 +877,13 @@ jobs:
           EXT=".exe"
         fi
         LITE_TAGS="lite,vtui_noebiten,vtui_nogogpu${MATRIX_TAGS:+,$MATRIX_TAGS}"
+
+        # The Windows GUI launcher needs its generated resource in this
+        # isolated matrix checkout too; it is not an artifact of another job.
+        if [ "$GOOS" = "windows" ]; then
+          env -u GOOS -u GOARCH go generate ./cmd/f4
+          test -s "cmd/f4-gui-launcher/rsrc_windows_${GOARCH}.syso"
+        fi
 
         go build -tags "$LITE_TAGS" -trimpath $GCFLAGS \
           -ldflags="$APP_LDFLAGS" -o build/f4$EXT ./cmd/f4
@@ -1551,6 +1579,10 @@ jobs:
         # archive like any windows/amd64 f4, and installed a build that
         # does not start on Windows 7/8/8.1 (#1656). The release check reads
         # the tag back from the archive.
+        # The generated launcher resource is absent from a fresh checkout;
+        # use the host toolchain so go generate can execute its generator.
+        env -u GOOS -u GOARCH go generate ./cmd/f4
+        test -s "cmd/f4-gui-launcher/rsrc_windows_${GOARCH}.syso"
         go build -tags win7 -trimpath -ldflags="$APP_LDFLAGS" -o build/f4.exe ./cmd/f4
         # f4-gui.exe: the launcher, same as in the main matrix (f4#1567).
         go build -trimpath -ldflags="-s -w -H windowsgui" -o build/f4-gui.exe ./cmd/f4-gui-launcher

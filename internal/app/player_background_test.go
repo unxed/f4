@@ -137,6 +137,89 @@ func TestPlayerStopsWhenAskedOnClose(t *testing.T) {
 	}
 }
 
+// The question on closing came every time the player was closed while it
+// played (#2185). I in the player, YouTube's key of its miniplayer, [-] in its
+// top right corner and the palette close it without asking and leave the
+// music playing. The corner has the button only while something is loaded.
+func TestPlayerGoesToTheBackgroundWithoutAsking(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		do   func(t *testing.T, f *playerFixture)
+	}{
+		{"ш, I with the Russian layout on", func(t *testing.T, f *playerFixture) { f.press(playerChar(0, 'ш')) }},
+		{"a click on [-]", func(t *testing.T, f *playerFixture) {
+			x, y := f.find("[-]")
+			if y != vtui.FrameManager.WorkspaceTopInset() {
+				// That row is where a click opens the main menu.
+				t.Fatalf("[-] is on row %d, not on the top row of the panels, %d", y, vtui.FrameManager.WorkspaceTopInset())
+			}
+			f.click(x+1, y)
+		}},
+		{"the palette", func(t *testing.T, f *playerFixture) {
+			if !RunAction("Panel.Player.ToBackground") {
+				t.Error("Player: close, keep playing did nothing")
+			}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := playingFixture(t)
+			c.do(t, f)
+			if top := vtui.FrameManager.GetTopFrame(); top != f.pf {
+				t.Fatalf("closing the player for the background put up %T", top)
+			}
+			if f.playerShown() {
+				t.Fatal("the player is still open")
+			}
+			if f.audio.Path() != f.path("a.mp3") || !f.audio.IsPlaying() {
+				t.Errorf("in the background the engine has %q, playing=%v; want a.mp3 playing", f.audio.Path(), f.audio.IsPlaying())
+			}
+			if got := f.indicator(); !strings.Contains(got, "♪") {
+				t.Errorf("the top right corner is %q, want the ♪ mark", got)
+			}
+			if strings.Contains(strings.Join(f.screenRows(), "\n"), "[-]") {
+				t.Error("the button stayed on the screen")
+			}
+		})
+	}
+
+	f := newPlayerFixture(t)
+	f.press(playerKey(vtinput.VK_TAB, 0))
+	if rows := f.screenRows(); strings.Contains(strings.Join(rows, "\n"), "[-]") {
+		t.Errorf("with nothing loaded the player has the button:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// With the player on the right its button is where the ♪ comes then: a click
+// there sends the player to the background, and a click on the same cell
+// brings it back.
+func TestPlayerButtonAndTheMarkShareTheCorner(t *testing.T) {
+	f := playingFixture(t) // the player on the left, with the focus
+	f.press(playerChar(vtinput.VK_I, 'i'))
+	f.toggle() // from the left panel: the player opens on the right
+	player, ok := f.pf.AltPanels[1].(*panel.PlayerPanel)
+	if !ok {
+		t.Fatalf("Ctrl+Shift+M from the left panel opened %T on the right", f.pf.AltPanels[1])
+	}
+	f.player = player
+	x, y := f.find("[-]")
+	if mark := f.scr.Width() - 3; x+1 != mark {
+		t.Fatalf("the _ of the player on the right is in column %d, the ♪ in %d", x+1, mark)
+	}
+
+	f.click(x+1, y)
+	if f.playerShown() {
+		t.Fatal("a click on _ left the player open")
+	}
+	if got := f.indicator(); !strings.Contains(got, "♪") {
+		t.Fatalf("the top right corner is %q, want the ♪ mark", got)
+	}
+	mx, my := at(x+1, y)
+	f.press(&vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: true, ButtonState: vtinput.FromLeft1stButtonPressed, MouseX: mx, MouseY: my})
+	if !f.playerShown() {
+		t.Error("a click on the ♪ in the same cell did not bring the player back")
+	}
+}
+
 // With nothing playing there is nothing to ask.
 func TestPlayerClosesWithoutAQuestionWhenSilent(t *testing.T) {
 	f := newPlayerFixture(t)

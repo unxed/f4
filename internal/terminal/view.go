@@ -183,6 +183,9 @@ type TerminalView struct {
 	// from the text alone made the whole screen jump down and back (f4#1749).
 	gravityLow int
 	hoverURL   string
+	// drawLine is Show's scratch copy of one line, kept between frames so
+	// that drawing a line does not allocate one.
+	drawLine []vtui.CharInfo
 }
 
 func NewTerminalView(w, h int) *TerminalView {
@@ -1184,7 +1187,9 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 		}
 		// Проверка выхода за пределы экрана
 		if drawY >= tv.Y1 && drawY <= tv.Y1+tv.Height-1 {
-			drawLine := append([]vtui.CharInfo(nil), line...)
+			// scr.Write copies the cells, so one scratch line serves them all.
+			tv.drawLine = append(tv.drawLine[:0], line...)
+			drawLine := tv.drawLine
 			for i := range drawLine {
 				if drawLine[i].Char == kittyPlaceholderRune {
 					drawLine[i].Char = ' ' // the picture is drawn over the cell
@@ -1197,7 +1202,12 @@ func (tv *TerminalView) Show(scr *vtui.ScreenBuf) {
 					drawLine[i].Attributes = userDefaultColors(drawLine[i].Attributes, userColors)
 				}
 			}
-			viewer.ApplyURLHoverAttr(drawLine, viewer.UrlCellRangesFromCells(line), tv.hoverURL)
+			// Only a link under the pointer changes how a line is drawn.
+			// Finding the links of every line on every frame was a URL scan
+			// per row per redraw, made on every line of a command's output.
+			if tv.hoverURL != "" {
+				viewer.ApplyURLHoverAttr(drawLine, viewer.UrlCellRangesFromCells(line), tv.hoverURL)
+			}
 			scr.Write(tv.X1, drawY, drawLine)
 		}
 	}

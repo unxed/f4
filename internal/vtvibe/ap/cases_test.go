@@ -417,6 +417,91 @@ var apCases = []apCase{
 			"aa000046 REPLACE\naa000046 snippet\nb\naa000046 content\nB\n",
 		expectFiles: map[string]string{"f.txt": "a\r\nB\r\n"},
 	},
+	{
+		// Upstream bug: `found` was unbound when creating a new file inside an
+		// EXISTING directory (Python UnboundLocalError). resolvePathPrefix never
+		// had it; kept in sync with upstream's case list.
+		name:  "c47_create_file_in_existing_dir_does_not_crash",
+		files: map[string]string{"archive/old.go": "package archive\n"},
+		patch: "aa000047 AP 3.2\n\naa000047 FILE LF\narchive/new_test.go\n\n" +
+			"aa000047 CREATE\naa000047 content\npackage archive\n",
+		expectFiles: map[string]string{"archive/new_test.go": "package archive\n",
+			"archive/old.go": "package archive\n"},
+	},
+	{
+		// A REPLACE that only dedents was taken for "already applied"
+		// (normalizeBlock ignores indentation) or re-indented back by
+		// reindentContent, so the file silently stayed unchanged.
+		name:  "c48_dedent_only_replace_is_applied",
+		files: map[string]string{"c.yml": "a:\n  b: 1\n  c: 2\n"},
+		patch: "aa000048 AP 3.2\n\naa000048 FILE\nc.yml\n\n" +
+			"aa000048 REPLACE\naa000048 snippet\n  c: 2\naa000048 content\nc: 2\n",
+		expectFiles: map[string]string{"c.yml": "a:\n  b: 1\nc: 2\n"},
+	},
+	{
+		name:  "c49_multiline_dedent_only_replace_is_applied",
+		files: map[string]string{"m.py": "class C:\n    def m(self):\n        return 1\n"},
+		patch: "aa000049 AP 3.2\n\naa000049 FILE\nm.py\n\n" +
+			"aa000049 REPLACE\naa000049 snippet\n    def m(self):\n        return 1\n" +
+			"aa000049 content\ndef m(self):\n    return 1\n",
+		expectFiles: map[string]string{"m.py": "class C:\ndef m(self):\n    return 1\n"},
+	},
+	{
+		name:  "c50_indent_only_replace_is_applied",
+		files: map[string]string{"m.py": "def f():\n    if x:\n        a()\n    b()\n"},
+		patch: "aa000050 AP 3.2\n\naa000050 FILE\nm.py\n\n" +
+			"aa000050 REPLACE\naa000050 snippet\n    b()\n" +
+			"aa000050 content\n        b()\n",
+		expectFiles: map[string]string{"m.py": "def f():\n    if x:\n        a()\n        b()\n"},
+	},
+	{
+		// Re-running the dedent: the region already has the requested indentation.
+		name:  "c51_dedent_only_replace_already_applied_is_skipped",
+		files: map[string]string{"c.yml": "a:\n  b: 1\nc: 2\n"},
+		patch: "aa000051 AP 3.2\n\naa000051 FILE\nc.yml\n\n" +
+			"aa000051 REPLACE\naa000051 snippet\n  c: 2\naa000051 content\nc: 2\n",
+		expectUnchanged: []string{"c.yml"},
+		expectStdout:    []string{"already applied"},
+	},
+	{
+		name:  "c52_indent_only_replace_already_applied_is_skipped",
+		files: map[string]string{"m.py": "def f():\n    if x:\n        a()\n        b()\n"},
+		patch: "aa000052 AP 3.2\n\naa000052 FILE\nm.py\n\n" +
+			"aa000052 REPLACE\naa000052 snippet\n    b()\n" +
+			"aa000052 content\n        b()\n",
+		expectUnchanged: []string{"m.py"},
+		expectStdout:    []string{"already applied"},
+	},
+	{
+		// The model dropped the base indentation in BOTH snippet and content;
+		// once re-indented to the target, the content is already there.
+		name:  "c53_reindented_replace_already_applied_is_skipped",
+		files: map[string]string{"m.py": "def f():\n    if x:\n        y()\n"},
+		patch: "aa000053 AP 3.2\n\naa000053 FILE\nm.py\n\n" +
+			"aa000053 REPLACE\naa000053 snippet\nif x:\ny()\n" +
+			"aa000053 content\nif x:\n    y()\n",
+		expectUnchanged: []string{"m.py"},
+		expectStdout:    []string{"already applied"},
+	},
+	{
+		// A REPLACE whose snippet and content are identical changes nothing,
+		// even when both are written at an indentation the file does not use.
+		name:  "c54_noop_replace_with_off_indentation_is_skipped",
+		files: map[string]string{"m.py": "def f():\n    x = 1\n"},
+		patch: "aa000054 AP 3.2\n\naa000054 FILE\nm.py\n\n" +
+			"aa000054 REPLACE\naa000054 snippet\n  x = 1\n" +
+			"aa000054 content\n  x = 1\n",
+		expectUnchanged: []string{"m.py"},
+	},
+	{
+		// Applying a re-indented REPLACE twice: the second run must be a no-op.
+		name:  "c55_reindented_replace_rerun_is_skipped",
+		files: map[string]string{"m.py": "def f():\n    a = 2\n"},
+		patch: "aa000055 AP 3.2\n\naa000055 FILE\nm.py\n\n" +
+			"aa000055 REPLACE\naa000055 snippet\na = 1\naa000055 content\na = 2\n",
+		expectUnchanged: []string{"m.py"},
+		expectStdout:    []string{"already applied"},
+	},
 }
 
 func runAPCase(t *testing.T, c apCase) {

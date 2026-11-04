@@ -255,7 +255,7 @@ func TestSettingsNavigationRegrouping(t *testing.T) {
 			counts[f.Group]++
 		}
 	}
-	if counts["Typing and focus"] != 4 || counts["Path suggestions"] != 7 {
+	if counts["Typing and focus"] != 5 || counts["Path suggestions"] != 7 {
 		t.Fatal("settings lost while regrouping")
 	}
 

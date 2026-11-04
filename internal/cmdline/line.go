@@ -98,8 +98,7 @@ func (cl *CommandLine) DisplayObject(scr *vtui.ScreenBuf) {
 func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 	if isCtrlY(e) {
 		// Far: Ctrl+Y clears the command line (docs/FAR2L_COMPAT.md, K-72).
-		cl.Clear()
-		cl.Edit.HistoryPos = -1
+		clearLine(cl.Edit)
 		return true
 	}
 	handled := cl.Edit.ProcessKey(e)
@@ -160,6 +159,12 @@ func (cl *CommandLine) InsertString(text string) {
 func (cl *CommandLine) PasteText(text string) {
 	cl.Edit.InsertString(singleLine(text))
 	cl.Edit.HistoryPos = -1
+}
+
+// clearLine is what Ctrl+Y does: the text goes, and history browsing with it.
+func clearLine(edit *vtui.Edit) {
+	edit.SetText("")
+	edit.HistoryPos = -1
 }
 
 // isCtrlY: Ctrl+Y alone, no Alt and no Shift.
