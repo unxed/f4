@@ -214,6 +214,46 @@ func TestIssue1229CaseOnlyRenameWithNothingInTheWayJustRenames(t *testing.T) {
 	}
 }
 
+// A directory can be renamed to a free name without prompting for overwrite
+// or surfacing the filesystem's no-replace reservation as an error (#2208).
+func TestIssue2208RenameDirectoryToFreeName(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	theme.SetDefaultF4Palette()
+
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "testdir")
+	newPath := filepath.Join(dir, "testdir_newname")
+	if err := os.Mkdir(oldPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G703 -- the path is inside the private test temp directory.
+	if err := os.WriteFile(filepath.Join(oldPath, "inside"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	pf := panel.NewPanelsFrame()
+	t.Cleanup(pf.Close)
+	pf.ResizeConsole(80, 25)
+	fsp := pf.Panels[0].(*panel.FileSystemPanel)
+	fsp.Vfs = vfs.NewOSVFS(dir)
+	pf.ActiveIdx = 0
+	paneltest.WaitForLoad(t, fsp)
+	t.Cleanup(func() { drainRenameTasks(t) })
+
+	before := vtui.FrameManager.GetTopFrame()
+	renameEntry(pf, fsp, "testdir", "testdir_newname")
+	pumpUntil(t, "the directory rename", func() bool {
+		_, oldErr := os.Stat(oldPath)
+		_, childErr := os.Stat(filepath.Join(newPath, "inside"))
+		return os.IsNotExist(oldErr) && childErr == nil
+	})
+	if top := vtui.FrameManager.GetTopFrame(); top != before {
+		if dlg, ok := top.(*vtui.Window); ok && dlg.OnResult != nil {
+			t.Fatal("asked to overwrite a free directory name")
+		}
+	}
+}
+
 // A dialog some earlier task left in the UI queue must not get the answer
 // meant for the rename's question (see waitOverwriteQuestion).
 func TestIssue1229AnswerGoesToTheRenameQuestion(t *testing.T) {
