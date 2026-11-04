@@ -4,9 +4,7 @@ import (
 	"context"
 	"io"
 	"strings"
-	"time"
 
-	"github.com/unxed/f4/internal/piecetable"
 	"github.com/unxed/f4/internal/textsearch"
 )
 
@@ -82,11 +80,7 @@ func SearchMatch(ctx context.Context, backend *ViewerBackend, pattern string, st
 			if progress != nil {
 				progress(int(((fileSize - end) * 100) / fileSize))
 			}
-			data, err := backend.ReadAt(begin, int(end-begin))
-			if err == piecetable.ErrLoading {
-				time.Sleep(20 * time.Millisecond)
-				continue
-			}
+			data, err := backend.readSearchAt(ctx, begin, int(end-begin))
 			if err != nil || len(data) == 0 {
 				return -1, 0, nil
 			}
@@ -116,11 +110,7 @@ func SearchMatch(ctx context.Context, backend *ViewerBackend, pattern string, st
 		if progress != nil {
 			progress(int((current * 100) / fileSize))
 		}
-		data, err := backend.ReadAt(current, int(chunkSize))
-		if err == piecetable.ErrLoading {
-			time.Sleep(20 * time.Millisecond)
-			continue
-		}
+		data, err := backend.readSearchAt(ctx, current, int(chunkSize))
 		if err != nil || len(data) == 0 {
 			break
 		}
@@ -158,11 +148,7 @@ func readSearchData(ctx context.Context, backend *ViewerBackend, progress func(i
 		if remaining := fileSize - current; remaining < length {
 			length = remaining
 		}
-		chunk, err := backend.ReadAt(current, int(length))
-		if err == piecetable.ErrLoading {
-			time.Sleep(20 * time.Millisecond)
-			continue
-		}
+		chunk, err := backend.readSearchAt(ctx, current, int(length))
 		if err != nil && err != io.EOF {
 			return nil, err
 		}

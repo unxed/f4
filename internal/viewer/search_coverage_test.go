@@ -3,6 +3,7 @@ package viewer
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/unxed/f4/vfs"
@@ -37,6 +38,24 @@ func TestSearchMatchHandlesEmptyBoundsAndProgress(t *testing.T) {
 	}
 	if got, _, err := SearchMatch(context.Background(), b, "alpha", 999, SearchOptions{Reverse: true}, nil); got != 11 || err != nil {
 		t.Fatalf("reverse clamped search = %d, %v", got, err)
+	}
+}
+
+func TestSearchMatchDoesNotReplaceViewerCache(t *testing.T) {
+	data := strings.Repeat("x", 256*1024) + "needle"
+	visible := []byte("visible page")
+	b := &ViewerBackend{
+		File:      &vfs.MemoryReadAtCloser{Data: []byte(data)},
+		size:      int64(len(data)),
+		cacheData: visible,
+	}
+
+	got, _, err := SearchMatch(context.Background(), b, "needle", 0, SearchOptions{CaseSensitive: true}, nil)
+	if err != nil || got != 256*1024 {
+		t.Fatalf("SearchMatch = %d, %v; want %d", got, err, 256*1024)
+	}
+	if string(b.cacheData) != string(visible) || b.cacheOff != 0 {
+		t.Fatalf("search changed the visible-page cache: offset=%d data=%q", b.cacheOff, b.cacheData)
 	}
 }
 

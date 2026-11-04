@@ -212,6 +212,47 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	return nil, piecetable.ErrLoading
 }
 
+// readSearchAt reads a search window without replacing the viewer's display
+// cache. A search can scan far ahead of the visible page; routing those reads
+// through ReadAt made the single display window jump between the search and
+// the screen, causing the page to flicker while searching large files.
+func (b *ViewerBackend) readSearchAt(ctx context.Context, offset int64, length int) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	b.mu.Lock()
+	readErr := b.readErr
+	b.mu.Unlock()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if b.File == nil || length <= 0 || offset < 0 {
+		return nil, nil
+	}
+	size := b.Size()
+	if offset >= size {
+		return nil, io.EOF
+	}
+	if remaining := size - offset; int64(length) > remaining {
+		length = int(remaining)
+	}
+	buf := make([]byte, length)
+	n, err := b.File.ReadAt(ctx, buf, b.DataOffset+offset)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, io.EOF
+	}
+	data := buf[:n]
+	if b.codepage != 0 && b.codepage != 65001 {
+		if decoded, decodeErr := vfs.DecodeBytes(data, b.codepage); decodeErr == nil {
+			data = decoded
+		}
+	}
+	return data, nil
+}
+
 // SearchFrom asks the file system for the first occurrence of pattern at or
 // after off. searched is false when the file system cannot answer, and the
 // caller then scans the file itself; when it is true, an offset of -1 means
