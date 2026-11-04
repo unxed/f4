@@ -19,7 +19,8 @@ import (
 //	!.!             file name under cursor (with extension)
 //	!`!             extension of the cursor file, including the dot
 //	!\ or !\!       current panel directory
-//	!&              space-joined basenames of marked files (or cursor file)
+//	!& or !&~       space-joined basenames of marked files (or cursor file),
+//	                names containing a space wrapped in double quotes
 //	!@!             path of a temp file containing one marked basename per line
 //	!?title?init!   prompt the user for input; init is the prefilled value
 //	!#              switch subsequent tokens to the passive panel
@@ -212,14 +213,22 @@ func SubstFileName(cmd string, ctx *SubstContext) SubstResult {
 			i += 2
 			continue
 		}
-		// !&  →  space-joined marked basenames. far2l does not quote;
-		// authors are expected to do their own quoting (e.g. "!.!") or
-		// use !@! for filenames with spaces.
+		// !& / !&~  →  space-joined marked basenames. As in Far, a name
+		// containing a space is wrapped in double quotes so the list can
+		// be split back into names; plain names stay bare. Short names
+		// are the long names here, so !&~ expands the same way.
 		if strings.HasPrefix(rest, "!&") {
 			files := marked(panel)
-			out.WriteString(strings.Join(files, " "))
+			words := make([]string, len(files))
+			for k, name := range files {
+				words[k] = quoteSpaceOnly(name)
+			}
+			out.WriteString(strings.Join(words, " "))
 			listFiles = true
 			i += 2
+			if strings.HasPrefix(rest, "!&~") {
+				i++
+			}
 			continue
 		}
 		// !@!  →  path of a temp file with marked basenames (one per line)
@@ -301,6 +310,15 @@ func trimTrailingSlash(dir string) string {
 		return dir[:len(dir)-1]
 	}
 	return dir
+}
+
+// quoteSpaceOnly wraps name in double quotes when it contains a space,
+// like Far's QuoteSpaceOnly.
+func quoteSpaceOnly(name string) string {
+	if strings.Contains(name, " ") {
+		return `"` + name + `"`
+	}
+	return name
 }
 
 func marked(p *PanelSnapshot) []string {
