@@ -2044,22 +2044,52 @@ func highlightIniHeader(text string) (header, rest string, ok bool) {
 	return text, "", false
 }
 
+// hasHighlightIniRules reports whether the file contains an active Highlight
+// section. The shipped examples are comments, so they do not count. Without a
+// working highlight section, the file is just an obsolete documentation file
+// and can be replaced by the current comment-only template (f4#912).
+func hasHighlightIniRules(text string) bool {
+	text = strings.TrimPrefix(text, "\xef\xbb\xbf")
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "[") || !strings.HasSuffix(line, "]") {
+			continue
+		}
+		section := line[1 : len(line)-1]
+		if section == "Highlight" || strings.HasPrefix(section, "Highlight_") {
+			return true
+		}
+	}
+	return false
+}
+
 // RefreshHighlightIniHeader rewrites the comments at the top of an existing
 // highlight.ini with those of the stock file, so that a file made by an older f4
-// describes the keys the current one reads (f4#912). Only the lines before the
-// first section are replaced; the rules stay as they are. It reports whether the
-// file was changed. A file with no section, or one it cannot write, is left alone.
+// describes the keys the current one reads (f4#912). A file with active
+// Highlight sections keeps all its user content and only has its header
+// replaced. A file without any active Highlight section is replaced by the
+// current comment-only template. It reports whether the file was changed.
 func RefreshHighlightIniHeader(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	newHeader, _, _ := highlightIniHeader(defaultHighlightIni)
+	if !hasHighlightIniRules(text) {
+		if text == defaultHighlightIni {
+			return false
+		}
+		// #nosec G703 -- path is the highlight.ini inside the profile directory, built by the caller.
+		if err := os.WriteFile(path, []byte(defaultHighlightIni), 0600); err != nil {
+			return false
+		}
+		return true
+	}
 	oldHeader, rest, ok := highlightIniHeader(text)
 	if !ok {
 		return false
 	}
-	newHeader, _, _ := highlightIniHeader(defaultHighlightIni)
 	if oldHeader == newHeader {
 		return false
 	}

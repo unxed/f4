@@ -1046,28 +1046,40 @@ func TestRefreshHighlightIniHeaderReplacesOnlyTheComments(t *testing.T) {
 	}
 }
 
-func TestRefreshHighlightIniHeaderLeavesOtherFilesAlone(t *testing.T) {
+func TestRefreshHighlightIniHeaderReplacesFilesWithoutHighlightRules(t *testing.T) {
 	dir := t.TempDir()
 	if RefreshHighlightIniHeader(filepath.Join(dir, "missing.ini")) {
 		t.Error("a missing file has nothing to refresh")
 	}
-	noSection := filepath.Join(dir, "plain.ini")
-	if err := os.WriteFile(noSection, []byte("# only comments\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if RefreshHighlightIniHeader(noSection) {
-		t.Error("a file with no section must not be touched")
+	for name, content := range map[string]string{
+		"comments-only":                    "# an old header\n# with no active rules\n",
+		"commented-example-and-sort-group": "# old header\n# [Highlight_100]\n[SortGroup_6]\nGroup = 5\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(dir, name+".ini")
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if !RefreshHighlightIniHeader(path) {
+				t.Fatal("a file without an active Highlight section must be replaced")
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := string(data); got != defaultHighlightIni {
+				t.Errorf("replacement must be the current comment-only template, got:\n%s", got)
+			}
+			if RefreshHighlightIniHeader(path) {
+				t.Error("the current comment-only template must not be rewritten")
+			}
+		})
 	}
 
 	fresh := filepath.Join(dir, "fresh.ini")
 	CreateDefaultHighlightIni(fresh)
-	before, _ := os.ReadFile(fresh)
 	if RefreshHighlightIniHeader(fresh) {
 		t.Error("the stock file is already current")
-	}
-	after, _ := os.ReadFile(fresh)
-	if string(before) != string(after) {
-		t.Error("the stock file must stay byte-for-byte the same")
 	}
 }
 
