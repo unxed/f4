@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -310,11 +311,31 @@ func TestActionCommandHistory_Del_CancelKeepsHistory(t *testing.T) {
 // historySearch.resize() bails out early when the FrameManager screen has
 // zero width, which leaves the underlying VMenu without geometry and
 // makes mouse-click coordinates land nowhere.
+//
+// Init keeps an existing task queue, so UI work an earlier test left queued
+// (a panel reload posted by Show, say) would run in this one, against the
+// history store this test installs. A history test starts from an empty queue
+// instead, whichever test ran before it and however the run is shuffled
+// (f4#2138).
 func initHistoryTestScreen(_ *testing.T) {
 	scr := vtui.NewSilentScreenBuf()
 	scr.AllocBuf(120, 40)
 	vtui.FrameManager.Init(scr)
+	testutil.DiscardUITasks()
 	theme.SetDefaultF4Palette()
+}
+
+func TestInitHistoryTestScreenDropsQueuedUIWork(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	var ran atomic.Bool
+	vtui.FrameManager.PostTask(func() { ran.Store(true) })
+
+	initHistoryTestScreen(t)
+	testutil.DrainUITasks()
+
+	if ran.Load() {
+		t.Fatal("UI work queued before the history test started ran inside it")
+	}
 }
 
 // TestActionCommandHistory_HelpTopic pins the F1 help topic name so
