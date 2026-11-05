@@ -299,40 +299,92 @@ func ansiStateOver(data []byte, base, state uint64) uint64 {
 // ansiStateAt returns the colours in force at the byte offset off of the
 // file, found by reading the colour sequences before it: a window that opens
 // in the middle of the file continues the colours of the lines above it
-// instead of starting from the plain ones. The result of the last call is
-// kept, so scrolling down reads only the bytes between the two windows; the
-// scan stops at a line break, where no sequence is cut.
-func (vv *ViewerView) ansiStateAt(off int64, base uint64) uint64 {
+// instead of starting from the plain ones. known is false while they are still
+// being worked out, and the caller then paints with base.
+//
+// The scan runs in the background and reads around the display cache
+// (readSearchAt). It used to go through ReadAt on the UI thread, whose single
+// 256 KiB window the scan and the rows being painted then fought over: a
+// window opened past the first 256 KiB of a terminal log -- Ctrl+End on a
+// 700 KiB one -- never got its state, because every frame fetched the window
+// at the top for the scan, dropped the one under the rows, and the next frame
+// did the opposite, so the viewer blinked "Loading..." for good (unxed/f4#2268).
+//
+// The result of the last scan is kept, so scrolling down reads only the bytes
+// between the two windows; the scan stops at a line break, where no sequence
+// is cut. The repaint that follows a finished scan finds the answer in the
+// cache.
+func (vv *ViewerView) ansiStateAt(off int64, base uint64) (state uint64, known bool) {
 	size := vv.Backend.Size()
 	if off > size {
 		off = size
 	}
-	pos, state := int64(0), base
 	c := vv.ansiCache
-	if c.valid && c.base == base && c.size == size && c.off <= off {
-		pos, state = c.off, c.state
+	if c.valid && c.base == base && c.size == size && c.off == off {
+		return c.state, true
 	}
-	for pos < off {
-		n := off - pos
-		if n > ansiScanChunk {
-			n = ansiScanChunk
-		}
-		data, err := vv.Backend.ReadAt(pos, int(n))
-		if err != nil || len(data) == 0 {
-			return base
-		}
-		if pos+int64(len(data)) < off {
-			// Cut the chunk at its last line break so that no sequence is
-			// split between two chunks.
-			if i := bytes.LastIndexByte(data, '\n'); i >= 0 {
-				data = data[:i+1]
+	if off <= 0 {
+		return base, true
+	}
+	if s := vv.ansiScan; s != nil && s.base == base && s.size == size && s.off == off {
+		return base, false
+	}
+	pos, cur := int64(0), base
+	if c.valid && c.base == base && c.size == size && c.off < off {
+		pos, cur = c.off, c.state
+	}
+	scan := &ansiScan{base: base, size: size, off: off}
+	vv.ansiScan = scan
+	backend := vv.Backend
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		ok := true
+		for pos < off {
+			if ctx.Err() != nil || (backend.ctx != nil && backend.ctx.Err() != nil) {
+				ok = false
+				break
 			}
+			n := off - pos
+			if n > ansiScanChunk {
+				n = ansiScanChunk
+			}
+			data, err := backend.readSearchAt(ctx.Context, pos, int(n))
+			if err != nil || len(data) == 0 {
+				// The colours above cannot be read: the plain ones stand,
+				// and are remembered so that the scan is not started again
+				// for every frame.
+				cur = base
+				break
+			}
+			if pos+int64(len(data)) < off {
+				// Cut the chunk at its last line break so that no sequence is
+				// split between two chunks.
+				if i := bytes.LastIndexByte(data, '\n'); i >= 0 {
+					data = data[:i+1]
+				}
+			}
+			cur = ansiStateOver(data, base, cur)
+			pos += int64(len(data))
 		}
-		state = ansiStateOver(data, base, state)
-		pos += int64(len(data))
-	}
-	vv.ansiCache = ansiStateCache{valid: true, base: base, size: size, off: off, state: state}
-	return state
+		ctx.RunOnUI(func() {
+			if vv.ansiScan != scan {
+				return
+			}
+			vv.ansiScan = nil
+			if !ok {
+				return
+			}
+			vv.ansiCache = ansiStateCache{valid: true, base: base, size: size, off: off, state: cur}
+			vtui.FrameManager.Redraw()
+		})
+	})
+	return base, false
+}
+
+// ansiScan is the background scan ansiStateAt has running: the colours at off
+// of a file of size, for the plain attribute base.
+type ansiScan struct {
+	base      uint64
+	size, off int64
 }
 
 // ansiStateCache remembers the result of the last ansiStateAt.

@@ -63,6 +63,8 @@ type ViewerView struct {
 
 	// ansiCache keeps the last ansiStateAt result (see ansi.go).
 	ansiCache ansiStateCache
+	// ansiScan is the background scan that is filling ansiCache, if any.
+	ansiScan *ansiScan
 
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets         []int64
@@ -717,7 +719,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 	ansiState := attr
 	if vv.AnsiMode && vv.TopOffset > 0 {
 		// A window that opens mid-file continues the colours above it.
-		ansiState = vv.ansiStateAt(vv.TopOffset, attr)
+		ansiState, _ = vv.ansiStateAt(vv.TopOffset, attr)
 	}
 	var hlLines []WindowLine
 	hlTexts := map[int64]string{}

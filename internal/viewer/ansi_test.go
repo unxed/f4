@@ -229,16 +229,16 @@ func TestANSIStateAtContinuesColoursFromAbove(t *testing.T) {
 	base := vtui.SetIndexBack(vtui.SetIndexFore(0, 7), 0)
 	vv := &ViewerView{Backend: vb}
 	still := int64(len("one\n\x1b[31mred\n"))
-	if got := vtui.GetIndexFore(vv.ansiStateAt(still, base)); got != 1 {
+	if got := vtui.GetIndexFore(ansiStateAtSync(t, vv, still, base)); got != 1 {
 		t.Errorf("fg %d at the second red line, want 1", got)
 	}
 	// Scrolling down uses the cached state and gives the same result as a
 	// scan from the start.
 	plain := int64(len("one\n\x1b[31mred\nstill red\n\x1b[0m"))
-	if got := vv.ansiStateAt(plain, base); got != base {
+	if got := ansiStateAtSync(t, vv, plain, base); got != base {
 		t.Errorf("state %#x after the reset, want the base %#x", got, base)
 	}
-	if got := vv.ansiStateAt(still, base); vtui.GetIndexFore(got) != 1 {
+	if got := ansiStateAtSync(t, vv, still, base); vtui.GetIndexFore(got) != 1 {
 		t.Errorf("fg %d scrolling back up, want 1", vtui.GetIndexFore(got))
 	}
 }
