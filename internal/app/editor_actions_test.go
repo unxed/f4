@@ -83,6 +83,7 @@ func TestEditorCopyPasteActionsWorkWhileEditMenuIsOpen(t *testing.T) {
 	if !RunAction("Editor.Copy") {
 		t.Fatal("Editor.Copy did not resolve the editor below the menu")
 	}
+	terminal.WaitForAsyncClipboard()
 	if got := vtui.GetClipboard(); got != "abc" {
 		t.Fatalf("menu copy clipboard = %q, want %q", got, "abc")
 	}

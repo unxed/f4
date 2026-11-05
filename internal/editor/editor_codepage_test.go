@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/piecetable"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtui"
 )
 
@@ -16,6 +17,7 @@ func TestEditorView_PastePreservesUnicodeAcrossCodepages(t *testing.T) {
 	source.SelActive = true
 	source.SelAnchorOffset = 0
 	source.CopySelection()
+	terminal.WaitForAsyncClipboard()
 	defer source.Close()
 
 	target := NewEditorView(piecetable.New(nil), nil, "")

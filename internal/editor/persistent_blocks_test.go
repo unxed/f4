@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -142,6 +143,7 @@ func TestPersistentVerticalBlock_Issue1729(t *testing.T) {
 	block := func() string {
 		vtui.SetClipboard("")
 		ev.CopySelection()
+		terminal.WaitForAsyncClipboard()
 		return vtui.GetClipboard()
 	}
 	want := block()
@@ -206,6 +208,7 @@ func TestPersistentVerticalBlockTransferAndLineEndings_Issue1729(t *testing.T) {
 				}
 				vtui.SetClipboard("")
 				ev.CopySelection()
+				terminal.WaitForAsyncClipboard()
 				if got := vtui.GetClipboard(); got != "bc\nhi" {
 					t.Fatalf("selected rectangle after transfer = %q, want %q", got, "bc\nhi")
 				}
