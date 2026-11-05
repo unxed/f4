@@ -976,9 +976,38 @@ func showEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtClose
 	ev.Mapped = mapped
 	ev.ResizeConsole(pf.LastW, pf.LastH)
 	ev.StartIndexing()
-	ev.OnClose = takeStartupEditorHook(v, path)
+	ev.OnClose = returnToOriginPanel(pf, takeStartupEditorHook(v, path))
 
 	vtui.FrameManager.AddScreen(ev)
+}
+
+// returnToOriginPanel wraps the close hook of an editor or viewer being opened
+// so that, with EditorReturnsToOriginPanel on, closing it makes the panel that
+// was active at opening active again, even if another panel was made active
+// while the editor was open (f4#2247). Off, the hook is untouched and the last
+// active panel stays, as in far2l and Far Manager.
+func returnToOriginPanel(pf *panel.PanelsFrame, prev func()) func() {
+	if pf == nil || !config.App.EditorReturnsToOriginPanel {
+		return prev
+	}
+	origin := pf.ActiveIdx
+	return func() {
+		if prev != nil {
+			prev()
+		}
+		if origin < 0 || origin > 1 || pf.ActiveIdx == origin {
+			return
+		}
+		if !pf.Wide && (origin != 0 || !pf.ShowLeftPanel) && (origin != 1 || !pf.ShowRightPanel) {
+			return
+		}
+		pf.ActiveIdx = origin
+		if pf.Wide {
+			pf.WidePanel = origin
+			pf.ResizeConsole(pf.LastW, pf.LastH)
+		}
+		pf.LastKey = 0
+	}
 }
 
 func findOpenedEditor(v vfs.VFS, path string) (*editor.EditorView, int) {
@@ -1217,6 +1246,7 @@ func showViewerMode(pf *panel.PanelsFrame, vv *viewer.ViewerView, path string, f
 		vv.HexAuto = false
 	}
 	vv.ResizeConsole(pf.LastW, pf.LastH)
+	vv.OnClose = returnToOriginPanel(pf, vv.OnClose)
 	vtui.FrameManager.AddScreen(vv)
 }
 

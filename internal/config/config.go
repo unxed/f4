@@ -667,6 +667,7 @@ type F4Config struct {
 	AutoSaveGUIWindow            bool
 	DefaultFileOpMode            int
 	QueueSmallOpsBypass          bool // small files in the queue need not wait for a long operation (f4#1894)
+	EditorReturnsToOriginPanel   bool // closing the editor or viewer returns to the panel it was opened from (f4#2247)
 	CopyThreads                  int  // files copied at once between local disks, 1..MaxCopyThreads; 1 is the single-file path (f4#1894)
 	FileOpPathDisplay            int
 	ClipboardImageFormat         string
@@ -884,6 +885,7 @@ var App = F4Config{
 	AutoSaveGUIWindow:               true,
 	DefaultFileOpMode:               0,
 	QueueSmallOpsBypass:             true,
+	EditorReturnsToOriginPanel:      false,
 	CopyThreads:                     1,
 	FileOpPathDisplay:               0,
 	ClipboardImageFormat:            "png",
@@ -1116,6 +1118,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 	}
 	_, _ = fmt.Sscanf(merged.GetString("Panel", "DefaultFileOpMode", "0"), "%d", &cfg.DefaultFileOpMode)
 	cfg.QueueSmallOpsBypass = merged.GetString("Panel", "QueueSmallOpsBypass", "1") != "0"
+	cfg.EditorReturnsToOriginPanel = merged.GetString("Panel", "EditorReturnsToOriginPanel", "0") == "1"
 	cfg.CopyThreads = 1
 	_, _ = fmt.Sscanf(merged.GetString("Panel", "CopyThreads", "1"), "%d", &cfg.CopyThreads)
 	cfg.CopyThreads = ClampCopyThreads(cfg.CopyThreads)
@@ -1480,6 +1483,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "ApplyCommandParallelism = %d\n", cfg.ApplyCommandParallelism)
 	fmt.Fprintf(&sb, "DefaultFileOpMode = %d\n", cfg.DefaultFileOpMode)
 	fmt.Fprintf(&sb, "QueueSmallOpsBypass = %d\n", map[bool]int{true: 1, false: 0}[cfg.QueueSmallOpsBypass])
+	fmt.Fprintf(&sb, "EditorReturnsToOriginPanel = %d\n", map[bool]int{true: 1, false: 0}[cfg.EditorReturnsToOriginPanel])
 	fmt.Fprintf(&sb, "CopyThreads = %d\n", cfg.CopyThreads)
 	fmt.Fprintf(&sb, "FileOpPathDisplay = %d\n", cfg.FileOpPathDisplay)
 	fmt.Fprintf(&sb, "CopyAccessRights = %d\n", cfg.CopyAccessRights)
