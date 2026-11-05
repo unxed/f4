@@ -1,6 +1,7 @@
 package viewer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -1090,6 +1091,27 @@ func (vv *ViewerView) gotoPosition(n int64) {
 		})
 	})
 }
+
+// tailRowData is the part of rest that jumpToEnd lays out as one row. Laying a
+// row out strips the ANSI sequences of everything it is given and allocates a
+// map of its bytes, so handing it the whole remainder of the 64 KiB read made
+// the cost of Ctrl+End, and of opening the terminal log at its end, grow with
+// rows times window: a large log of short lines kept the viewer on
+// "Loading..." for minutes (unxed/f4#2268). A wrapped row needs at most rowRead
+// bytes; an unwrapped one is a single line, so the data stops at its newline.
+func tailRowData(rest []byte, wrap bool, rowRead int) []byte {
+	if wrap {
+		if rowRead < len(rest) {
+			return rest[:rowRead]
+		}
+		return rest
+	}
+	if nl := bytes.IndexByte(rest, '\n'); nl >= 0 {
+		return rest[:nl+1]
+	}
+	return rest
+}
+
 func (vv *ViewerView) jumpToEnd() {
 	// End has to mean the end of the file as it is now, not as it was when
 	// the viewer opened it. That is what mc does, and it makes End the manual
@@ -1202,13 +1224,7 @@ func (vv *ViewerView) jumpToEnd() {
 			scanPos := 0
 			for scanPos < len(data) {
 				offsets = append(offsets, currOff+int64(scanPos))
-				rowData := data[scanPos:]
-				if wrapMode {
-					maxRowData := rowRead
-					if maxRowData < len(rowData) {
-						rowData = rowData[:maxRowData]
-					}
-				}
+				rowData := tailRowData(data[scanPos:], wrapMode, rowRead)
 				row := layoutViewerTextRowANSI(rowData, width, tabSize, wrapMode, ansiMode)
 				scanPos += row.lineLen
 				if !row.foundNewline && !wrapMode {
