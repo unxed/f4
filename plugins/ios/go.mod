@@ -52,7 +52,7 @@ require (
 	github.com/unxed/kiwi-go v0.1.0 // indirect
 	github.com/unxed/libwinescape v0.2.1 // indirect
 	github.com/unxed/localecp v0.1.7 // indirect
-	github.com/unxed/vtui v0.1.430 // indirect
+	github.com/unxed/vtui v0.1.431 // indirect
 	github.com/unxed/winkeys v0.1.2 // indirect
 	github.com/unxed/xkb-go v0.1.9 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect

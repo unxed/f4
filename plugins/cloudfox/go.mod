@@ -16,7 +16,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/unxed/f4 v0.0.0
 	github.com/unxed/vtinput v0.1.12
-	github.com/unxed/vtui v0.1.430
+	github.com/unxed/vtui v0.1.431
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.57.0
