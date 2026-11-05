@@ -730,6 +730,9 @@ func (pf *PanelsFrame) insertFileNameOf(fsp *FileSystemPanel) bool {
 	if name == "" {
 		return false
 	}
+	if !terminal.WindowsShellSyntax() {
+		name = pf.dotSlashName(fsp, name)
+	}
 	// Escape spaces and special characters for shell commands.
 	if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
 		if terminal.WindowsShellSyntax() {
@@ -744,6 +747,22 @@ func (pf *PanelsFrame) insertFileNameOf(fsp *FileSystemPanel) bool {
 	pf.CmdLine.InsertString(name + " ")
 	vtui.DebugLog("[FIX:ctrl-enter] inserted file name with trailing space")
 	return true
+}
+
+// dotSlashName adds the `./` that a POSIX shell needs to the name of the file
+// under the panel cursor (f4#2235, see withDotSlash).
+func (pf *PanelsFrame) dotSlashName(fsp *FileSystemPanel, name string) string {
+	idx := fsp.GetCursorIndex()
+	if idx < 0 || idx >= len(fsp.Entries) {
+		return name
+	}
+	entry := fsp.Entries[idx]
+	text := []rune(pf.CmdLine.Edit.GetText())
+	pos := pf.CmdLine.Edit.CursorPos()
+	if pos < 0 || pos > len(text) {
+		pos = len(text)
+	}
+	return withDotSlash(name, string(text[:pos]), entry.IsExecutable, entry.IsDir, defaultCommandWrappers)
 }
 
 // applyNavigationMode resets transient focus when the setting is changed.

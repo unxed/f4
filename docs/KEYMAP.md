@@ -58,6 +58,14 @@ No leading space is inserted, so an already typed path prefix stays attached
 to the filename. While Fast Find is active, `Ctrl+Enter` still finds the next
 match instead of inserting a filename.
 
+On a POSIX shell the filename gets a `./` prefix when it needs one (f4#2235):
+an executable file typed where a command goes (at the start of the line, after
+`;`, `&`, `|`, `(`, or after a wrapper such as `sudo`, `doas`, `time`, `nohup`,
+`env`, `exec`, `strace`, `xargs`), because a bare word is looked up in `PATH`
+and not in the current folder; and a name that starts with `-` anywhere, so
+that the command does not take it for an option. Any other name goes in as it
+is. Settings for this (always, never, the list of wrappers) are to follow.
+
 In the autofilter window (a lone Alt, or Panel.AutoFilter), `Ctrl+E` flips the
 "Exact match" option shown on the window's second line, as a click on that line
 does; the option is the same one as Settings > Panels > "Strict quick search"
