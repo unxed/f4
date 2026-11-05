@@ -16,6 +16,13 @@ type CommandLine struct {
 	Prompt                 string
 	RichPrompt             []vtui.CharInfo
 	AutoCompleteSuppressed bool
+
+	// Ctrl+End completion from the history (K-79): the text the walk started
+	// from, the text this walk put into the line, and where to go on from.
+	histBase string
+	histText string
+	histNext int
+	histLive bool
 }
 
 func NewCommandLine(prompt string) *CommandLine {
@@ -105,6 +112,9 @@ func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
 		clearLine(cl.Edit)
 		return true
 	}
+	if isCtrlEnd(e) && cl.completeFromHistory() {
+		return true
+	}
 	handled := cl.Edit.ProcessKey(e)
 	if handled && cl.Edit.HistoryPos != -1 {
 		// If a key was handled by the edit control, it means the text was modified.
@@ -163,6 +173,52 @@ func (cl *CommandLine) InsertString(text string) {
 func (cl *CommandLine) PasteText(text string) {
 	cl.Edit.InsertString(singleLine(text))
 	cl.Edit.HistoryPos = -1
+}
+
+// isCtrlEnd: Ctrl+End alone, no Alt and no Shift.
+func isCtrlEnd(e *vtinput.InputEvent) bool {
+	if e.Type != vtinput.KeyEventType || !e.KeyDown || e.VirtualKeyCode != vtinput.VK_END {
+		return false
+	}
+	mods := e.ControlKeyState & (vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed | vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed)
+	return mods == vtinput.LeftCtrlPressed || mods == vtinput.RightCtrlPressed
+}
+
+// completeFromHistory is Ctrl+End at the end of a non-empty line (K-79,
+// docs/FAR2L_COMPAT.md; unxed/f4#2139): the line becomes the newest history
+// entry that starts with it, and the same key again goes to the next older
+// one. After the last candidate the walk starts over from the typed text.
+// Anywhere else Ctrl+End is the plain move to the end of the line (K-73),
+// so false means "not handled here".
+func (cl *CommandLine) completeFromHistory() bool {
+	text := cl.Edit.GetText()
+	n := len([]rune(text))
+	if n == 0 || cl.Edit.CursorPos() != n {
+		return false
+	}
+	base, start := text, 0
+	if cl.histLive && text == cl.histText {
+		base, start = cl.histBase, cl.histNext
+	}
+	for i := start; i < len(cl.Edit.History); i++ {
+		h := cl.Edit.History[i]
+		if h == base || h == text || !strings.HasPrefix(h, base) {
+			continue
+		}
+		cl.Edit.SetText(h)
+		cl.Edit.SetCursorPos(len([]rune(h)))
+		cl.Edit.HistoryPos = -1
+		cl.histBase, cl.histText, cl.histNext, cl.histLive = base, h, i+1, true
+		return true
+	}
+	if cl.histLive && text != base {
+		// The walk is over: back to what was typed.
+		cl.Edit.SetText(base)
+		cl.Edit.SetCursorPos(len([]rune(base)))
+		cl.histLive = false
+		return true
+	}
+	return false
 }
 
 // clearLine is what Ctrl+Y does: the text goes, and history browsing with it.

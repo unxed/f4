@@ -321,6 +321,11 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 		nav:       []string{"BACK", "DELETE", "END", "HOME", "LEFT", "RIGHT"},
 		rationale: "the command line: Ctrl+E and Ctrl+X walk the history, the rest is editing",
 	},
+	"cmdline.isCtrlEnd": {
+		areas:     []string{"Shell"},
+		nav:       []string{"END"},
+		rationale: "Ctrl+End at the end of the command line completes it from the history (far2l K-79); plain End only moves the cursor",
+	},
 	"cmdline.isCtrlY": {
 		areas:     []string{"Shell"},
 		chords:    []string{"CtrlY"},
