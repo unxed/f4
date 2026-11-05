@@ -1139,9 +1139,13 @@ func (fp *FileSystemPanel) sortEntriesAt(now time.Time) {
 		case SortName:
 			cmp = compareName(ei.Name, ej.Name)
 		case SortExt:
-			cmp = compareName(filepath.Ext(ei.Name), filepath.Ext(ej.Name))
-			if cmp == 0 {
+			if ei.IsDir && ej.IsDir {
 				cmp = compareName(ei.Name, ej.Name)
+			} else {
+				cmp = compareName(filepath.Ext(ei.Name), filepath.Ext(ej.Name))
+				if cmp == 0 {
+					cmp = compareName(ei.Name, ej.Name)
+				}
 			}
 		case SortTime:
 			if ei.MTime.After(ej.MTime) {

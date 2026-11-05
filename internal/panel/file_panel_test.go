@@ -3508,6 +3508,33 @@ func TestFileSystemPanel_Sorting(t *testing.T) {
 	waitForLoad(t, fp)
 }
 
+func TestFileSystemPanel_SortExtSortsDirectoriesByName(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	fp := NewFileSystemPanel(0, 0, 80, 24, vfs.NewOSVFS(t.TempDir()))
+	waitForLoad(t, fp)
+
+	fp.Entries = []*FileEntry{
+		{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "zeta.a", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "alpha.z", IsDir: true}},
+		{VFSItem: vfs.VFSItem{Name: "zeta.txt"}},
+		{VFSItem: vfs.VFSItem{Name: "alpha.exe"}},
+	}
+
+	fp.SortMode = SortExt
+	fp.SortReverse = false
+	fp.SortEntries()
+
+	got := make([]string, len(fp.Entries))
+	for i, entry := range fp.Entries {
+		got[i] = entry.Name
+	}
+	want := []string{"..", "alpha.z", "zeta.a", "alpha.exe", "zeta.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SortExt entries = %v, want directories sorted by name and files by extension: %v", got, want)
+	}
+}
+
 // TestFileSystemPanel_SortNumeric covers f4#1471: with SortNumeric on, name
 // sort must treat the leading track number as a number ("2" before "10")
 // instead of comparing it as plain text ("10" before "2").
