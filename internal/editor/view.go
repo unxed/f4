@@ -6431,7 +6431,7 @@ func (ev *EditorView) DeleteSpacersForward() {
 func (ev *EditorView) CopySelection() {
 	if ev.RectSelActive {
 		GlobalLastClipboardWasRectangular = true
-		terminal.SetClipboardAsync(ev.rectSelectionText())
+		terminal.SetF4Clipboard(ev.rectSelectionText())
 		return
 	}
 
@@ -6441,7 +6441,7 @@ func (ev *EditorView) CopySelection() {
 		data, _ := ev.Pt.GetRange(min, max-min)
 		if data != nil {
 			text := string(data)
-			terminal.SetClipboardAsync(text)
+			terminal.SetF4Clipboard(text)
 			vtui.DebugLog("EDITOR: Copied %d bytes to clipboard", max-min)
 		}
 	}

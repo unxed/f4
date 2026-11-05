@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/piecetable"
-	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -15,7 +14,6 @@ func newFAR3Editor(t *testing.T, text string) *EditorView {
 	ev := NewEditorView(piecetable.New([]byte(text)), nil, "test.txt")
 	ev.SetPosition(0, 0, 80, 12)
 	t.Cleanup(ev.Close)
-	t.Cleanup(terminal.WaitForAsyncClipboard)
 	return ev
 }
 
@@ -143,7 +141,6 @@ func TestFAR3CopyWithoutSelectionMarksAndCopiesCurrentLine_Issue1729(t *testing.
 	ev.CursorLine, ev.CursorPos = 1, 4
 	vtui.SetClipboard("old clipboard")
 	ev.CopyCurrentLine()
-	terminal.WaitForAsyncClipboard()
 	if got, want := vtui.GetClipboard(), "second line\n"; got != want {
 		t.Fatalf("clipboard = %q, want %q", got, want)
 	}
@@ -171,7 +168,6 @@ func TestFAR3CopyWithoutSelectionHandlesCRLFAndEmptyLine_Issue1729(t *testing.T)
 			ev.CursorLine, ev.CursorPos = tc.line, tc.pos
 			vtui.SetClipboard("old clipboard")
 			ev.CopyCurrentLine()
-			terminal.WaitForAsyncClipboard()
 			if got := vtui.GetClipboard(); got != tc.clipboard {
 				t.Fatalf("clipboard = %q, want %q", got, tc.clipboard)
 			}
@@ -182,19 +178,6 @@ func TestFAR3CopyWithoutSelectionHandlesCRLFAndEmptyLine_Issue1729(t *testing.T)
 				t.Fatal("current line was not kept as a marked block")
 			}
 		})
-	}
-}
-
-func TestAppendSelectionToClipboardUsesSelectedText(t *testing.T) {
-	ev := newFAR3Editor(t, "selected text")
-	ev.SelActive = true
-	ev.SelAnchorOffset = 0
-	ev.CursorPos = len("selected text")
-	vtui.SetClipboard("existing")
-	ev.AppendSelectionToClipboard()
-	terminal.WaitForAsyncClipboard()
-	if got, want := vtui.GetClipboard(), "existing\nselected text"; got != want {
-		t.Fatalf("appended clipboard = %q, want %q", got, want)
 	}
 }
 

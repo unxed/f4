@@ -8,7 +8,6 @@ import (
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/piecetable"
-	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/f4/internal/textsearch"
 	"github.com/unxed/f4/internal/theme"
@@ -5281,7 +5280,6 @@ func TestEditorView_MouseBlockSelection_AltShiftCopiesAndKeepsSelection(t *testi
 	if !ev.RectSelActive {
 		t.Fatal("rectangular selection should remain highlighted after release")
 	}
-	terminal.WaitForAsyncClipboard()
 	if got, want := vtui.GetClipboard(), "bc\n23\nwx"; got != want {
 		t.Errorf("mouse rectangular copy = %q, want %q", got, want)
 	}
@@ -5305,7 +5303,6 @@ func TestEditorView_RectangularSelection_Copy(t *testing.T) {
 
 	vtui.SetClipboard("")
 	ev.CopySelection()
-	terminal.WaitForAsyncClipboard()
 
 	expected := "ine1\nine2\nine3"
 	if vtui.GetClipboard() != expected {

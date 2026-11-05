@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/piecetable"
-	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -61,7 +60,6 @@ func TestEditorShiftDelCutsOnEveryBackend(t *testing.T) {
 			if !ev.ProcessKey(e) {
 				t.Fatal("Shift+Del was not handled by the editor")
 			}
-			terminal.WaitForAsyncClipboard()
 
 			data, _ := ev.Pt.GetRange(0, ev.Pt.Size())
 			if got := string(data); got != " world" {

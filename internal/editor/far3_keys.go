@@ -181,25 +181,15 @@ func (ev *EditorView) AppendSelectionToClipboard() {
 		return
 	}
 	old := vtui.GetClipboard()
-	part := ""
-	if ev.RectSelActive {
-		GlobalLastClipboardWasRectangular = true
-		part = ev.rectSelectionText()
-	} else {
-		GlobalLastClipboardWasRectangular = false
-		min, max := ev.GetSelectionRange()
-		if max > min {
-			data, _ := ev.Pt.GetRange(min, max-min)
-			part = string(data)
-		}
-	}
+	ev.CopySelection()
+	part := vtui.GetClipboard()
 	if part == "" {
 		return
 	}
 	if old != "" && !strings.HasSuffix(old, "\n") {
 		old += "\n"
 	}
-	terminal.SetClipboardAsync(old + part)
+	terminal.SetF4Clipboard(old + part)
 }
 
 // CopyCurrentLine selects the current logical line as a persistent block and
@@ -216,7 +206,7 @@ func (ev *EditorView) CopyCurrentLine() {
 	ev.selEndOffset = lineEnd
 	if lineTextLength == 0 {
 		GlobalLastClipboardWasRectangular = false
-		terminal.SetClipboardAsync("")
+		terminal.SetF4Clipboard("")
 		return
 	}
 	ev.CopySelection()
