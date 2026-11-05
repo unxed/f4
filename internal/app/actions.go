@@ -976,7 +976,7 @@ func showEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtClose
 	ev.Mapped = mapped
 	ev.ResizeConsole(pf.LastW, pf.LastH)
 	ev.StartIndexing()
-	ev.OnClose = returnToOriginPanel(pf, takeStartupEditorHook(v, path))
+	ev.OnClose = returnToOriginPanel(pf, takeStartupEditorHook(v, path), ev)
 
 	vtui.FrameManager.AddScreen(ev)
 }
@@ -984,17 +984,22 @@ func showEditor(pf *panel.PanelsFrame, v vfs.VFS, path string, f vfs.ReadAtClose
 // returnToOriginPanel wraps the close hook of an editor or viewer being opened
 // so that, with EditorReturnsToOriginPanel on, closing it makes the panel that
 // was active at opening active again, even if another panel was made active
-// while the editor was open (f4#2247). Off, the hook is untouched and the last
-// active panel stays, as in far2l and Far Manager.
-func returnToOriginPanel(pf *panel.PanelsFrame, prev func()) func() {
+// while the editor was open (f4#2247). The same goes for the workspace: if the
+// editor was left for another workspace and came back to, closing it returns to
+// the workspace it was opened from, not to the one used last. Off, the hook is
+// untouched and the last active panel and workspace stay, as in far2l and Far
+// Manager. frame is the editor or viewer being opened.
+func returnToOriginPanel(pf *panel.PanelsFrame, prev func(), frame vtui.Frame) func() {
 	if pf == nil || !config.App.EditorReturnsToOriginPanel {
 		return prev
 	}
 	origin := pf.ActiveIdx
+	originScreen := activeAppScreen()
 	return func() {
 		if prev != nil {
 			prev()
 		}
+		returnToOriginWorkspace(originScreen, frame)
 		if origin < 0 || origin > 1 || pf.ActiveIdx == origin {
 			return
 		}
@@ -1008,6 +1013,48 @@ func returnToOriginPanel(pf *panel.PanelsFrame, prev func()) func() {
 		}
 		pf.LastKey = 0
 	}
+}
+
+// activeAppScreen is the workspace that is active now, nil if there is none.
+func activeAppScreen() *vtui.AppScreen {
+	fm := vtui.FrameManager
+	if fm == nil || fm.ActiveIdx < 0 || fm.ActiveIdx >= len(fm.Screens) {
+		return nil
+	}
+	return fm.Screens[fm.ActiveIdx]
+}
+
+// returnToOriginWorkspace makes origin the active workspace again after frame,
+// which sits in the active workspace, was closed. Without it the frame manager
+// goes back to the workspace that was in use before the closed one, which is
+// not the one the editor was opened from once the user switched around
+// (Ctrl+Tab) while it was open (f4#2247). The switch is queued: the frame is
+// being torn down right now, and the frame manager removes its workspace later.
+func returnToOriginWorkspace(origin *vtui.AppScreen, frame vtui.Frame) {
+	cur := activeAppScreen()
+	if origin == nil || cur == nil || cur == origin {
+		return
+	}
+	closing := false
+	for _, f := range cur.Frames {
+		if f == frame {
+			closing = true
+			break
+		}
+	}
+	if !closing {
+		return
+	}
+	vtui.FrameManager.PostTask(func() {
+		for i, s := range vtui.FrameManager.Screens {
+			if s == origin {
+				if i != vtui.FrameManager.ActiveIdx {
+					vtui.FrameManager.SwitchScreen(i)
+				}
+				return
+			}
+		}
+	})
 }
 
 func findOpenedEditor(v vfs.VFS, path string) (*editor.EditorView, int) {
@@ -1246,7 +1293,7 @@ func showViewerMode(pf *panel.PanelsFrame, vv *viewer.ViewerView, path string, f
 		vv.HexAuto = false
 	}
 	vv.ResizeConsole(pf.LastW, pf.LastH)
-	vv.OnClose = returnToOriginPanel(pf, vv.OnClose)
+	vv.OnClose = returnToOriginPanel(pf, vv.OnClose, vv)
 	vtui.FrameManager.AddScreen(vv)
 }
 

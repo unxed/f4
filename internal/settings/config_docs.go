@@ -78,8 +78,8 @@ var configOptionExtraDocs = map[string]string{
 		"Ctrl+PgDn still opens them. A far2l file mask: \"|\" starts the exceptions to it. Empty by default.",
 	"Panel.QueueSmallOpsBypass": "1 lets an operation in the queue on at most 100 files and no folders, of at most 16 MB in all, start while a long one holds the same device, " +
 		"when none of its paths is or lies under a path of a running operation. 0 makes it wait its turn.",
-	"Panel.EditorReturnsToOriginPanel": "1 makes closing the editor or viewer return to the panel it was opened from, even if another panel was made active while it was open (f4#2247). " +
-		"0, the default and the way far2l and Far Manager behave, leaves the panel that was active last.",
+	"Panel.EditorReturnsToOriginPanel": "1 makes closing the editor or viewer return to the panel and workspace it was opened from, even if another panel or workspace was made active while it was open (f4#2247). " +
+		"0, the default and the way far2l and Far Manager behave, leaves the panel and workspace that were active last.",
 	"Panel.CopyThreads": "How many files a copy between two local disks works on at once, 1 to 16 (f4#1894). 1, the default, copies one file at a time, as always. " +
 		"The multi-threaded engine is being built in steps: until it is connected, values above 1 change nothing.",
 	"Panel.DriveMenuOptions": "The drive menu options as a bit mask, one bit per option of Settings Center, Drive chooser; the final bit hides the Links section so old settings keep showing it:",
