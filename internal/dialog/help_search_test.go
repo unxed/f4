@@ -306,7 +306,10 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 	}
 	// f4#904: the maximized window's own top border, with its zoom/collapse
 	// button, must stay inside the visible screen rather than being scrolled
-	// out from under the tab bar.
+	// out from under the tab bar. The frame draws its own title buttons now
+	// (BaseWindow, with the mouse-over tint), so draw it before the host
+	// decorations, as the FrameManager does.
+	view.Show(scr)
 	RenderHelpFrame(scr, view)
 	if got := testutil.Rune(scr.GetCell(maxX2-6, maxY1).Char); got != vtui.UIStrings.ZoomSymbol {
 		t.Fatalf("maximized top border zoom symbol = %q, want %q", got, vtui.UIStrings.ZoomSymbol)
@@ -323,6 +326,7 @@ func TestHelpShowsZoomButtonAndRestoresPreviousBounds(t *testing.T) {
 		t.Fatalf("restored bounds=(%d,%d)-(%d,%d), want (%d,%d)-(%d,%d)", gotX1, gotY1, gotX2, gotY2, x1, y1, x2, y2)
 	}
 	// The collapsed-back window keeps the same working top border too.
+	view.Show(scr)
 	RenderHelpFrame(scr, view)
 	if got := testutil.Rune(scr.GetCell(gotX2-6, gotY1).Char); got != vtui.UIStrings.ZoomSymbol {
 		t.Fatalf("restored top border zoom symbol = %q, want %q", got, vtui.UIStrings.ZoomSymbol)
@@ -533,5 +537,53 @@ func TestHelpTitleButtonsFollowTheButtonStyle(t *testing.T) {
 				t.Errorf("left cell of the close button = %q, want %q", got, tc.left)
 			}
 		})
+	}
+}
+
+// The Help window's title buttons are drawn by BaseWindow once the zoom button
+// is on, with the tint under the mouse; RenderHelpFrame must not paint over
+// them on every frame (f4#285).
+func TestHelpTitleButtonsKeepTheirMouseOverTint(t *testing.T) {
+	oldStyle, oldBackend := vtui.CurrentGlyphStyle(), vtui.ActiveBackend()
+	t.Cleanup(func() {
+		vtui.SetGlyphStyle(oldStyle)
+		vtui.SetActiveBackend(oldBackend)
+	})
+	vtui.SetGlyphStyle(vtui.GlyphStyleRounded)
+	vtui.SetActiveBackend("test-gui")
+	view, scr := newSearchableHelpForTestAtSize(t, 80, 40, []string{"Help text"})
+	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	_, y1, x2, _ := view.GetPosition()
+	zoomX, closeX := x2-6, x2-3
+	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	zoomPlain := scr.GetCell(zoomX, y1).Attributes
+	closePlain := scr.GetCell(closeX, y1).Attributes
+
+	view.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, MouseX: int16(zoomX), MouseY: int16(y1), //nolint:gosec // small test coordinates
+		MouseEventFlags: vtinput.MouseMoved,
+	})
+	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	if got := scr.GetCell(zoomX, y1).Attributes; got == zoomPlain {
+		t.Errorf("zoom button under the mouse keeps its plain attributes %#x", got)
+	}
+	if got := scr.GetCell(closeX, y1).Attributes; got != closePlain {
+		t.Errorf("close button not under the mouse changed attributes: %#x, want %#x", got, closePlain)
+	}
+
+	view.ProcessMouse(&vtinput.InputEvent{
+		Type: vtinput.MouseEventType, MouseX: int16(closeX), MouseY: int16(y1), //nolint:gosec // small test coordinates
+		MouseEventFlags: vtinput.MouseMoved,
+	})
+	view.Show(scr)
+	RenderHelpFrame(scr, view)
+	if got := scr.GetCell(zoomX, y1).Attributes; got != zoomPlain {
+		t.Errorf("zoom button after the mouse left it: %#x, want %#x", got, zoomPlain)
+	}
+	if got := scr.GetCell(closeX, y1).Attributes; got == closePlain {
+		t.Errorf("close button under the mouse keeps its plain attributes %#x", got)
 	}
 }

@@ -422,9 +422,10 @@ var keyInventoryVTUIAudit = map[string]keyInventoryEntry{
 	"vtui.(*Edit).ProcessKey": {
 		areas:  []string{"Shell"},
 		chords: []string{"CtrlA", "CtrlE", "CtrlX", "CtrlC", "CtrlIns", "CtrlV", "ShiftDel", "ShiftIns", "Enter"},
-		nav:    []string{"BACK", "DELETE", "DOWN", "END", "HOME", "INSERT", "LEFT", "RIGHT", "Char ' '", "Char '\\n'", "Char '\\r'"},
+		nav:    []string{"BACK", "DELETE", "DOWN", "END", "HOME", "INSERT", "LEFT", "RIGHT", "Char ' '", "Char '\\n'", "Char '\\r'", "K"},
 		rationale: "the input line under the command line; in the panels the hotkey table takes Ctrl+A, Ctrl+C, Ctrl+V and the clipboard keys before it. " +
-			"A space and the line breaks are characters of a paste or of typing",
+			"A space and the line breaks are characters of a paste or of typing. K is vtui's Far-style Ctrl+K (delete to the end of the line), " +
+			"which only works with Edit.FarKeys; f4 leaves that off, so the key stays a plain letter here",
 	},
 }
 

@@ -9,7 +9,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/unxed/f4 v0.0.0
 	github.com/unxed/vtinput v0.1.12
-	github.com/unxed/vtui v0.1.422 // indirect
+	github.com/unxed/vtui v0.1.429 // indirect
 )
 
 require (
@@ -94,9 +94,7 @@ replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 // gogpu with drag callbacks and the macOS display-scale fix (see ../../go.mod).
 replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.2
 
-// vtui and gg with the f4 --gui memory and idle CPU fixes (see ../../go.mod).
-replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1
-
+// gg with the f4 --gui memory fixes (see ../../go.mod).
 replace github.com/gogpu/gg => github.com/sogonov/gg v0.52.6-memory.1
 
 replace github.com/neurlang/wayland => github.com/unxed/wayland v0.4.5-0.20260924170549-04f3e691fadc

@@ -37,7 +37,7 @@ require (
 	github.com/unxed/sevenzip v0.1.8
 	github.com/unxed/tar v0.1.141
 	github.com/unxed/vtinput v0.1.12
-	github.com/unxed/vtui v0.1.422
+	github.com/unxed/vtui v0.1.429
 	github.com/unxed/zip v0.1.146
 	github.com/unxed/zipper v0.1.178
 	github.com/vmihailenco/msgpack/v5 v5.4.1
@@ -228,14 +228,11 @@ replace github.com/go-webgpu/goffi => github.com/unxed/goffi v0.1.11
 // Includes gogpu/gogpu#502: synchronize the macOS layer when display scale changes.
 replace github.com/gogpu/gogpu => github.com/unxed/gogpu v0.53.1-drag.1-altgr.2
 
-// f4 --gui memory and idle CPU, until upstream merges and tags them (tracked
-// in docs/UPSTREAM.md): vtui v0.1.422 with unxed/vtui#250 (fallback fonts from
-// the cmap table), unxed/vtui#251 (no MSAA) and unxed/vtui#253 (caret blink on
-// the held frame), and gg v0.52.5 with gogpu/gg#546 (one copy of each font)
-// and gogpu/gg#547 (SetAcceleratorMaxSampleCount). The plugin modules carry
-// the same lines.
-replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1
-
+// f4 --gui memory, until upstream merges and tags it (tracked in
+// docs/UPSTREAM.md): gg v0.52.5 with gogpu/gg#546 (one copy of each font) and
+// gogpu/gg#547 (SetAcceleratorMaxSampleCount). vtui's part (unxed/vtui#250,
+// #251, #253) is in vtui v0.1.429 and needs no replace. The plugin modules
+// carry the same line.
 replace github.com/gogpu/gg => github.com/sogonov/gg v0.52.6-memory.1
 
 replace github.com/unxed/f4/plugins/android => ./plugins/android

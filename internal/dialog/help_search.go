@@ -513,19 +513,34 @@ func fitHelpBounds(bounds helpWindowBounds) helpWindowBounds {
 	return bounds
 }
 
-func enableHelpZoom(frame vtui.Frame) bool {
+// helpZoomShown reports whether the frame already has its zoom button turned
+// on, that is, whether BaseWindow has drawn it (with the hover tint) itself.
+func helpZoomShown(frame vtui.Frame) bool {
+	field, ok := helpZoomField(frame)
+	return ok && field.Bool()
+}
+
+func helpZoomField(frame vtui.Frame) (reflect.Value, bool) {
 	value := reflect.ValueOf(frame)
 	for value.IsValid() && (value.Kind() == reflect.Pointer || value.Kind() == reflect.Interface) {
 		if value.IsNil() {
-			return false
+			return reflect.Value{}, false
 		}
 		value = value.Elem()
 	}
 	if !value.IsValid() || value.Kind() != reflect.Struct {
-		return false
+		return reflect.Value{}, false
 	}
 	field := value.FieldByName("ShowZoom")
-	if !field.IsValid() || field.Kind() != reflect.Bool || !field.CanSet() {
+	if !field.IsValid() || field.Kind() != reflect.Bool {
+		return reflect.Value{}, false
+	}
+	return field, true
+}
+
+func enableHelpZoom(frame vtui.Frame) bool {
+	field, ok := helpZoomField(frame)
+	if !ok || !field.CanSet() {
 		return false
 	}
 	field.SetBool(true)
@@ -579,7 +594,12 @@ func RenderHelpFrame(scr *vtui.ScreenBuf, frame vtui.Frame) {
 	if currentHelpZoom != nil && currentHelpZoom.frame == frame {
 		helpZoomFrameShown = true
 	}
-	if !isMarkdownSearchFrame(frame) && enableHelpZoom(frame) {
+	// Once ShowZoom is on, BaseWindow draws both title buttons itself, with
+	// their mouse-over tint (f4 #285); only the first frame, which was drawn
+	// before ShowZoom flipped, needs the buttons painted here. Painting them on
+	// every frame would draw over the tint.
+	zoomWasShown := helpZoomShown(frame)
+	if !isMarkdownSearchFrame(frame) && enableHelpZoom(frame) && !zoomWasShown {
 		defer drawHelpWindowControls(scr, frame)
 	}
 

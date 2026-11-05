@@ -275,8 +275,6 @@ github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0t
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/sogonov/gg v0.52.6-memory.1 h1:KZI14wK8CcvU7gh/OFlEOLnhpt8lyF+3zV+ZtHTxxnM=
 github.com/sogonov/gg v0.52.6-memory.1/go.mod h1:mKiEGiR8lT7BCECfSoxRYBQ96HrDc0DHv/CNDxYQG5M=
-github.com/sogonov/vtui v0.1.423-memcpu.1 h1:dA9xB3oT0+6eahIrOzfC46zJCMySnK2Jv6k18mYEkl4=
-github.com/sogonov/vtui v0.1.423-memcpu.1/go.mod h1:AYMsa1uE4noqEn/6B4Myp7RhCUCfEFGxmp2pvzCUEpM=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8 h1:TG/diQgUe0pntT/2D9tmUCz4VNwm9MfrtPr0SU2qSX8=
 github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8/go.mod h1:P5HUIBuIWKbyjl083/loAegFkfbFNx5i2qEP4CNbm7E=
 github.com/soniakeys/quant v1.0.0 h1:N1um9ktjbkZVcywBVAAYpZYSHxEfJGzshHCxx/DaI0Y=
@@ -353,6 +351,8 @@ github.com/unxed/tar v0.1.141 h1:wuI5d2cRVlUhm5eu5mfkjTqRoqWCwEM27y9eIyc0MpY=
 github.com/unxed/tar v0.1.141/go.mod h1:as13Y8SVJ65FGs+pSS1rLMuMKKmtcmVc2HTA8kQnFtQ=
 github.com/unxed/vtinput v0.1.12 h1:asfKfTrDBEsltIFHiK7QSDg+mSQQKVBF66ypE3p1fps=
 github.com/unxed/vtinput v0.1.12/go.mod h1:lwwcC3nbHH0nrmxCb9jeIIcQbXHQsMYHctO0P0zvgiw=
+github.com/unxed/vtui v0.1.429 h1:BpZ6Qe1+pRHx9p73/3C0v5fdgfmC388yMP4N99XDwFA=
+github.com/unxed/vtui v0.1.429/go.mod h1:AYMsa1uE4noqEn/6B4Myp7RhCUCfEFGxmp2pvzCUEpM=
 github.com/unxed/winkeys v0.1.2 h1:uYlTpa37SeSEKDPKSn3H4WdbIQ6QS5Ouudy9TUAB2N0=
 github.com/unxed/winkeys v0.1.2/go.mod h1:eCDbEJFdYcii0Fd4O9u+CAqjJ4SkkhWDkhikNFwBCd4=
 github.com/unxed/xkb-go v0.1.9 h1:t2lhW6bcPxzX/1DBf9jIRoo13KhMm9+XUPJT4o5a/Kw=

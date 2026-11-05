@@ -64,7 +64,7 @@ Checked on 2026-09-25 for every open PR in the tables below:
 | [neurlang/wayland](#neurlangwayland) | unxed/wayland | 2 | 1 | 0 | nothing |
 | [nwaples/rardecode](#nwaplesrardecode) | unxed/rardecode (branches only) | 0 | 3 | 0 | nothing |
 | [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu; sogonov/gg `f4/memory-v0.52` | 2 | 3 | 0 | nothing |
-| [unxed/vtui](#unxedvtui) | sogonov/vtui `f4/memory-cpu` | 0 | 3 + 1 issue | 0 | nothing |
+| [unxed/vtui](#unxedvtui) | none (merged and tagged in v0.1.429) | 3 | 1 issue | 0 | nothing |
 | [alecthomas/chroma](#alecthomaschroma) | unxed/chroma | 1 | 0 | 0 | nothing |
 | [korli/go](#korligo-go-for-haiku) (Go for Haiku) | unxed/go | 0 | 0 | 0 | nothing |
 
@@ -245,20 +245,19 @@ under unxed first is the owner's call.
 
 ## unxed/vtui
 
-f4's own UI library, listed here because f4 takes these changes from a fork
-by `replace` until they are merged and tagged.
+f4's own UI library, listed here because f4 took these changes from a fork
+by `replace` until they were merged and tagged.
 
 | PR | What | State |
 | --- | --- | --- |
-| [#250](https://github.com/unxed/vtui/pull/250) | GUI fallback fonts: coverage from the cmap table instead of parsing every font at start (about 820 MB of garbage on macOS); Menlo and Apple Symbols ahead of the CJK fonts; color bitmap fonts passed over | Open since 2026-10-25, CI green |
-| [#251](https://github.com/unxed/vtui/pull/251) | gogpu: ask gg for 1x MSAA (through the method gogpu/gg#547 adds; a no-op with older gg) | Open since 2026-10-25, CI green |
-| [#253](https://github.com/unxed/vtui/pull/253) | gogpu: the idle heartbeat blinks the caret on the held frame instead of calling `Redraw`; an unfocused window holds the caret still | Open since 2026-10-25, CI green |
+| [#250](https://github.com/unxed/vtui/pull/250) | GUI fallback fonts: coverage from the cmap table instead of parsing every font at start (about 820 MB of garbage on macOS); Menlo and Apple Symbols ahead of the CJK fonts; color bitmap fonts passed over | Merged, in vtui v0.1.429 |
+| [#251](https://github.com/unxed/vtui/pull/251) | gogpu: ask gg for 1x MSAA (through the method gogpu/gg#547 adds; a no-op with older gg) | Merged, in vtui v0.1.429 |
+| [#253](https://github.com/unxed/vtui/pull/253) | gogpu: the idle heartbeat blinks the caret on the held frame instead of calling `Redraw`; an unfocused window holds the caret still | Merged, in vtui v0.1.429 |
 | [Issue #252](https://github.com/unxed/vtui/issues/252) | gogpu: redraw only the damaged cells. For later, the author takes it himself | Open |
 
-f4 uses all three through
-`replace github.com/unxed/vtui => github.com/sogonov/vtui v0.1.423-memcpu.1`
-(branch `f4/memory-cpu`: v0.1.422 with the three PRs). Once vtui tags a
-release with them, drop the replace and require that release.
+f4 requires vtui v0.1.429, which has all three, so the `replace` of
+`github.com/unxed/vtui` by sogonov/vtui `v0.1.423-memcpu.1` (and its copies in
+the plugin modules) is gone.
 
 The `replace` lines are repeated in plugins/android, ios and cloudfox, as the
 gogpu one is.
