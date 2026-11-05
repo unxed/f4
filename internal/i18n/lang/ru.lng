@@ -2320,6 +2320,7 @@ Attributes.LinkKindJunction=Тип ссылки: связь каталогов (
 Attributes.HardLinks=Жёстких ссылок: %d
 Attributes.MTime=Изменён:
 Attributes.LastWrite=Изменён:
+Attributes.UTC=&UTC
 Attributes.Created=Создан:
 Attributes.Accessed=Доступ:
 Attributes.Changed=Метаданные:

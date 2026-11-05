@@ -2320,6 +2320,7 @@ Attributes.LinkKindJunction=Link type: directory junction
 Attributes.HardLinks=Hard links: %d
 Attributes.MTime=Modified:
 Attributes.LastWrite=Last write:
+Attributes.UTC=&UTC
 Attributes.Created=Created:
 Attributes.Accessed=Accessed:
 Attributes.Changed=Metadata:

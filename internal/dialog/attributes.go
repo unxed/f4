@@ -506,6 +506,13 @@ func setWindowsAttributesForTargets(ctx context.Context, v vfs.VFS, targets []At
 // below uses the localized i18n.Msg("Attributes.MTimeFormatHint") instead.
 const attributesTimeFormat = "02.01.2006 15:04:05"
 
+func parseAttributesTime(text string, utc bool) (time.Time, error) {
+	if utc {
+		return time.Parse(attributesTimeFormat, text)
+	}
+	return time.ParseInLocation(attributesTimeFormat, text, time.Local)
+}
+
 // attributesSelectionSummary names a multiple selection the way far2l's
 // attributes dialog does, "selected 3 items (dirs: 1, files: 2)", so the
 // dialog describes what Set will change instead of naming its first object.
@@ -835,6 +842,7 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 	if showRecursive {
 		height++
 	}
+	height++ // UTC input checkbox
 
 	dlg := vtui.NewCenteredDialog(width, height, i18n.Msg("Attributes.Title"))
 	dlg.ShowClose = true
@@ -934,6 +942,9 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 	dlg.AddItem(lblTime)
 	dlg.AddItem(editMTime)
 	mainVBox.Add(rowTime, vtui.Margins{Top: 0}, vtui.AlignFill)
+	cbUTC := vtui.NewCheckbox(0, 0, i18n.Msg("Attributes.UTC"), false)
+	dlg.AddItem(cbUTC)
+	mainVBox.Add(cbUTC, vtui.Margins{Top: 0}, vtui.AlignLeft)
 
 	if showChanged {
 		rowChanged = attributesReadOnlyTimeRow(dlg, mainVBox, 66, 2, i18n.Msg("Attributes.Changed"), changedText)
@@ -974,6 +985,7 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 	// --- ПЕРВЫЙ ПРОХОД: Позиционируем контейнеры в диалоге ---
 	mainVBox.Apply()
 	rowTime.Apply()
+	cbUTC.Apply()
 	if rowCreated != nil {
 		rowCreated.Apply()
 	}
@@ -1130,7 +1142,7 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 			edit.gid, edit.setGid = lookupUnixGid(text)
 		}
 		if text := editMTime.GetText(); text != initialMTime {
-			t, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+			t, err := parseAttributesTime(text, cbUTC.State == 1)
 			if err != nil {
 				// f4 #1404: a garbled date used to be silently dropped —
 				// nothing applied, nothing said why.
@@ -1141,7 +1153,7 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		}
 		if editAccessed != nil {
 			if text := editAccessed.GetText(); text != initialAccessed {
-				t, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+				t, err := parseAttributesTime(text, cbUTC.State == 1)
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), i18n.Msg("Attributes.MTimeFormatHint")), []string{"&Ok"})
 					return
@@ -1151,7 +1163,7 @@ func ShowAttributesUnixForTargets(refresh func(), v vfs.VFS, targets []Attribute
 		}
 		if editCreated != nil {
 			if text := editCreated.GetText(); text != initialCreated {
-				t, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+				t, err := parseAttributesTime(text, cbUTC.State == 1)
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), i18n.Msg("Attributes.MTimeFormatHint")), []string{"&Ok"})
 					return
@@ -1285,6 +1297,7 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 			height++
 		}
 	}
+	height++ // UTC input checkbox
 
 	// f4#1828: the target of a single link is editable here as it is in the
 	// Unix-shaped dialog. A link whose target cannot be read gets no field,
@@ -1391,6 +1404,9 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	dlg.AddItem(lblTime)
 	dlg.AddItem(editMTime)
 	mainVBox.Add(rowTime, vtui.Margins{Top: 1}, vtui.AlignFill)
+	cbUTC := vtui.NewCheckbox(0, 0, i18n.Msg("Attributes.UTC"), false)
+	dlg.AddItem(cbUTC)
+	mainVBox.Add(cbUTC, vtui.Margins{Top: 0}, vtui.AlignLeft)
 
 	var rowCreated, rowAccessed *vtui.HBoxLayout
 	// Created is editable where the platform can set a creation time (native
@@ -1482,6 +1498,7 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 	// Apply first pass
 	mainVBox.Apply()
 	rowTime.Apply()
+	cbUTC.Apply()
 	if rowLinkTarget != nil {
 		rowLinkTarget.Apply()
 	}
@@ -1615,7 +1632,7 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 			}
 		}
 		if text := editMTime.GetText(); text != initialMTime {
-			nt, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+			nt, err := parseAttributesTime(text, cbUTC.State == 1)
 			if err != nil {
 				// f4 #1404: a garbled date used to be silently dropped —
 				// nothing applied, nothing said why.
@@ -1626,7 +1643,7 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 		}
 		if editAccessed != nil {
 			if text := editAccessed.GetText(); text != initialAccessed {
-				nt, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+				nt, err := parseAttributesTime(text, cbUTC.State == 1)
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), i18n.Msg("Attributes.MTimeFormatHint")), []string{"&Ok"})
 					return
@@ -1636,7 +1653,7 @@ func ShowAttributesWindowsWithPropertiesForTargets(
 		}
 		if editCreated != nil {
 			if text := editCreated.GetText(); text != initialCreated {
-				nt, err := time.ParseInLocation(attributesTimeFormat, text, time.Local)
+				nt, err := parseAttributesTime(text, cbUTC.State == 1)
 				if err != nil {
 					vtui.ShowMessage(" Error ", fmt.Sprintf(i18n.Msg("Attributes.MTimeInvalidError"), i18n.Msg("Attributes.MTimeFormatHint")), []string{"&Ok"})
 					return
