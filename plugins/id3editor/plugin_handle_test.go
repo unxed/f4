@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/id3-go"
@@ -170,6 +171,42 @@ func TestHandleEditOpensAndSavesSelectedMP3(t *testing.T) {
 	}
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestHandleEditPreservesModificationTimeWhenConfigured(t *testing.T) {
+	oldConfigDir := vfs.CustomConfigDir
+	vfs.CustomConfigDir = t.TempDir()
+	t.Cleanup(func() { vfs.CustomConfigDir = oldConfigDir })
+	if err := saveID3EditorSettings(id3EditorSettings{PreserveModTime: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	path := writeID3TestFile(t)
+	want := time.Date(2020, time.January, 2, 3, 4, 5, 0, time.Local)
+	if err := os.Chtimes(path, want, want); err != nil {
+		t.Fatal(err)
+	}
+	newID3FrameManager(t)
+	app := &id3AppStub{activeVFS: vfs.NewOSVFS(filepath.Dir(path)), selected: []string{filepath.Base(path)}}
+	(&ID3EditorPlugin{}).handleEdit(app)
+	dlg := vtui.FrameManager.GetTopFrame().(*vtui.Window)
+	var save *vtui.Button
+	for _, child := range dlg.GetChildren() {
+		if button, ok := child.(*vtui.Button); ok && button.IsDefault {
+			save = button
+		}
+	}
+	if save == nil || save.OnClick == nil {
+		t.Fatal("save button callback is not installed")
+	}
+	save.OnClick()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(want) {
+		t.Errorf("modification time = %v, want %v", info.ModTime(), want)
 	}
 }
 

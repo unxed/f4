@@ -2,6 +2,7 @@ package id3editor
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -13,12 +14,21 @@ import (
 )
 
 type ID3EditorPlugin struct {
-	api          vfs.HostAPI
-	registration vfs.Registration
+	api                  vfs.HostAPI
+	registration         vfs.Registration
+	settingsRegistration vfs.Registration
 }
 
 func (p *ID3EditorPlugin) Init(api vfs.HostAPI) error {
 	p.api = api
+	if settingsHost, ok := api.(vfs.SettingsContributionHost); ok {
+		registration, err := settingsHost.RegisterSettingsProvider(id3SettingsProvider())
+		if err != nil {
+			p.api = nil
+			return fmt.Errorf("ID3 editor: register settings: %w", err)
+		}
+		p.settingsRegistration = registration
+	}
 	if contributions, ok := api.(vfs.ContributionHost); ok {
 		registration, err := contributions.RegisterPluginCommand(vfs.PluginCommand{
 			ID:             "id3editor.edit",
@@ -45,6 +55,10 @@ func (p *ID3EditorPlugin) Init(api vfs.HostAPI) error {
 }
 
 func (p *ID3EditorPlugin) Close() error {
+	if p.settingsRegistration != nil {
+		p.settingsRegistration.Unregister()
+		p.settingsRegistration = nil
+	}
 	if p.registration != nil {
 		p.registration.Unregister()
 		p.registration = nil
@@ -125,6 +139,7 @@ func (p *ID3EditorPlugin) handleEdit(app vfs.App) {
 }
 
 func (p *ID3EditorPlugin) showEditorDialog(app vfs.App, fullPath string) {
+	original, statErr := os.Stat(fullPath)
 	file, err := id3.Open(fullPath)
 	if err != nil {
 		app.Message(" Error ", fmt.Sprintf(vtui.Msg("ID3Editor.OpenError"), err), []string{"&Ok"})
@@ -256,6 +271,9 @@ func (p *ID3EditorPlugin) showEditorDialog(app vfs.App, fullPath string) {
 
 		err := file.Close()
 		closed = true
+		if err == nil && statErr == nil && loadID3EditorSettings().PreserveModTime {
+			err = os.Chtimes(fullPath, original.ModTime(), original.ModTime())
+		}
 		if err != nil {
 			app.Message(" Error ", fmt.Sprintf(vtui.Msg("ID3Editor.SaveError"), err), []string{"&Ok"})
 			return
