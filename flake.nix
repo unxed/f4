@@ -48,7 +48,7 @@
           # CloudFox modules: after a dependency change nix build
           # fails with "hash mismatch in fixed-output derivation ... got:
           # sha256-...", and that got: value is the new vendorHash.
-          vendorHash = "sha256-m4C6JvIROF1i/Hf3cbkjF6Z1TdojglOzR/FaWiXazIk=";
+          vendorHash = "sha256-tUxyM2o7YMMyMmJgLSUqj+00Pd3XW5PUEDBNygABC4Q=";
 
           subPackages = [ "cmd/f4" ];
           tags = lib.optionals ttyOnly [ "tty_only" "vtui_noebiten" "vtui_nogogpu" ];
