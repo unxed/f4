@@ -66,6 +66,10 @@ type FileDialog struct {
 
 	height   int
 	relayout func()
+
+	// WheelHistory is the history field that opens its list on the mouse
+	// wheel anywhere in the dialog (f4#2124); nil leaves the wheel alone.
+	WheelHistory *vtui.Edit
 }
 
 // NewFileDialog opens a centered dialog of the shared width and the given
@@ -83,6 +87,9 @@ func NewFileDialog(title string, height int) *FileDialog {
 // dialog: the width follows the f4 window and the height is fixed, so letting
 // the user stretch the dialog only left the controls behind (f4#891).
 func (d *FileDialog) ProcessMouse(e *vtinput.InputEvent) bool {
+	if OpenHistoryOnWheel(e, d.WheelHistory) {
+		return true
+	}
 	if e != nil && e.Type == vtinput.MouseEventType && e.ButtonState == vtinput.FromLeft1stButtonPressed && e.KeyDown &&
 		int(e.MouseX) == d.X2 && int(e.MouseY) == d.Y2 {
 		return true

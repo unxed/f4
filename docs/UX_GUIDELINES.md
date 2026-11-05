@@ -173,6 +173,13 @@ New File uses the same width calculation on opening and screen resizing:
 `min(screenWidth, max(30, screenWidth/2))`. It keeps its empty initial input,
 path hints and `NewEdit` history. Select/Deselect Group open 40 cells wide.
 
+In the name fields of New File (Shift+F4), Copy and Move (F5, F6) and Make Folder
+(F7) a left click in the field only places the cursor (`vtui.Edit.HistoryButtonOnly`).
+The history list opens on the arrow at the right edge of the field, on Ctrl+Down, or on the mouse wheel
+anywhere inside the dialog, and the open list scrolls with the wheel. The wheel
+outside the dialog frame does not reach the dialog (the modal dialog keeps it).
+Other history fields keep opening the list on a click.
+
 #### Groups (`RadioGroup`, `CheckGroup`)
 
 *   **Interaction Model:** These components separate the concepts of *cursor* and *selection*.

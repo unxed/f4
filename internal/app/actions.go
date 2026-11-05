@@ -2277,6 +2277,10 @@ func actionNewFile(pf *panel.PanelsFrame) {
 		// The prompt opens on the last name entered here, selected, as Far
 		// does: the first character typed replaces it (#2124).
 		nameEdit = history.AttachHistoryUseLast(history.InputBoxEdit(dlg.Window), history.NewEditHistoryID)
+		// A click in the field only places the cursor; the history opens on the
+		// arrow or the mouse wheel, wherever the pointer is in the dialog (#2124).
+		nameEdit.HistoryButtonOnly = true
+		dlg.WheelHistory = true
 	}
 }
 
@@ -2855,6 +2859,10 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	editDest := vtui.NewEdit(0, 0, 10, initialDest)
 	editDest.PathHintsEnabled = true
 	history.AttachHistoryUseLast(editDest, history.CopyDestHistoryID)
+	// A click in the field only places the cursor; the history opens on the
+	// arrow or the mouse wheel, wherever the pointer is in the dialog (#2124).
+	editDest.HistoryButtonOnly = true
+	dlg.WheelHistory = editDest
 	dlg.AddItem(editDest)
 
 	modes := []string{i18n.Msg("Op.Queue"), i18n.Msg("Op.Background"), i18n.Msg("Op.Foreground")}
@@ -3925,7 +3933,7 @@ func actionMkDir(pf *panel.PanelsFrame) {
 		activeVfs = vfs.NewOSVFS(destPath)
 	}
 
-	dlg := vtui.NewCenteredDialog(40, 11, i18n.Msg("MakeFolder.Title"))
+	dlg := &dialog.HistoryWheelWindow{Window: vtui.NewCenteredDialog(40, 11, i18n.Msg("MakeFolder.Title"))}
 	dlg.ShowClose = true
 
 	editName := vtui.NewEdit(0, 0, 10, "")
@@ -3936,6 +3944,10 @@ func actionMkDir(pf *panel.PanelsFrame) {
 	// The field opens on the last folder created, selected, as in Far: Enter
 	// takes it again, the first character typed replaces it (#2124).
 	history.AttachHistoryUseLast(editName, history.NewFolderHistoryID)
+	// A click in the field only places the cursor; the history opens on the
+	// arrow or the mouse wheel, wherever the pointer is in the dialog (#2124).
+	editName.HistoryButtonOnly = true
+	dlg.Edit = editName
 	lblPrompt := vtui.NewLabel(0, 0, i18n.Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)
 	dlg.AddItem(editName)

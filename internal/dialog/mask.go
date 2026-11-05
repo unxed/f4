@@ -14,6 +14,10 @@ type MaskDialog struct {
 	edit    *vtui.Edit
 	rule    *vtui.Separator
 	buttons *vtui.HBoxLayout
+
+	// WheelHistory makes the mouse wheel open the history list of the field
+	// anywhere in the dialog (f4#2124); it needs edit.HistoryButtonOnly.
+	WheelHistory bool
 }
 
 const (
@@ -48,6 +52,9 @@ func (d *MaskDialog) ResizeConsole(width, height int) {
 }
 
 func (d *MaskDialog) ProcessMouse(e *vtinput.InputEvent) bool {
+	if d.WheelHistory && OpenHistoryOnWheel(e, d.edit) {
+		return true
+	}
 	handled := d.Window.ProcessMouse(e)
 	// Window's corner handler calls BaseWindow.ChangeSize directly, so our
 	// ChangeSize override cannot constrain its vertical drag. Restore the
