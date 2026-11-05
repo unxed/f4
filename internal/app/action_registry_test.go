@@ -67,13 +67,16 @@ func TestRegistry_HexModeAndWorkspaceActions(t *testing.T) {
 	if !ok {
 		t.Fatal("File.ViewHex should be registered")
 	}
-	if len(viewHex.DefaultKeys) != 1 || viewHex.DefaultKeys[0] != "AltF3" {
-		t.Fatalf("File.ViewHex default keys = %v, want [AltF3]", viewHex.DefaultKeys)
+	if len(viewHex.DefaultKeys) != 2 || viewHex.DefaultKeys[0] != "AltF3" || viewHex.DefaultKeys[1] != "CtrlShiftF3" {
+		t.Fatalf("File.ViewHex default keys = %v, want [AltF3 CtrlShiftF3]", viewHex.DefaultKeys)
 	}
 	hm := keymap.NewHotkeyManager("")
 	hm.InitDefaults()
 	if got := hm.GetAction("Shell", "AltF3"); got != "File.ViewHex" {
 		t.Fatalf("Shell/AltF3 = %q, want File.ViewHex", got)
+	}
+	if got := hm.GetAction("Shell", "CtrlShiftF3"); got != "File.ViewHex" {
+		t.Fatalf("Shell/CtrlShiftF3 = %q, want File.ViewHex", got)
 	}
 
 	a, ok := GetAction("Editor.HexMode")
