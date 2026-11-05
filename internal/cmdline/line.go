@@ -32,6 +32,10 @@ func NewCommandLine(prompt string) *CommandLine {
 	// Leaving vtui's own trigger on would open the menu from inside
 	// Edit.ProcessKey, one call before any of that is consulted.
 	cl.Edit.NoAutoComplete = true
+	// Far command-line keys of the edit line: Ctrl+K deletes to the end,
+	// Ctrl+Backspace and Ctrl+Delete delete a word (docs/FAR2L_COMPAT.md,
+	// K-72; unxed/f4#2139). Dialog edit lines keep their behaviour.
+	cl.Edit.FarKeys = true
 	cl.Edit.ColorTextIdx = theme.ColCommandLineText
 	cl.Edit.ColorUnchangedIdx = theme.ColCommandLineText
 	cl.Edit.ColorSelectedIdx = theme.ColCommandLineSelectedText
