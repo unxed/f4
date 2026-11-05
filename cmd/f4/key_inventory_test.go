@@ -348,9 +348,6 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 	"panel.(*PanelsFrame).updateConsoleOverlayModifiers": {
 		infrastructure: true, rationale: "tracks the modifiers held over the console overlay",
 	},
-	"panel.(*PanelsFrame).userScreenKey": {
-		infrastructure: true, rationale: "tracks the Ctrl+Alt+Shift hold-to-peek gesture using physical modifier events",
-	},
 	"panel.(*PanelsFrame).consumeHostConsoleReply": {
 		infrastructure: true, rationale: "reads a reply of the host console, which arrives as keystrokes",
 	},
