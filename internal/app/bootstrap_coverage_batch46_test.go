@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtui"
 )
 
@@ -24,12 +25,15 @@ func (r coverageBatch46PositionRenderer) WindowPosition() (int, int, bool) {
 
 func prepareWindowCaptureCoverageBatch46(t *testing.T, backend string, renderer vtui.SurfaceRenderer) {
 	t.Helper()
+	// A clipboard worker left by an earlier test reads vtui.FrameManager.
+	terminal.WaitForAsyncClipboard()
 	oldFrameManager := vtui.FrameManager
 	oldBackend := vtui.ActiveBackend()
 	oldApp := config.App
 	vtui.FrameManager = vtui.NewFrameManager()
 	managedFrameManager := vtui.FrameManager
 	t.Cleanup(func() {
+		terminal.WaitForAsyncClipboard()
 		managedFrameManager.Shutdown()
 		vtui.FrameManager = oldFrameManager
 		vtui.SetActiveBackend(oldBackend)

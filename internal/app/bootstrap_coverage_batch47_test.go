@@ -7,10 +7,13 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/config"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtui"
 )
 
 func prepareSessionOptionsCoverageBatch47(t *testing.T, withFrameManager bool) (string, string) {
+	// A clipboard worker left by an earlier test reads vtui.FrameManager.
+	terminal.WaitForAsyncClipboard()
 	t.Helper()
 	oldConfigPath := config.GetUserConfigIniPath
 	oldConfigPaths := config.GetConfigIniPaths
@@ -37,6 +40,7 @@ func prepareSessionOptionsCoverageBatch47(t *testing.T, withFrameManager bool) (
 		getSessionIniPath = oldSessionPath
 		config.App = oldApp
 		sessionLoaded = oldSessionLoaded
+		terminal.WaitForAsyncClipboard()
 		vtui.FrameManager = oldFrameManager
 		vtui.SetActiveBackend(oldBackend)
 	})

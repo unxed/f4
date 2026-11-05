@@ -8,13 +8,19 @@ import (
 
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/panel"
+	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/vtui"
 )
 
 func prepareSessionSaveCoverageBatch45(t *testing.T) {
+	// A clipboard worker left by an earlier test reads vtui.FrameManager.
+	terminal.WaitForAsyncClipboard()
 	oldFrameManager := vtui.FrameManager
 	vtui.FrameManager = nil
-	t.Cleanup(func() { vtui.FrameManager = oldFrameManager })
+	t.Cleanup(func() {
+		terminal.WaitForAsyncClipboard()
+		vtui.FrameManager = oldFrameManager
+	})
 
 	oldSearch, oldReplace := editor.LastEditorSearch, editor.LastEditorReplace
 	oldCase := editor.LastEditorSearchCase
