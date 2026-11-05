@@ -794,7 +794,7 @@ func init() {
 		LabelKey:    "Action.File.ViewHex",
 		Description: "Open the selected file with its AltView association, or in the hex viewer",
 		DescKey:     "Action.File.ViewHex.Desc",
-		DefaultKeys: []string{"AltF3"},
+		DefaultKeys: []string{"AltF3", "CtrlShiftF3"},
 		Enabled:     cursorEntryEnabled,
 		Handler:     withPF(func(pf *panel.PanelsFrame) { actionViewFileHex(pf) }),
 	})
