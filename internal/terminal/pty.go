@@ -15,6 +15,13 @@ type PtyBackend interface {
 	IsBusy() bool
 }
 
+// PtyShellCwd is implemented by backends that can tell the current directory
+// of the shell they run (on Linux, the target of /proc/<pid>/cwd). It is how
+// the panel follows a directory change made inside the shell itself.
+type PtyShellCwd interface {
+	ShellCwd() (dir string, ok bool)
+}
+
 // PtyPixelSizer is implemented by backends that can report the size of the
 // window in pixels next to its size in cells. A program that draws Images
 // reads it from the window size of the terminal; a zero there leaves it

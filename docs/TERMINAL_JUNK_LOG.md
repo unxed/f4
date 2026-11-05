@@ -207,3 +207,25 @@ Not yet confirmed by the reporter on macOS.
   ticket number, the symptom, the cause or the hypothesis, and who confirmed it.
 - Put this file's path (`docs/TERMINAL_JUNK_LOG.md`) into every ticket of this
   family, closed ones too.
+
+## 7. The shell changes its own directory (unxed/f4#2272)
+
+*Symptom.* A function in `.bashrc` (`gt() { cd /; }`) typed on f4's command
+line moved the shell to `/` while the panel stayed where it was, and every later
+command ran in the other directory. f4 followed only the `cd` text it could
+read on the command line (`parseDirChangeCommand`).
+
+*Change (Linux only; macOS, the BSDs and Windows are untouched).* This is the
+direction shell -> panel, so the way the shell follows the panel (section 1,
+point 2) is not touched and nothing new is typed into the shell. The command
+f4 wraps around what it runs already prints OSC 133 `C` before and `D` after.
+On each of them `PanelsFrame.handlePOSIXShellMark` reads the shell's directory
+from `/proc/<pid>/cwd` (`PTY.ShellCwd`); if `D` finds a different directory
+than `C` did, the command itself changed it, and the active local panel goes
+there and `LastPtyPath` is set to it, so the panel's own synchronization types
+no `cd` back (the loop of section 6 is closed). Comparing `C` with `D`, not the
+shell with the panel, is deliberate: a `cd ... && true f4_sync` line typed while
+a command runs waits in the terminal input until the command ends, so the shell
+may legitimately lag the panel at `D`, and following that would pull the panel
+back to a stale directory. Tests: `TestPanelFollowsDirectoryChangedByShellFunction`,
+`TestPanelStaysWhenCommandKeepsShellDirectory`. *Untested by the reporter.*

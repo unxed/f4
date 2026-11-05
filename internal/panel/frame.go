@@ -461,6 +461,8 @@ type PanelsFrame struct {
 	CommandLineFocused bool
 
 	LastPtyPath string
+	// shellDir sees the shell's directory around each command (frame_shellcwd.go).
+	shellDir shellDirTracker
 	// ptySyncTriedPath/ptySyncTriedVFS remember the last directory sync that
 	// was sent to the shell but could not be confirmed (syncPTYDirectory
 	// returned false: the folder needs sudo, so the unprivileged shell's own
@@ -613,6 +615,10 @@ func NewPanelsFrame() *PanelsFrame {
 			}
 		}
 		logWindowsReflowRemoved()
+	} else {
+		pf.TermView.OnShellMark = func(mark string, _ terminal.PromptSnapshot) {
+			pf.handlePOSIXShellMark(mark)
+		}
 	}
 	// Parser will be fully initialized in initPTY once pty is ready
 	pf.InitPTY()
