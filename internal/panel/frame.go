@@ -439,9 +439,10 @@ type PanelsFrame struct {
 	deferredProcessEnvironmentInput     []byte
 	processEnvironmentClosed            bool
 
-	lastAlt        bool
-	lastBusy       bool
-	lastShowPanels bool
+	lastAlt               bool
+	lastBusy              bool
+	lastShowPanels        bool
+	userScreenChordActive bool
 	// lastPtyW/lastPtyH remember the size last passed to SetPtySize.
 	// ResizeConsole is also the generic re-layout entry point and runs with
 	// the same w/h after menus, command start/finish (Show()'s isBusy flip),
@@ -3096,6 +3097,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 
 func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	pf.updateConsoleOverlayModifiers(e)
+	if pf.userScreenKey(e) {
+		return true
+	}
 	if pf.consumeHostConsoleReply(e) {
 		return true
 	}
@@ -4040,6 +4044,39 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 		return true
 	}
 
+	return false
+}
+
+// userScreenKey implements far2l's Ctrl+Alt+Shift hold-to-peek behavior only
+// when the child-input protocol negotiated by the shell reports key releases.
+func (pf *PanelsFrame) userScreenKey(e *vtinput.InputEvent) bool {
+	if e == nil || e.Type != vtinput.KeyEventType || pf.TermView == nil || !pf.TermView.ReportsKeyUp() {
+		return false
+	}
+	modifier := e.VirtualKeyCode == vtinput.VK_LCONTROL || e.VirtualKeyCode == vtinput.VK_RCONTROL ||
+		e.VirtualKeyCode == vtinput.VK_LMENU || e.VirtualKeyCode == vtinput.VK_RMENU ||
+		e.VirtualKeyCode == vtinput.VK_LSHIFT || e.VirtualKeyCode == vtinput.VK_RSHIFT
+	if !modifier {
+		return false
+	}
+	if !e.KeyDown && pf.userScreenChordActive {
+		pf.userScreenChordActive = false
+		if !pf.ShowPanels {
+			pf.TogglePanelsVisibility()
+		}
+		return true
+	}
+	ctrl := e.ControlKeyState&(vtinput.LeftCtrlPressed|vtinput.RightCtrlPressed) != 0 ||
+		e.VirtualKeyCode == vtinput.VK_LCONTROL || e.VirtualKeyCode == vtinput.VK_RCONTROL
+	alt := e.ControlKeyState&(vtinput.LeftAltPressed|vtinput.RightAltPressed) != 0 ||
+		e.VirtualKeyCode == vtinput.VK_LMENU || e.VirtualKeyCode == vtinput.VK_RMENU
+	shift := e.ControlKeyState&vtinput.ShiftPressed != 0 ||
+		e.VirtualKeyCode == vtinput.VK_LSHIFT || e.VirtualKeyCode == vtinput.VK_RSHIFT
+	if e.KeyDown && ctrl && alt && shift && pf.ShowPanels {
+		pf.userScreenChordActive = true
+		pf.TogglePanelsVisibility()
+		return true
+	}
 	return false
 }
 func (pf *PanelsFrame) HandleBroadcast(cmd int, args any) bool {

@@ -99,6 +99,32 @@ func TestTerminalView_Far2lExtensionsTurnOffWhenCommandEnds(t *testing.T) {
 	}
 }
 
+func TestTerminalView_ReportsKeyUpOnlyForKeyReleaseProtocols(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*TerminalView)
+		want  bool
+	}{
+		{name: "legacy", want: false},
+		{name: "win32 input mode", setup: func(tv *TerminalView) { tv.Win32InputMode = true }, want: true},
+		{name: "kitty event types", setup: func(tv *TerminalView) { tv.KittyFlags.Store(2) }, want: true},
+		{name: "kitty disambiguation only", setup: func(tv *TerminalView) { tv.KittyFlags.Store(1) }, want: false},
+		{name: "far2l extensions", setup: func(tv *TerminalView) { tv.far2lExtensionsOn.Store(true) }, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tv := NewTerminalView(80, 24)
+			defer tv.Close()
+			if tt.setup != nil {
+				tt.setup(tv)
+			}
+			if got := tv.ReportsKeyUp(); got != tt.want {
+				t.Fatalf("ReportsKeyUp() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTerminalView_Far2lCompactInputNegotiation(t *testing.T) {
 	tv := NewTerminalView(80, 24)
 	defer tv.Close()

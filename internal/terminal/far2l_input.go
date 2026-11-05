@@ -83,3 +83,9 @@ func (tv *TerminalView) Far2lInputEvent(e *vtinput.InputEvent) []byte {
 	}
 	return far2lInputEvent(e, tv.far2lCompactInput.Load())
 }
+
+// ReportsKeyUp reports whether the active child-input protocol can distinguish
+// key releases. Legacy terminal encodings cannot support hold-to-peek chords.
+func (tv *TerminalView) ReportsKeyUp() bool {
+	return tv != nil && (tv.Win32InputMode || tv.KittyFlags.Load()&2 != 0 || tv.far2lExtensionsOn.Load())
+}
