@@ -138,6 +138,16 @@ func TestCompletionEnterPolicy(t *testing.T) {
 			if !menu.IsDone() {
 				t.Error("accepted suggestion did not close the menu")
 			}
+			if ctrl {
+				// Ctrl+Enter accepts the suggestion; the user's next Enter is
+				// the only event that should reach the command executor.
+				frame.ProcessKey(&vtinput.InputEvent{
+					Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_RETURN,
+				})
+				if frame.executions != 1 {
+					t.Errorf("selected=%v modifier=%d: after Ctrl+Enter, next Enter executed %d commands, want 1", selected, modifier, frame.executions)
+				}
+			}
 		}
 	}
 }
