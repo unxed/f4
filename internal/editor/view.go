@@ -2083,6 +2083,15 @@ func (ev *EditorView) VetoActionKey(e *vtinput.InputEvent) bool {
 // away even when it moved nothing: Up at the top of a file left the user at the
 // top of the file, which is precisely where they did not want to be.
 func (ev *EditorView) ProcessKey(e *vtinput.InputEvent) bool {
+	// Paste characters only extend pasteBuffer; the document, cursor and
+	// markdown state are updated once, when the paste-end event arrives. Keep
+	// the per-character path out of the regular key wrapper so a large paste
+	// does not schedule markdown work or run frame diagnostics for every rune.
+	if ev.pasting && e.Type == vtinput.KeyEventType && e.KeyDown {
+		ev.collectPasteKey(e)
+		return true
+	}
+
 	defer stallwatch.Frame("editor.ProcessKey")()
 	defer ev.scheduleMarkdownSplit()
 	if ev.TargetLine == -1 {
