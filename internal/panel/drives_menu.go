@@ -222,17 +222,37 @@ func driveMenuKindLabel(kind driveMenuKind) string {
 
 func DriveMenuSize(b uint64, decimal bool) string {
 	if decimal {
-		return formatBytesHuman(b)
+		return formatDriveMenuDecimalSize(b)
 	}
 	if b < 1024 {
 		return fmt.Sprintf("%d B", b)
 	}
 	div, exp := uint64(1024), 0
-	for n := b / 1024; n >= 1024 && exp < 6; n /= 1024 {
+	for n := b / 1024; n >= 1024 && exp < 3; n /= 1024 {
 		div *= 1024
 		exp++
 	}
-	return fmt.Sprintf("%d %ciB", b/div, "KMGTPE"[exp])
+	return fmt.Sprintf("%d %cB", b/div, "KMGT"[exp])
+}
+
+func formatDriveMenuDecimalSize(b uint64) string {
+	if b < 1024 {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(1024), 0
+	for n := b / 1024; n >= 1024 && exp < 3; n /= 1024 {
+		div *= 1024
+		exp++
+	}
+	whole := b / div
+	decimals := 0
+	switch {
+	case whole < 10:
+		decimals = 2
+	case whole < 100:
+		decimals = 1
+	}
+	return fmt.Sprintf("%.*f %cB", decimals, float64(b)/float64(div), "KMGT"[exp])
 }
 
 type DriveMenuPlatformRow struct {
