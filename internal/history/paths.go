@@ -15,17 +15,10 @@ type commandHistoryPathRecord struct {
 
 func LoadCommandHistoryPaths(commands []string) []string {
 	paths := make([]string, len(commands))
-	if vtui.GlobalHistoryProvider == nil || len(commands) == 0 {
+	if len(commands) == 0 {
 		return paths
 	}
-
-	byCommand := make(map[string]string)
-	for _, encoded := range vtui.GlobalHistoryProvider.LoadHistory(CommandHistoryPathsID) {
-		var record commandHistoryPathRecord
-		if json.Unmarshal([]byte(encoded), &record) == nil && record.Command != "" {
-			byCommand[record.Command] = record.Path
-		}
-	}
+	byCommand := legacyCommandPaths(vtui.GlobalHistoryProvider)
 	for i, command := range commands {
 		paths[i] = byCommand[command]
 	}

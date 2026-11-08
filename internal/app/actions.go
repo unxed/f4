@@ -297,27 +297,8 @@ func actionCommandHistory(pf *panel.PanelsFrame) {
 		return
 	}
 
-	var richCmds []history.HistoryRecord
 	hp, isF4 := vtui.GlobalHistoryProvider.(*history.F4HistoryProvider)
-	if isF4 {
-		richCmds = hp.LoadRichHistory("cmdline")
-	} else {
-		for _, c := range h {
-			richCmds = append(richCmds, history.HistoryRecord{Name: c})
-		}
-	}
-	if len(richCmds) == 0 && len(h) > 0 {
-		richCmds = history.RecordsFromNames(h)
-	}
-	// The tab/workspace branch originally stored command directories in a
-	// parallel history. Fold those records into upstream's richer history
-	// model so existing sessions retain their paths after the merge.
-	legacyPaths := history.LoadCommandHistoryPaths(h)
-	for i := range richCmds {
-		if richCmds[i].Directory() == "" && i < len(legacyPaths) {
-			richCmds[i].Dir = legacyPaths[i]
-		}
-	}
+	richCmds := history.CommandRecords(vtui.GlobalHistoryProvider, h)
 
 	menu := vtui.NewVMenu(i18n.Msg("History.CommandsTitle"))
 	menu.SetHelp("History")
