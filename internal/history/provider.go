@@ -74,6 +74,16 @@ type F4HistoryProvider struct {
 	path string
 	data map[string][]string
 	rich map[string][]HistoryRecord
+	// gen counts the saves, so a caller that derives something from the
+	// history can tell when it must derive it again.
+	gen uint64
+}
+
+// Generation changes whenever any history bucket is saved.
+func (hp *F4HistoryProvider) Generation() uint64 {
+	hp.mu.Lock()
+	defer hp.mu.Unlock()
+	return hp.gen
 }
 
 // NewProviderAtPath opens the history stored in one named file, creating an
@@ -192,6 +202,7 @@ func (hp *F4HistoryProvider) SaveHistory(id string, history []string) {
 		}
 		hp.rich[id] = MergeHistoryNames(hp.rich[id], history)
 	}
+	hp.gen++
 	hp.mu.Unlock()
 	hp.save()
 }
@@ -218,6 +229,7 @@ func (hp *F4HistoryProvider) SaveRichHistory(id string, history []HistoryRecord)
 	if id == "cmdline" || id == "folders" {
 		hp.data[id] = ExtractHistoryNames(history)
 	}
+	hp.gen++
 	hp.mu.Unlock()
 	hp.save()
 }

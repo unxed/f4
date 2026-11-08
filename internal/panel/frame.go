@@ -124,10 +124,7 @@ func (pf *PanelsFrame) AddCommandHistory(cmd string) {
 		return
 	}
 
-	rich := hp.LoadRichHistory("cmdline")
-	if len(rich) == 0 {
-		rich = history.RecordsFromNames(pf.CmdLine.Edit.History)
-	}
+	rich := history.CommandRecords(hp, pf.CmdLine.Edit.History)
 	var newRich []history.HistoryRecord
 	curDir := ""
 	if fsp := pf.GetActivePanel(); fsp != nil {
@@ -160,37 +157,6 @@ func (pf *PanelsFrame) AddCommandHistory(cmd string) {
 		strHist = append(strHist, r.Name)
 	}
 	pf.CmdLine.Edit.History = strHist
-}
-
-// AttachCommandHistory backs the command line with the "cmdline" history and
-// gives it far2l's completion: history by prefix, the commands run in the
-// current directory first, file suggestions after them.
-func (pf *PanelsFrame) AttachCommandHistory() {
-	pf.CmdLine.Edit.HistoryID = "cmdline"
-	pf.CmdLine.Edit.ClearHistory = history.ClearKeepingPinned(pf.CmdLine.Edit, "cmdline")
-	pf.CmdLine.Edit.HistoryMatches = pf.commandHistoryMatches
-	pf.CmdLine.Edit.PathHintsLast = true
-	if vtui.GlobalHistoryProvider != nil {
-		pf.CmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
-	}
-}
-
-// commandHistoryMatches is the command line's vtui.Edit.HistoryMatches: the
-// rich records carry the directory each command ran in, which is what puts
-// the commands run in the active panel's directory first.
-func (pf *PanelsFrame) commandHistoryMatches(text string) []vtui.AutoCompleteItem {
-	var records []history.HistoryRecord
-	if hp, ok := vtui.GlobalHistoryProvider.(*history.F4HistoryProvider); ok {
-		records = hp.LoadRichHistory("cmdline")
-	}
-	if len(records) == 0 {
-		records = history.RecordsFromNames(pf.CmdLine.Edit.History)
-	}
-	curDir := ""
-	if fsp := pf.GetActivePanel(); fsp != nil && fsp.Vfs != nil {
-		curDir = fsp.Vfs.GetPath()
-	}
-	return history.CommandCompletions(records, text, curDir)
 }
 
 func (pf *PanelsFrame) InsertPathToCmdLine(path string) {
@@ -491,6 +457,9 @@ type PanelsFrame struct {
 	LastKey            rune
 	lastKeyEvent       time.Time
 	CommandLineFocused bool
+	// cmdRecords keeps the command history's records between keystrokes of
+	// the completion menu (frame_cmdline_history.go).
+	cmdRecords commandRecordsCache
 
 	LastPtyPath string
 	// shellDir sees the shell's directory around each command (frame_shellcwd.go).
