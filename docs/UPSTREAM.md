@@ -50,6 +50,12 @@ Checked on 2026-09-25 for every open PR in the tables below:
   do not build). Our #36 fails in the same packages and no others.
 - **rardecode**: upstream runs only CodeQL. The branches pass `go test` on
   Linux, Windows and macOS in the sandbox.
+- **gg, gogpu** (checked 2026-11-08): upstream CI waits for a maintainer's
+  approval after every push of a first-time contributor. gogpu/gg#546 is green
+  on gg v0.52.6. Before that, its Lint was red because of gocognit on gg's own
+  `main`, which gg fixed for v0.52.6. gogpu/gg#547 passes everything but
+  Lint, which twice failed before linting: a 504 while downloading
+  golangci-lint. Its doc commit and gogpu/gogpu#506 wait for approval.
 
 ## Summary
 
@@ -63,8 +69,8 @@ Checked on 2026-09-25 for every open PR in the tables below:
 | [godesktop/xkb-go](#godesktopxkb-go) | unxed/xkb-go `main` | 0 | 2 | 0 | nothing |
 | [neurlang/wayland](#neurlangwayland) | unxed/wayland | 2 | 1 | 0 | nothing |
 | [nwaples/rardecode](#nwaplesrardecode) | unxed/rardecode (branches only) | 0 | 3 | 0 | nothing |
-| [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu; sogonov/gg `f4/memory-v0.52` | 2 | 3 | 0 | nothing |
-| [unxed/vtui](#unxedvtui) | none (merged and tagged in v0.1.429) | 3 | 1 issue | 0 | nothing |
+| [gogpu/gg](#gogpugg-gogpugogpu), [gogpu/gogpu](#gogpugg-gogpugogpu) | unxed/gg, unxed/gogpu; sogonov/gg `f4/memory-v0.52` | 2 | 5 | 0 | nothing |
+| [unxed/vtui](#unxedvtui) | none (merged, in vtui since v0.1.423) | 3 | 1 issue | 0 | nothing |
 | [alecthomas/chroma](#alecthomaschroma) | unxed/chroma | 1 | 0 | 0 | nothing |
 | [korli/go](#korligo-go-for-haiku) (Go for Haiku) | unxed/go | 0 | 0 | 0 | nothing |
 
@@ -225,23 +231,32 @@ branches of unxed/rardecode and are offered upstream.
 | --- | --- | --- |
 | [gogpu/gg#332](https://github.com/gogpu/gg/pull/332) | HiDPI: scale damage rectangles to physical pixels | Merged 2026-05-19 |
 | [gogpu/gogpu#435](https://github.com/gogpu/gogpu/pull/435) | Drag and drop under X11 | Merged 2026-08-07 |
-| [gogpu/gogpu#502](https://github.com/gogpu/gogpu/pull/502) | macOS: update the Metal layer contents scale when a window moves between displays | Open; backported in [unxed/gogpu#1](https://github.com/unxed/gogpu/pull/1) |
-| [gogpu/gg#546](https://github.com/gogpu/gg/pull/546) | `FontSource` parses its own copy of the data and keeps one: `NewFontSource` parsed the caller's slice (reusing it broke the font) while keeping an unread copy, so every font took twice its file size; `NewFontSourceFromFile` no longer copies | Open since 2026-10-25, CI awaiting approval |
-| [gogpu/gg#547](https://github.com/gogpu/gg/pull/547) | `SetAcceleratorMaxSampleCount` / `SampleCountAware`: an opt-in MSAA cap; 1 turns off the 4x color and depth/stencil targets, about 120 MB of GPU memory for a 2060x1638 window | Open since 2026-10-25, CI awaiting approval |
+| [gogpu/gogpu#502](https://github.com/gogpu/gogpu/pull/502) | macOS: update the Metal layer contents scale when a window moves between displays | Open; backported in [unxed/gogpu#1](https://github.com/unxed/gogpu/pull/1), merged 2026-11-03 |
+| [gogpu/gogpu#503](https://github.com/gogpu/gogpu/pull/503) | Native Windows key and committed text events (AltGr text without shortcuts) | Open since 2026-10-12, in unxed/gogpu; upstream Lint and codecov/patch fail |
+| [gogpu/gogpu#506](https://github.com/gogpu/gogpu/pull/506) | `App.OnDragEnter` / `OnDragMove` / `OnDragLeave`: a file drag in progress, not only the drop, so f4 can highlight the target folder (#2049) | Open since 2026-10-18, in unxed/gogpu; rebased onto gogpu v0.54.1 on 2026-11-08, CI awaiting approval |
+| [gogpu/gg#546](https://github.com/gogpu/gg/pull/546) | `FontSource` parses its own copy of the data and keeps one: `NewFontSource` parsed the caller's slice (reusing it broke the font) while keeping an unread copy, so every font took twice its file size; `NewFontSourceFromFile` no longer copies | Approved 2026-11-08 for the next gg patch release; rebased onto gg v0.52.6, CI green |
+| [gogpu/gg#547](https://github.com/gogpu/gg/pull/547) | `SetAcceleratorMaxSampleCount` / `SampleCountAware`: an opt-in MSAA cap; 1 turns off the 4x color and depth/stencil targets, about 120 MB of GPU memory for a 2060x1638 window | Open; the API is accepted. The doc change asked in review (2026-11-08) is pushed, and approval follows a green CI. Rebased onto gg v0.52.6 |
 
 f4 pins `github.com/unxed/gogpu v0.53.1-drag.1-altgr.2` on
-`vtui207-text-and-drag`: the existing drag/native-input changes plus the
-macOS display-scale backport above. The replace is repeated in the Android,
-iOS and CloudFox modules. Keep it until an upstream release contains both
-the required drag callbacks and the display-scale fix.
+`vtui207-text-and-drag`: gogpu v0.53.0 with gogpu/gogpu#506, gogpu/gogpu#503
+and the backport of gogpu/gogpu#502. The replace is repeated in the Android,
+iOS and CloudFox modules. Keep it until an upstream release contains all
+three. gogpu v0.54.1 (2026-11-08) has none of them.
 
-gg's `main` already requires gpucontext v0.31 and gputypes v0.8, which f4 and
-gogpu v0.53 do not use yet, so f4 takes both PRs on top of v0.52.5:
+gg v0.52.6 (2026-11-08) does not include gogpu/gg#546 or gogpu/gg#547.
+Like gg's `main`, it requires gpucontext v0.31.3, gputypes v0.8.2 and wgpu
+v0.34.9, the set gogpu v0.54 uses, while f4 and vtui are still on gogpu v0.53
+and gpucontext v0.28. So f4 takes both PRs on top of v0.52.5:
 `replace github.com/gogpu/gg => github.com/sogonov/gg v0.52.6-memory.1`
 (branch `f4/memory-v0.52`, the same patches as gogpu/gg#546 and
-gogpu/gg#547). Once gg
-releases them, drop the replace and require that release; moving the fork
-under unxed first is the owner's call.
+gogpu/gg#547). The tag was named before gg's own v0.52.6 and is based on
+v0.52.5. The doc-only commit added to gogpu/gg#547 in review is not in the
+fork.
+
+Dropping the replace takes two things: a gg release with both PRs, and vtui
+and f4 on gogpu v0.54. The second needs unxed/gogpu moved to v0.54, or a gogpu
+release with the three PRs above. Moving the gg fork under unxed first is the
+owner's call. The state is tracked in #2226.
 
 ## unxed/vtui
 
@@ -250,14 +265,14 @@ by `replace` until they were merged and tagged.
 
 | PR | What | State |
 | --- | --- | --- |
-| [#250](https://github.com/unxed/vtui/pull/250) | GUI fallback fonts: coverage from the cmap table instead of parsing every font at start (about 820 MB of garbage on macOS); Menlo and Apple Symbols ahead of the CJK fonts; color bitmap fonts passed over | Merged, in vtui v0.1.429 |
-| [#251](https://github.com/unxed/vtui/pull/251) | gogpu: ask gg for 1x MSAA (through the method gogpu/gg#547 adds; a no-op with older gg) | Merged, in vtui v0.1.429 |
-| [#253](https://github.com/unxed/vtui/pull/253) | gogpu: the idle heartbeat blinks the caret on the held frame instead of calling `Redraw`; an unfocused window holds the caret still | Merged, in vtui v0.1.429 |
+| [#250](https://github.com/unxed/vtui/pull/250) | GUI fallback fonts: coverage from the cmap table instead of parsing every font at start (about 820 MB of garbage on macOS); Menlo and Apple Symbols ahead of the CJK fonts; color bitmap fonts passed over | Merged 2026-10-27, in vtui since v0.1.423 |
+| [#251](https://github.com/unxed/vtui/pull/251) | gogpu: ask gg for 1x MSAA (through the method gogpu/gg#547 adds; a no-op with older gg) | Merged 2026-10-27, in vtui since v0.1.423 |
+| [#253](https://github.com/unxed/vtui/pull/253) | gogpu: the idle heartbeat blinks the caret on the held frame instead of calling `Redraw`; an unfocused window holds the caret still | Merged 2026-10-27, in vtui since v0.1.423 |
 | [Issue #252](https://github.com/unxed/vtui/issues/252) | gogpu: redraw only the damaged cells. For later, the author takes it himself | Open |
 
-f4 requires vtui v0.1.429, which has all three, so the `replace` of
-`github.com/unxed/vtui` by sogonov/vtui `v0.1.423-memcpu.1` (and its copies in
-the plugin modules) is gone.
+Every vtui since v0.1.423 has all three. The `replace` of
+`github.com/unxed/vtui` by sogonov/vtui `v0.1.423-memcpu.1`, and its copies in
+the plugin modules, was dropped when f4 moved to vtui v0.1.429.
 
 The `replace` lines are repeated in plugins/android, ios and cloudfox, as the
 gogpu one is.
