@@ -161,6 +161,38 @@ func (pf *PanelsFrame) AddCommandHistory(cmd string) {
 	}
 	pf.CmdLine.Edit.History = strHist
 }
+
+// AttachCommandHistory backs the command line with the "cmdline" history and
+// gives it far2l's completion: history by prefix, the commands run in the
+// current directory first, file suggestions after them.
+func (pf *PanelsFrame) AttachCommandHistory() {
+	pf.CmdLine.Edit.HistoryID = "cmdline"
+	pf.CmdLine.Edit.ClearHistory = history.ClearKeepingPinned(pf.CmdLine.Edit, "cmdline")
+	pf.CmdLine.Edit.HistoryMatches = pf.commandHistoryMatches
+	pf.CmdLine.Edit.PathHintsLast = true
+	if vtui.GlobalHistoryProvider != nil {
+		pf.CmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
+	}
+}
+
+// commandHistoryMatches is the command line's vtui.Edit.HistoryMatches: the
+// rich records carry the directory each command ran in, which is what puts
+// the commands run in the active panel's directory first.
+func (pf *PanelsFrame) commandHistoryMatches(text string) []vtui.AutoCompleteItem {
+	var records []history.HistoryRecord
+	if hp, ok := vtui.GlobalHistoryProvider.(*history.F4HistoryProvider); ok {
+		records = hp.LoadRichHistory("cmdline")
+	}
+	if len(records) == 0 {
+		records = history.RecordsFromNames(pf.CmdLine.Edit.History)
+	}
+	curDir := ""
+	if fsp := pf.GetActivePanel(); fsp != nil && fsp.Vfs != nil {
+		curDir = fsp.Vfs.GetPath()
+	}
+	return history.CommandCompletions(records, text, curDir)
+}
+
 func (pf *PanelsFrame) InsertPathToCmdLine(path string) {
 	if path == "" {
 		return
@@ -583,11 +615,7 @@ func NewPanelsFrame() *PanelsFrame {
 	if config.App.NavigationMode == config.NavigationSearchFirst {
 		pf.CmdLine.SetFocus(false)
 	}
-	pf.CmdLine.Edit.HistoryID = "cmdline"
-	pf.CmdLine.Edit.ClearHistory = history.ClearKeepingPinned(pf.CmdLine.Edit, "cmdline")
-	if vtui.GlobalHistoryProvider != nil {
-		pf.CmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
-	}
+	pf.AttachCommandHistory()
 	pf.KeyBar = vtui.NewKeyBar()
 	pf.KeyBar.SetOwner(pf)
 
@@ -3070,6 +3098,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if pf.commandLineOwnsDeletion(e) {
 		return true
 	}
+	if pf.commandLineOwnsCopy(e) {
+		return true
+	}
 	if !pf.ShowPanels {
 		return false
 	}
@@ -3281,7 +3312,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// A non-empty command line gets first refusal for plain deletion. This is
 	// intentionally after Fast Find, whose own query has a higher-priority
 	// panel-local meaning, and before the active file panel and its actions.
-	if pf.commandLineOwnsDeletion(e) {
+	if pf.commandLineOwnsDeletion(e) || pf.commandLineOwnsCopy(e) {
 		return pf.CmdLine.ProcessKey(e)
 	}
 	// Crash test hotkey: Ctrl+Alt+C. Not while a program owns the terminal:

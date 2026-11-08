@@ -158,6 +158,14 @@ func (cl *CommandLine) Clear() {
 	cl.Edit.SetText("")
 }
 
+// HasSelection reports whether part of the command line text is selected.
+// vtui.Edit keeps its selection unexported; its semantic node is the one
+// place that reports it.
+func (cl *CommandLine) HasSelection() bool {
+	start, ok := cl.Edit.SemanticNode(nil)["selectionStart"].(int)
+	return ok && start != -1
+}
+
 // IsEmpty returns true if there is no text in the command line.
 func (cl *CommandLine) IsEmpty() bool {
 	return cl.Edit.GetText() == ""
