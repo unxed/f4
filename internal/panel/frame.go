@@ -124,10 +124,7 @@ func (pf *PanelsFrame) AddCommandHistory(cmd string) {
 		return
 	}
 
-	rich := hp.LoadRichHistory("cmdline")
-	if len(rich) == 0 {
-		rich = history.RecordsFromNames(pf.CmdLine.Edit.History)
-	}
+	rich := history.CommandRecords(hp, pf.CmdLine.Edit.History)
 	var newRich []history.HistoryRecord
 	curDir := ""
 	if fsp := pf.GetActivePanel(); fsp != nil {
@@ -161,6 +158,7 @@ func (pf *PanelsFrame) AddCommandHistory(cmd string) {
 	}
 	pf.CmdLine.Edit.History = strHist
 }
+
 func (pf *PanelsFrame) InsertPathToCmdLine(path string) {
 	if path == "" {
 		return
@@ -459,6 +457,9 @@ type PanelsFrame struct {
 	LastKey            rune
 	lastKeyEvent       time.Time
 	CommandLineFocused bool
+	// cmdRecords keeps the command history's records between keystrokes of
+	// the completion menu (frame_cmdline_history.go).
+	cmdRecords commandRecordsCache
 
 	LastPtyPath string
 	// shellDir sees the shell's directory around each command (frame_shellcwd.go).
@@ -583,11 +584,7 @@ func NewPanelsFrame() *PanelsFrame {
 	if config.App.NavigationMode == config.NavigationSearchFirst {
 		pf.CmdLine.SetFocus(false)
 	}
-	pf.CmdLine.Edit.HistoryID = "cmdline"
-	pf.CmdLine.Edit.ClearHistory = history.ClearKeepingPinned(pf.CmdLine.Edit, "cmdline")
-	if vtui.GlobalHistoryProvider != nil {
-		pf.CmdLine.Edit.History = vtui.GlobalHistoryProvider.LoadHistory("cmdline")
-	}
+	pf.AttachCommandHistory()
 	pf.KeyBar = vtui.NewKeyBar()
 	pf.KeyBar.SetOwner(pf)
 
@@ -3070,6 +3067,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if pf.commandLineOwnsDeletion(e) {
 		return true
 	}
+	if pf.commandLineOwnsCopy(e) {
+		return true
+	}
 	if !pf.ShowPanels {
 		return false
 	}
@@ -3281,7 +3281,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// A non-empty command line gets first refusal for plain deletion. This is
 	// intentionally after Fast Find, whose own query has a higher-priority
 	// panel-local meaning, and before the active file panel and its actions.
-	if pf.commandLineOwnsDeletion(e) {
+	if pf.commandLineOwnsDeletion(e) || pf.commandLineOwnsCopy(e) {
 		return pf.CmdLine.ProcessKey(e)
 	}
 	// Crash test hotkey: Ctrl+Alt+C. Not while a program owns the terminal:

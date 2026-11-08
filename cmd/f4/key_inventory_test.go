@@ -134,6 +134,11 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 		nav:       []string{"BACK", "DELETE"},
 		rationale: "plain Backspace and Delete edit a non-empty command line",
 	},
+	"panel.(*PanelsFrame).commandLineOwnsCopy": {
+		areas:     []string{"Shell"},
+		chords:    []string{"CtrlC"},
+		rationale: "Ctrl+C (Cmd+C on macOS) copies the command line's selected text ahead of the Shell actions bound to it",
+	},
 	"panel.(*PanelsFrame).commandLineOwnsSelection": {
 		areas:     []string{"Shell"},
 		chords:    []string{"CtrlShiftLeft", "CtrlShiftRight"},
