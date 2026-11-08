@@ -61,3 +61,46 @@ func TestPanelsFrame_CtrlCCopiesCommandLineSelection(t *testing.T) {
 		t.Fatal("VetoActionKey(Ctrl+C) claimed a command line with nothing selected")
 	}
 }
+
+// A selection the user left behind by going back to the panel does not keep
+// Ctrl+C: the key that went to the panel drops it, highlight and all.
+func TestPanelsFrame_PanelKeyDropsCommandLineSelection(t *testing.T) {
+	oldConfig := config.App
+	config.App.NavigationMode = config.NavigationClassic
+	t.Cleanup(func() { config.App = oldConfig })
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	pf := NewPanelsFrame()
+	t.Cleanup(pf.Close)
+	pf.ResizeConsole(80, 25)
+
+	ctrlC := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_C, ControlKeyState: vtinput.LeftCtrlPressed}
+
+	// Ctrl pressed on its own, on the way to Ctrl+C, keeps the selection.
+	selectCommandLinePrefix(pf, "hello world", 5)
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_CONTROL, ControlKeyState: vtinput.LeftCtrlPressed})
+	if !pf.CmdLine.HasSelection() {
+		t.Fatal("pressing Ctrl alone dropped the command-line selection")
+	}
+
+	// A key the command line takes keeps it too.
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_RIGHT, ControlKeyState: vtinput.ShiftPressed})
+	if !pf.CmdLine.HasSelection() {
+		t.Fatal("extending the selection with Shift+Right dropped it")
+	}
+
+	// Down moves the panel cursor: the user is back in the panel.
+	pf.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_DOWN})
+	if pf.CmdLine.HasSelection() {
+		t.Fatal("the command-line selection survived a key that went to the panel")
+	}
+	if pf.VetoActionKey(ctrlC) {
+		t.Fatal("Ctrl+C still belongs to the command line after the user left it")
+	}
+	if got := pf.CmdLine.Edit.GetText(); got != "hello world" {
+		t.Fatalf("dropping the selection changed the command line to %q", got)
+	}
+}
