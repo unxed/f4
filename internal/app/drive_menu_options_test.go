@@ -74,8 +74,8 @@ func TestDriveMenuOptions_DefaultsAndFormatting(t *testing.T) {
 	if got := panel.DriveMenuPlatformItemText(sysinfo.DriveEntry{Name: "/ Root"}, config.DriveMenuShowType|config.DriveMenuShowFilesystem); !strings.Contains(got, "/") {
 		t.Fatalf("root row lost its name: %q", got)
 	}
-	if got := panel.DriveMenuSize(1024*1024*3, false); got != "3 MiB" {
-		t.Fatalf("integer drive size = %q, want 3 MiB", got)
+	if got := panel.DriveMenuSize(1024*1024*3, false); got != "3 MB" {
+		t.Fatalf("integer drive size = %q, want 3 MB", got)
 	}
 	if got := panel.DriveMenuSize(1024*1024*3, true); !strings.Contains(got, "3.0") {
 		t.Fatalf("decimal drive size = %q, want a decimal value", got)
