@@ -3070,6 +3070,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	if pf.commandLineOwnsDeletion(e) {
 		return true
 	}
+	if pf.commandLineOwnsCopy(e) {
+		return true
+	}
 	if !pf.ShowPanels {
 		return false
 	}
@@ -3120,7 +3123,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	return fsp.fastFindKeeps(e)
 }
 
-func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
+// processKey is ProcessKey without the command-line selection bookkeeping
+// (frame_copy_cmdline.go).
+func (pf *PanelsFrame) processKey(e *vtinput.InputEvent) bool {
 	pf.updateConsoleOverlayModifiers(e)
 	if pf.userScreenKey(e) {
 		return true
@@ -3281,7 +3286,7 @@ func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
 	// A non-empty command line gets first refusal for plain deletion. This is
 	// intentionally after Fast Find, whose own query has a higher-priority
 	// panel-local meaning, and before the active file panel and its actions.
-	if pf.commandLineOwnsDeletion(e) {
+	if pf.commandLineOwnsDeletion(e) || pf.commandLineOwnsCopy(e) {
 		return pf.CmdLine.ProcessKey(e)
 	}
 	// Crash test hotkey: Ctrl+Alt+C. Not while a program owns the terminal:

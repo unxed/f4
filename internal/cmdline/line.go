@@ -23,6 +23,8 @@ type CommandLine struct {
 	histText string
 	histNext int
 	histLive bool
+
+	keysTaken uint64 // key events given to ProcessKey; see KeysTaken
 }
 
 func NewCommandLine(prompt string) *CommandLine {
@@ -107,6 +109,7 @@ func (cl *CommandLine) DisplayObject(scr *vtui.ScreenBuf) {
 }
 
 func (cl *CommandLine) ProcessKey(e *vtinput.InputEvent) bool {
+	cl.keysTaken++
 	if isCtrlY(e) {
 		// Far: Ctrl+Y clears the command line (docs/FAR2L_COMPAT.md, K-72).
 		clearLine(cl.Edit)
@@ -156,6 +159,29 @@ func (cl *CommandLine) ProcessMouse(e *vtinput.InputEvent) bool {
 // Clear empties the command line text.
 func (cl *CommandLine) Clear() {
 	cl.Edit.SetText("")
+}
+
+// HasSelection reports whether part of the command line text is selected.
+// vtui.Edit keeps its selection unexported; its semantic node is the one
+// place that reports it.
+func (cl *CommandLine) HasSelection() bool {
+	start, ok := cl.Edit.SemanticNode(nil)["selectionStart"].(int)
+	return ok && start != -1
+}
+
+// ClearSelection drops the selection, if there is one, and leaves the text
+// and the cursor as they are.
+func (cl *CommandLine) ClearSelection() {
+	if cl.HasSelection() {
+		cl.Edit.ClearSelection()
+	}
+}
+
+// KeysTaken counts the key events ProcessKey has been given. A caller that
+// routes a key compares it before and after to learn whether the key reached
+// the command line, however many routes lead there.
+func (cl *CommandLine) KeysTaken() uint64 {
+	return cl.keysTaken
 }
 
 // IsEmpty returns true if there is no text in the command line.

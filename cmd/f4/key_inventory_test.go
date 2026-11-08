@@ -76,7 +76,7 @@ type keyInventoryEntry struct {
 // command-palette audit uses: package, then receiver and name.
 var keyInventoryAudit = map[string]keyInventoryEntry{
 	// The panels: everything the panels frame does with a key itself.
-	"panel.(*PanelsFrame).ProcessKey": {
+	"panel.(*PanelsFrame).processKey": {
 		areas: []string{"Shell", "Terminal"},
 		chords: append(keyInventoryBookmarkChords(),
 			"RCtrlVK_C0", "CtrlAltVK_C0", "VK_C0", "AltShiftF3", "CtrlAltC", "CtrlC",
@@ -133,6 +133,14 @@ var keyInventoryAudit = map[string]keyInventoryEntry{
 	"panel.(*PanelsFrame).commandLineOwnsDeletion": {
 		nav:       []string{"BACK", "DELETE"},
 		rationale: "plain Backspace and Delete edit a non-empty command line",
+	},
+	"panel.leavesCommandLineSelection": {
+		infrastructure: true, rationale: "tells a modifier pressed on its own, which must not drop the command-line selection, from a key that went past the line",
+	},
+	"panel.(*PanelsFrame).commandLineOwnsCopy": {
+		areas:     []string{"Shell"},
+		chords:    []string{"CtrlC"},
+		rationale: "Ctrl+C (Cmd+C on macOS) copies the command line's selected text ahead of the Shell actions bound to it",
 	},
 	"panel.(*PanelsFrame).commandLineOwnsSelection": {
 		areas:     []string{"Shell"},
