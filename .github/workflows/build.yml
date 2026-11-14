@@ -211,7 +211,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -573,7 +573,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -841,7 +841,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1023,7 +1023,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: plugins/cloudfox/go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1152,7 +1152,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: plugins/android/go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1276,7 +1276,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: plugins/ios/go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1398,7 +1398,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1665,7 +1665,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1868,7 +1868,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -1917,7 +1917,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -2004,7 +2004,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -2171,7 +2171,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         # The salt file is part of the key on purpose: the cache stores
         # absolute paths, so a cache saved before a GOCACHE/GOMODCACHE move
         # above would restore to the old location -- and with the key
@@ -2498,7 +2498,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache: false
 
     - name: Compute affected packages
@@ -2583,7 +2583,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -2901,7 +2901,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -3115,7 +3115,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
@@ -3291,7 +3291,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
-        go-version: '1.26.10'
+        go-version: '1.26.11'
         cache-dependency-path: go.sum
         cache: ${{ env.CACHE_WRITE }}
 
