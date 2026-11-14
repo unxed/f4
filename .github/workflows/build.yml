@@ -549,7 +549,8 @@ jobs:
     name: Build batch (${{ matrix.name }})
     needs: [should-run-full]
     if: github.event_name != 'pull_request' && needs.should-run-full.outputs.run-full == 'true'
-    runs-on: ubuntu-latest
+    # qemu-user-static has no apt candidate on ubuntu-26.04 (run 43640498779).
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       # 7 cells, pushes/tags only. Not capped any more, for the reason given
@@ -800,7 +801,8 @@ jobs:
     name: Build lite (${{ matrix.name }})
     needs: [should-run-full, long-jobs-first]
     if: github.event_name != 'pull_request' && needs.should-run-full.outputs.run-full == 'true'
-    runs-on: ubuntu-latest
+    # qemu-user-static has no apt candidate on ubuntu-26.04 (run 43640498779).
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
