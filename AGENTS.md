@@ -11,7 +11,7 @@ static binary and runs either in a terminal or as a standalone graphical window.
 
 ## Tech Stack
 
-- **Programming language:** Go 1.26.10, `CGO_ENABLED=0`
+- **Programming language:** Go 1.26.11, `CGO_ENABLED=0`
 - **Framework:** none — custom TUI; UI and input come from the external `vtui` and
   `vtinput` libraries
 - **Database:** none for the application; `plugins/sqlite` browses user SQLite files

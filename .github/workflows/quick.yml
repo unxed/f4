@@ -75,12 +75,12 @@ jobs:
       # The toolchain build.yml builds, tests and releases with, not go.mod's
       # `go` line: that line is the minimum the module accepts, and the cache
       # below can serve only the same toolchain -- Go keys every build cache
-      # entry by its version, so caches made by 1.26.6 here and 1.26.10 there
+      # entry by its version, so caches made by 1.26.6 here and 1.26.11 there
       # never shared an object. This workflow never saves a cache (see
       # CACHE_WRITE in build.yml); it reads main's.
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: false
 
       # main's entry for build.yml's Test (linux/amd64) cell -- hence the salt
@@ -189,7 +189,7 @@ jobs:
       # Same toolchain and read-only cache as the check job above.
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: false
 
       - name: Restore Go cache (read-only)
@@ -232,7 +232,7 @@ jobs:
       # Same toolchain and read-only cache as the check job above.
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: false
 
       - name: Restore Go cache (read-only)
@@ -277,7 +277,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: false
 
       - name: Restore Go cache (read-only)
@@ -326,7 +326,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache: false
 
       - name: Restore Go cache (read-only)
