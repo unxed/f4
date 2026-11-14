@@ -3120,7 +3120,9 @@ func (pf *PanelsFrame) VetoActionKey(e *vtinput.InputEvent) bool {
 	return fsp.fastFindKeeps(e)
 }
 
-func (pf *PanelsFrame) ProcessKey(e *vtinput.InputEvent) bool {
+// processKey is ProcessKey without the command-line selection bookkeeping
+// (frame_copy_cmdline.go).
+func (pf *PanelsFrame) processKey(e *vtinput.InputEvent) bool {
 	pf.updateConsoleOverlayModifiers(e)
 	if pf.userScreenKey(e) {
 		return true

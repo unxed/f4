@@ -124,14 +124,28 @@ func macroCommandLine() string {
 	return pf.CmdLine.Edit.GetText()
 }
 
-// macroCommandLineOwnsDeletion reports whether e is a plain Backspace or Delete
-// that the command line of the panels takes because it holds text.
-func macroCommandLineOwnsDeletion(area string, e *vtinput.InputEvent) bool {
+// macroCommandLineOwnsKey reports whether e is a key the command line of the
+// panels takes ahead of a recorded macro: a plain Backspace or Delete while it
+// holds text, or Ctrl+C while part of its text is selected.
+func macroCommandLineOwnsKey(area string, e *vtinput.InputEvent) bool {
 	if area != "Shell" && area != "Terminal" {
 		return false
 	}
 	pf := panel.FindPanelsFrameAnyScreen()
-	return pf != nil && pf.CommandLineOwnsDeletion(e)
+	return pf != nil && (pf.CommandLineOwnsDeletion(e) || pf.CommandLineOwnsCopy(e))
+}
+
+// dropCommandLineSelection runs after a configured action took a key in the
+// Shell area: the key went past the command line, so its selection no longer
+// claims Ctrl+C (panel.PanelsFrame.ProcessKey does the same for the keys the
+// panels take themselves).
+func dropCommandLineSelection(area string, e *vtinput.InputEvent) {
+	if area != "Shell" || !e.KeyDown {
+		return
+	}
+	if pf := panel.FindPanelsFrame(); pf != nil {
+		pf.DropCommandLineSelection()
+	}
 }
 
 // macroPasting is true between the marks of a bracketed paste.
@@ -287,8 +301,9 @@ func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	// remapped hotkey, and a recorded macro on the same key is no exception:
 	// a user who bound Backspace to "up one folder" for an empty command line
 	// otherwise lost it for editing as soon as the macro was played back
-	// from the key (f4#1797).
-	commandLineEdits := macroCommandLineOwnsDeletion(currentArea, e)
+	// from the key (f4#1797). Ctrl+C on a selection in the command line
+	// copies it before a macro on Ctrl+C plays, for the same reason.
+	commandLineEdits := macroCommandLineOwnsKey(currentArea, e)
 
 	if areaMacros, ok := m.Macros[currentArea]; ok && !commandLineEdits {
 		if seq, ok := areaMacros[keyStr]; ok {
@@ -374,6 +389,7 @@ func macroFilter(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 			// overlay behind (for example, when the selected panel entry is
 			// the parent directory and an archive command has no target).
 			RunAction(actionName)
+			dropCommandLineSelection(currentArea, e)
 			return true
 		}
 	}
@@ -449,6 +465,7 @@ func macroLookupHotkey(m *macro.MacroManager, e *vtinput.InputEvent) bool {
 	// configured action matched, its result must not expose the key to the
 	// frame below it.
 	RunAction(actionName)
+	dropCommandLineSelection(area, e)
 	return true
 }
 
