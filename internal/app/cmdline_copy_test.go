@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/macro"
 	"github.com/unxed/f4/internal/panel"
@@ -58,5 +59,97 @@ func TestCtrlCCopiesCommandLineSelectionThroughHotkeys(t *testing.T) {
 	}
 	if got := vtui.GetClipboard(); got != "selected" {
 		t.Fatalf("clipboard after Ctrl+C = %q, want %q", got, "selected")
+	}
+}
+
+// selectCommandLineTail selects the last n characters of text in the command
+// line with Shift+Left.
+func selectCommandLineTail(pf *panel.PanelsFrame, text string, n int) {
+	pf.CmdLine.Edit.SetText(text)
+	pf.CmdLine.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+	for range n {
+		pf.CmdLine.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true,
+			VirtualKeyCode: vtinput.VK_LEFT, ControlKeyState: vtinput.ShiftPressed})
+	}
+}
+
+func cmdlineCopyKey() *vtinput.InputEvent {
+	return &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true,
+		VirtualKeyCode: vtinput.VK_C, ControlKeyState: vtinput.LeftCtrlPressed}
+}
+
+// A recorded macro on Ctrl+C must not play over a command-line selection,
+// as one on Backspace must not over a command line that holds text (f4#1797).
+func TestMacroFilterLetsCommandLineCopyBeforeRecordedMacro(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	oldConfig := config.App
+	oldHotkeys, oldMacros, oldRemap := keymap.GlobalHotkeysMgr, macro.MacroMgr, keymap.GlobalKeyRemap
+	t.Cleanup(func() {
+		config.App = oldConfig
+		keymap.GlobalHotkeysMgr, macro.MacroMgr, keymap.GlobalKeyRemap = oldHotkeys, oldMacros, oldRemap
+	})
+	config.App.NavigationMode = config.NavigationClassic
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
+	keymap.GlobalKeyRemap = nil
+	mgr := macro.NewMacroManager("")
+	mgr.Macros["Shell"] = map[string][]*vtinput.InputEvent{
+		keymap.EventToFarString(cmdlineCopyKey()): {{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_PRIOR, ControlKeyState: vtinput.LeftCtrlPressed}},
+	}
+
+	pf := panel.NewPanelsFrame()
+	t.Cleanup(pf.Close)
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	selectCommandLineTail(pf, "echo selected", len("selected"))
+	vtui.SetClipboard("")
+	if macroFilter(mgr, cmdlineCopyKey()) {
+		t.Fatal("the recorded Ctrl+C macro played over a command-line selection")
+	}
+	if !pf.ProcessKey(cmdlineCopyKey()) || vtui.GetClipboard() != "selected" {
+		t.Fatalf("clipboard after Ctrl+C = %q, want %q", vtui.GetClipboard(), "selected")
+	}
+
+	pf.CmdLine.ClearSelection()
+	if !macroFilter(mgr, cmdlineCopyKey()) {
+		t.Fatal("the recorded Ctrl+C macro did not play with nothing selected")
+	}
+}
+
+// A Shell action that takes a key leaves the command-line selection behind:
+// the key went past the line, and Ctrl+C belongs to the panel again.
+func TestShellActionDropsCommandLineSelection(t *testing.T) {
+	t.Cleanup(paneltest.SwapFrameManager(t))
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+
+	previousHotkeys, previousMacro := keymap.GlobalHotkeysMgr, macro.MacroMgr
+	keymap.GlobalHotkeysMgr = &keymap.HotkeyManager{
+		Defaults: map[string]map[string]string{"Shell": {"F12": "Panel.SplitReset"}},
+		Bindings: map[string]map[string]string{"Shell": {"F12": "Panel.SplitReset"}},
+	}
+	manager := &macro.MacroManager{}
+	macro.MacroMgr = manager
+	t.Cleanup(func() {
+		keymap.GlobalHotkeysMgr = previousHotkeys
+		macro.MacroMgr = previousMacro
+	})
+
+	pf := panel.NewPanelsFrame()
+	t.Cleanup(pf.Close)
+	pf.ResizeConsole(80, 25)
+	vtui.FrameManager.Push(pf)
+
+	selectCommandLineTail(pf, "echo selected", len("selected"))
+	f12 := &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F12}
+	if !macroFilter(manager, f12) {
+		t.Fatal("test premise: the Shell action did not take F12")
+	}
+	if pf.CmdLine.HasSelection() {
+		t.Fatal("the command-line selection survived a key that went to a Shell action")
+	}
+	if pf.VetoActionKey(cmdlineCopyKey()) {
+		t.Fatal("Ctrl+C still belongs to the command line after the user left it")
 	}
 }
