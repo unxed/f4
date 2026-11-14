@@ -1356,6 +1356,11 @@ func (pf *PanelsFrame) runMenuCommandSteps(steps []string) {
 			return
 		}
 		pf.CmdLine.Edit.SetText(step)
+		// The injected Enter executes this command, regardless of which
+		// surface Search first currently routes user input to.
+		if pf.SearchFirstMode() && pf.ShowPanels && !pf.CommandLineFocused {
+			pf.SetCommandLineFocus(true)
+		}
 		pf.ProcessKey(&vtinput.InputEvent{
 			Type: vtinput.KeyEventType, KeyDown: true,
 			VirtualKeyCode: vtinput.VK_RETURN,

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/cmdline"
+	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/f4/vfs"
@@ -365,6 +366,28 @@ func TestUserMenu_ExecuteCommands(t *testing.T) {
 	// Комментарии не должны уйти в выполнение
 	if strings.Contains(written, "ignored") {
 		t.Error("Comments (REM / ::) were erroneously sent to term.PTY execution")
+	}
+}
+
+func TestUserMenu_ExecuteCommandsWithSearchFirstNavigation(t *testing.T) {
+	oldConfig := config.App
+	config.App = config.DefaultConfig()
+	config.App.NavigationMode = config.NavigationSearchFirst
+	t.Cleanup(func() { config.App = oldConfig })
+
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	theme.SetDefaultF4Palette()
+	pf := setupMockPanelsFrame(t)
+	defer pf.Close()
+	pf.ResizeConsole(80, 25)
+	pty := pf.Pty.(*mockPty)
+
+	// The command line is not the user-input target in Search first until
+	// explicitly focused. A menu command must still be delivered there rather
+	// than interpreted as Enter on the selected panel file.
+	executeMenuCommands(pf, []string{"echo association-ran"})
+	if written := string(pty.written); !strings.Contains(written, "echo association-ran") {
+		t.Fatalf("menu command was routed to the panel instead of the command line: %q", written)
 	}
 }
 
