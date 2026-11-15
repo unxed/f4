@@ -28,6 +28,15 @@ type protoUIContainer struct {
 	uis    map[string]vtui.UIElement
 }
 
+func (p *protoUIContainer) MoveRelative(dx, dy int) {
+	p.ScreenObject.MoveRelative(dx, dy)
+	for _, ui := range p.uis {
+		if ui != nil {
+			ui.MoveRelative(dx, dy)
+		}
+	}
+}
+
 func (p *protoUIContainer) GetChildren() []vtui.UIElement {
 	var children []vtui.UIElement
 	if ui, ok := p.uis[p.active]; ok && ui != nil {

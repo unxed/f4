@@ -50,3 +50,33 @@ func TestConnectionDialogLayout(t *testing.T) {
 	// Validate the layout
 	vtui.AssertLayout(t, dlg)
 }
+
+func TestProtoUIContainerMovesProtocolControls(t *testing.T) {
+	first := vtui.NewCheckbox(10, 20, "first", false)
+	second := vtui.NewCheckbox(10, 20, "second", false)
+	container := &protoUIContainer{
+		active: "first",
+		uis: map[string]vtui.UIElement{
+			"first":  first,
+			"second": second,
+		},
+	}
+	container.SetPosition(10, 20, 65, 20)
+	x1, y1, x2, y2 := first.GetPosition()
+	firstBefore := [4]int{x1, y1, x2, y2}
+	x1, y1, x2, y2 = second.GetPosition()
+	secondBefore := [4]int{x1, y1, x2, y2}
+
+	container.MoveRelative(3, 4)
+
+	for name, ui := range map[string]vtui.UIElement{"first": first, "second": second} {
+		x1, y1, x2, y2 := ui.GetPosition()
+		before := firstBefore
+		if name == "second" {
+			before = secondBefore
+		}
+		if x1 != before[0]+3 || y1 != before[1]+4 || x2 != before[2]+3 || y2 != before[3]+4 {
+			t.Errorf("%s position = (%d,%d)-(%d,%d), want original position + (3,4)", name, x1, y1, x2, y2)
+		}
+	}
+}
