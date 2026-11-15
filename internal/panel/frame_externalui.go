@@ -13,6 +13,12 @@ type externalUICommandRunner func(command string, args []string, dir string) err
 var DefaultExternalUICommandRunner externalUICommandRunner = runExternalUICommandOS
 
 func runExternalUICommandOS(command string, args []string, dir string) error {
+	// On Windows, opening an associated file through rundll32's
+	// FileProtocolHandler treats a filesystem path as a URL. Characters with URL semantics can then be decoded or truncated.
+	// Use ShellExecuteW with the original path instead.
+	if command == "rundll32" && len(args) == 2 && args[0] == "url.dll,FileProtocolHandler" {
+		return runAssociatedFileOS(args[1], dir)
+	}
 	cmd := exec.Command(command, args...)
 	if dir != "" {
 		cmd.Dir = dir
