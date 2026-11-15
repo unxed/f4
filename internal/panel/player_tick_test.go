@@ -1,6 +1,8 @@
 package panel
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -118,5 +120,32 @@ func TestPlayerTickMovesOnFromATrackThatEnded(t *testing.T) {
 	s.step()
 	if eng.loaded || !redrawRequested() {
 		t.Fatalf("after the last track's end: engine %+v; want it stopped and a redraw", *eng)
+	}
+}
+
+func TestPlayerNextSkipsPlaylistFilesThatWereRemoved(t *testing.T) {
+	dir := t.TempDir()
+	currentPath := filepath.Join(dir, "current.mp3")
+	nextPath := filepath.Join(dir, "next.mp3")
+	if err := os.WriteFile(currentPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nextPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newPlayerSession(&tickEngine{})
+	t.Cleanup(s.end)
+	current := &playlistItem{Name: "current", Path: currentPath}
+	s.root.insertChild(-1, current)
+	s.root.insertChild(-1, &playlistItem{Name: "removed", Path: filepath.Join(dir, "removed.mp3")})
+	next := &playlistItem{Name: "next", Path: nextPath}
+	s.root.insertChild(-1, next)
+	if !s.playItem(current) {
+		t.Fatal("could not start the current track")
+	}
+
+	if !s.playRelative(+1) || s.current != next || s.Engine.(*tickEngine).path != nextPath {
+		t.Fatalf("Next did not skip the removed file: current=%v engine=%+v", s.current, *s.Engine.(*tickEngine))
 	}
 }

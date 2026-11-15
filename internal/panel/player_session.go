@@ -336,11 +336,16 @@ func (s *playerSession) playRelative(delta int) bool {
 			idx = len(list)
 		}
 	}
-	idx += delta
-	if idx < 0 || idx >= len(list) {
-		return false
+	for idx += delta; idx >= 0 && idx < len(list); idx += delta {
+		// A playlist can outlive files removed from disk. Do not let one stale
+		// entry stop playback at the end of a track or send Next back to the
+		// first item; keep going in the requested direction.
+		if _, err := os.Stat(list[idx].Path); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		return s.playItem(list[idx])
 	}
-	return s.playItem(list[idx])
+	return false
 }
 
 // playPause pauses or goes on playing, or with nothing loaded starts the
