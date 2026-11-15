@@ -44,9 +44,17 @@ func tickFixture(t *testing.T, shown bool) (*playerSession, *tickEngine, *Panels
 	eng := &tickEngine{}
 	s := newPlayerSession(eng)
 	t.Cleanup(s.end)
-	s.root.insertChild(-1, &playlistItem{Name: "a", Path: "/a.mp3"})
-	s.root.insertChild(-1, &playlistItem{Name: "b", Path: "/b.mp3"})
-	if !s.playRelative(+1) || eng.path != "/a.mp3" || !eng.playing {
+	dir := t.TempDir()
+	aPath := filepath.Join(dir, "a.mp3")
+	bPath := filepath.Join(dir, "b.mp3")
+	for _, path := range []string{aPath, bPath} {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.root.insertChild(-1, &playlistItem{Name: "a", Path: aPath})
+	s.root.insertChild(-1, &playlistItem{Name: "b", Path: bPath})
+	if !s.playRelative(+1) || eng.path != aPath || !eng.playing {
 		t.Fatalf("the first track did not start: %+v", *eng)
 	}
 	if shown {
@@ -113,7 +121,7 @@ func TestPlayerTickMovesOnFromATrackThatEnded(t *testing.T) {
 		t.Fatal("a track that ended does not tick, so the next one never starts")
 	}
 	s.step()
-	if redrawn := redrawRequested(); eng.path != "/b.mp3" || !eng.playing || !redrawn {
+	if redrawn := redrawRequested(); filepath.Base(eng.path) != "b.mp3" || !eng.playing || !redrawn {
 		t.Fatalf("after a's end: engine %+v, redraw=%v; want b playing and a redraw", *eng, redrawn)
 	}
 	eng.playing, eng.finished = false, true
