@@ -836,7 +836,7 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 			// In no-wrap mode, we must consume until the actual newline
 			tempOff := currOffset
 			for {
-				b, err := vv.Backend.ReadAt(tempOff, 1024)
+				b, err := vv.Backend.readAtWithoutCache(vv.Backend.ctx, tempOff, 64*1024)
 				if err != nil || len(b) == 0 {
 					break
 				}

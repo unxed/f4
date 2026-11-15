@@ -303,7 +303,7 @@ func ansiStateOver(data []byte, base, state uint64) uint64 {
 // being worked out, and the caller then paints with base.
 //
 // The scan runs in the background and reads around the display cache
-// (readSearchAt). It used to go through ReadAt on the UI thread, whose single
+// (readAtWithoutCache). It used to go through ReadAt on the UI thread, whose single
 // 256 KiB window the scan and the rows being painted then fought over: a
 // window opened past the first 256 KiB of a terminal log -- Ctrl+End on a
 // 700 KiB one -- never got its state, because every frame fetched the window
@@ -347,7 +347,7 @@ func (vv *ViewerView) ansiStateAt(off int64, base uint64) (state uint64, known b
 			if n > ansiScanChunk {
 				n = ansiScanChunk
 			}
-			data, err := backend.readSearchAt(ctx.Context, pos, int(n))
+			data, err := backend.readAtWithoutCache(ctx.Context, pos, int(n))
 			if err != nil || len(data) == 0 {
 				// The colours above cannot be read: the plain ones stand,
 				// and are remembered so that the scan is not started again

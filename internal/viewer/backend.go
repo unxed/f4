@@ -212,11 +212,10 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	return nil, piecetable.ErrLoading
 }
 
-// readSearchAt reads a search window without replacing the viewer's display
-// cache. A search can scan far ahead of the visible page; routing those reads
-// through ReadAt made the single display window jump between the search and
-// the screen, causing the page to flicker while searching large files.
-func (b *ViewerBackend) readSearchAt(ctx context.Context, offset int64, length int) ([]byte, error) {
+// readAtWithoutCache reads a window without replacing the viewer's display
+// cache. Searches and long-line lookahead can scan far beyond the visible page;
+// routing those reads through ReadAt would evict the page the viewer is drawing.
+func (b *ViewerBackend) readAtWithoutCache(ctx context.Context, offset int64, length int) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
