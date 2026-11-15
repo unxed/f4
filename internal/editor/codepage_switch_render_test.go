@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/internal/piecetable"
+	"github.com/unxed/f4/internal/testutil"
 	"github.com/unxed/vtui"
 )
 
@@ -62,7 +63,7 @@ drained:
 	ev.Show(scr)
 	var got strings.Builder
 	for x := 0; x < 5; x++ {
-		got.WriteRune(rune(scr.GetCell(x, 1).Char))
+		got.WriteRune(testutil.Rune(scr.GetCell(x, 1).Char))
 	}
 	if !strings.Contains(got.String(), "café") {
 		t.Fatalf("rendered editor text = %q, want café", got.String())
