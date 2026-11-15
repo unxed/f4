@@ -31,13 +31,13 @@ func TestUnwrappedLongLineLookaheadDoesNotEvictDisplayWindow(t *testing.T) {
 	vv := &ViewerView{Backend: backend, WrapMode: false}
 	vv.SetPosition(0, 0, 79, 1)
 	deadline := time.Now().Add(5 * time.Second)
-	for {
+	for !vv.eofVisible {
 		vv.renderText(scr, 80, 1)
-		if scr.GetCell(0, 1).Char == 'x' {
+		if vv.eofVisible {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("viewer did not load the first row")
+			t.Fatal("viewer did not finish looking ahead through the long line")
 		}
 		select {
 		case task := <-vtui.FrameManager.TaskChan:
@@ -45,7 +45,7 @@ func TestUnwrappedLongLineLookaheadDoesNotEvictDisplayWindow(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	if !vv.eofVisible {
-		t.Fatal("looking for the end of a line longer than the display cache did not reach EOF")
+	if scr.GetCell(0, 1).Char != 'x' {
+		t.Fatal("viewer did not preserve the visible row while looking ahead")
 	}
 }

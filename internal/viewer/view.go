@@ -65,6 +65,10 @@ type ViewerView struct {
 	ansiCache ansiStateCache
 	// ansiScan is the background scan that is filling ansiCache, if any.
 	ansiScan *ansiScan
+	// lineEndCache and lineEndScan keep long-line lookahead out of the display
+	// cache and off the UI thread.
+	lineEndCache lineEndCache
+	lineEndScan  *lineEndScan
 
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets         []int64
@@ -833,27 +837,13 @@ func (vv *ViewerView) renderText(scr *vtui.ScreenBuf, width, contentHeight int) 
 		currOffset += int64(row.lineLen)
 
 		if !row.foundNewline && !vv.WrapMode {
-			// In no-wrap mode, we must consume until the actual newline
-			tempOff := currOffset
-			for {
-				b, err := vv.Backend.readAtWithoutCache(vv.Backend.ctx, tempOff, 64*1024)
-				if err != nil || len(b) == 0 {
-					break
-				}
-				found := false
-				for i, char := range b {
-					if char == '\n' {
-						tempOff += int64(i + 1)
-						found = true
-						break
-					}
-				}
-				if found {
-					break
-				}
-				tempOff += int64(len(b))
+			// A long logical line can exceed the single display-cache window.
+			// Scan it asynchronously without evicting the row currently on screen.
+			lineEnd, ready := vv.lineEndAt(currOffset)
+			if !ready {
+				break
 			}
-			currOffset = tempOff
+			currOffset = lineEnd
 		}
 		if row.foundNewline || !vv.WrapMode {
 			lineStart = currOffset
