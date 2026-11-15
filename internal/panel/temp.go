@@ -717,6 +717,12 @@ func (t *TempPanelVFS) HandlePanelAction(app vfs.App, action vfs.PanelAction, pa
 	if len(paths) == 0 {
 		return true
 	}
+	// The panel's parent row is navigation, not an item in this VFS. Let the
+	// ordinary panel handler process it; otherwise mouse/semantic activation
+	// gets swallowed here (the keyboard path handles it before this callback).
+	if action == vfs.PanelActionActivate && paths[0] == t.Dir(t.GetPath()) {
+		return false
+	}
 	ref, realPath, _, ok := t.resolve(paths[0])
 	if !ok {
 		return true
