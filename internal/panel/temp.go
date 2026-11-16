@@ -715,7 +715,9 @@ func (t *TempPanelVFS) HandlePanelAction(app vfs.App, action vfs.PanelAction, pa
 		return false
 	}
 	if len(paths) == 0 {
-		return true
+		// SelectedPanelActionPaths omits the synthetic ".." row. Let the
+		// panel's normal Enter handler navigate it instead of swallowing it.
+		return action != vfs.PanelActionActivate
 	}
 	// The panel's parent row is navigation, not an item in this VFS. Let the
 	// ordinary panel handler process it; otherwise mouse/semantic activation
