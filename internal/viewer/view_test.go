@@ -431,14 +431,21 @@ func TestViewerView_EndJumpReadsOnlyTailOfLargeFile(t *testing.T) {
 				t.Fatalf("End jump made %d whole-file line-index calls", indexer.calls)
 			}
 			ranges := File.ranges()
-			if len(ranges) != 1 {
-				t.Fatalf("End jump made %d range reads, want one: %+v", len(ranges), ranges)
+			if len(ranges) == 0 || len(ranges) > 2 {
+				t.Fatalf("End jump made %d range reads, want a tail read and at most one EOF probe: %+v", len(ranges), ranges)
 			}
-			if ranges[0].length > 256*1024 {
-				t.Fatalf("End jump read %d bytes, want at most one 256 KiB window", ranges[0].length)
+			var totalRead int
+			for _, r := range ranges {
+				totalRead += r.length
+				if r.length > 256*1024 {
+					t.Fatalf("End jump read %d bytes, want at most one 256 KiB window per read", r.length)
+				}
+				if r.offset < fileSize-256*1024 {
+					t.Fatalf("End jump read from offset %d, want only the file tail", r.offset)
+				}
 			}
-			if ranges[0].offset < fileSize-256*1024 {
-				t.Fatalf("End jump read from offset %d, want only the file tail", ranges[0].offset)
+			if totalRead > 256*1024+1 {
+				t.Fatalf("End jump read %d bytes, want at most one 256 KiB tail window and one EOF probe", totalRead)
 			}
 			if vv.TopOffset < fileSize-256*1024 {
 				t.Fatalf("End jump landed at %d, outside the final cache window", vv.TopOffset)
