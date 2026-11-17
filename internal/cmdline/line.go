@@ -33,7 +33,7 @@ func NewCommandLine(prompt string) *CommandLine {
 		Edit:   vtui.NewEdit(0, 0, 10, ""),
 	}
 	cl.Edit.DeduplicateHistory = true
-	cl.Edit.HistoryLimit = 100
+	cl.Edit.HistoryLimit = 1000
 	cl.Edit.PathHintsEnabled = config.App.CommandLineAutoComplete
 	// CommandLine.ProcessKey drives the completion menu itself, under
 	// gating that vtui knows nothing about: CommandLineAutoComplete,

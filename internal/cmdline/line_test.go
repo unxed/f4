@@ -1,12 +1,19 @@
 package cmdline
 
 import (
+	"testing"
+
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
-	"testing"
 )
+
+func TestCommandLine_DefaultHistoryLimit(t *testing.T) {
+	if got := NewCommandLine("> ").Edit.HistoryLimit; got != 1000 {
+		t.Fatalf("command-line history limit = %d, want 1000", got)
+	}
+}
 
 func TestCommandLine_Input(t *testing.T) {
 	vtui.SetDefaultPalette()
