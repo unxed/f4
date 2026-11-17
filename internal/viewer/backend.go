@@ -31,6 +31,8 @@ type ViewerBackend struct {
 	mu         sync.Mutex
 	cacheOff   int64
 	cacheData  []byte
+	cacheOff2  int64
+	cacheData2 []byte
 	isFetching bool
 	readErr    error
 
@@ -67,6 +69,7 @@ func (b *ViewerBackend) Close() error {
 	}
 	b.mu.Lock()
 	b.cacheData = nil
+	b.cacheData2 = nil
 	b.mu.Unlock()
 	return b.File.Close()
 }
@@ -98,6 +101,7 @@ func (b *ViewerBackend) Size() int64 {
 func (b *ViewerBackend) DropCache() {
 	b.mu.Lock()
 	b.cacheData = nil
+	b.cacheData2 = nil
 	b.totalLines = -1
 	b.totalForSize = -1
 	b.mu.Unlock()
@@ -151,6 +155,14 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 		}
 		return b.cacheData[start : start+int64(length)], nil
 	}
+	if b.cacheData2 != nil && offset >= b.cacheOff2 && offset < b.cacheOff2+int64(len(b.cacheData2)) {
+		start := offset - b.cacheOff2
+		avail := int64(len(b.cacheData2)) - start
+		if int64(length) > avail {
+			length = int(avail)
+		}
+		return b.cacheData2[start : start+int64(length)], nil
+	}
 
 	if offset >= b.size {
 		return nil, io.EOF
@@ -197,8 +209,13 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 				b.mu.Lock()
 				if b.ctx.Err() == nil {
 					if err == nil || err == io.EOF {
-						b.cacheOff = fetchOff
-						b.cacheData = cached
+						if b.cacheData == nil {
+							b.cacheOff = fetchOff
+							b.cacheData = cached
+						} else {
+							b.cacheOff2 = fetchOff
+							b.cacheData2 = cached
+						}
 					} else {
 						b.readErr = err
 					}
@@ -496,30 +513,25 @@ func (b *ViewerBackend) LastTextRowsStart(ctx context.Context, end, rows int64) 
 		end--
 	}
 
-	remaining := rows
-	curr := end - 1
-	for curr >= 0 {
-		if err := ctx.Err(); err != nil {
-			return 0, false
-		}
-		start := curr - 64*1024 + 1
-		if start < 0 {
-			start = 0
-		}
-		data, err := b.readAtWithoutCache(ctx, start, int(curr-start+1))
-		if err != nil {
-			return 0, false
-		}
-		for i := len(data) - 1; i >= 0; i-- {
-			if data[i] != '\n' {
-				continue
-			}
-			remaining--
-			if remaining == 0 {
-				return start + int64(i) + 1, true
-			}
-		}
-		curr = start - 1
+	// Bound the scan to one display-cache window. A file may contain a
+	// single newline-free line hundreds of megabytes long; End should still
+	// be a tail operation rather than reading the entire file to count rows.
+	start := end - 256*1024
+	if start < 0 {
+		start = 0
 	}
-	return 0, true
+	data, err := b.readAtWithoutCache(ctx, start, int(end-start))
+	if err != nil {
+		return 0, false
+	}
+	for i := len(data) - 1; i >= 0; i-- {
+		if data[i] != '\n' {
+			continue
+		}
+		rows--
+		if rows == 0 {
+			return start + int64(i) + 1, true
+		}
+	}
+	return start, true
 }
