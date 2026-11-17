@@ -52,6 +52,8 @@ VisRen.NewName=Новое имя
 
 ID3Editor.Menu=Редактор ID3-&тегов
 ID3Editor.Command.Edit.Desc=Изменить метаданные ID3 выбранного MP3-файла
+ID3Editor.ConfigMenu=Редактор ID3-тегов
+ID3Editor.ConfigDescription=Настроить редактор ID3-тегов
 ID3Editor.Title=Редактор ID3-тегов
 ID3Editor.LocalOnly=Редактор ID3-тегов поддерживает только локальные файлы.
 ID3Editor.SelectFile=Сначала выберите файл MP3.

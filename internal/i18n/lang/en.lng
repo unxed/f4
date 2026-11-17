@@ -52,6 +52,8 @@ VisRen.NewName=New name
 
 ID3Editor.Menu=ID3 Tag &Editor
 ID3Editor.Command.Edit.Desc=Edit ID3 metadata of the selected MP3 file
+ID3Editor.ConfigMenu=ID3 Tag Editor
+ID3Editor.ConfigDescription=Configure ID3 Tag Editor
 ID3Editor.Title=ID3 Tag Editor
 ID3Editor.LocalOnly=ID3 Tag Editor only supports local files.
 ID3Editor.SelectFile=Select an MP3 file first.

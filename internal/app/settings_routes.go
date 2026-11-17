@@ -58,6 +58,7 @@ func init() {
 			"visren.configure":       {"operations", "visren.", "Visual File Renamer"},
 			"f4.envman.configure":    {"terminal", "envman.", "Environment Manager"},
 			"f4.mediainfo.configure": {"metadata", "mediainfo.", "Media information"},
+			"id3editor.configure":    {"metadata", "id3editor.", "ID3 Tag Editor"},
 		}[strings.ToLower(id)]
 		return ok && settings.OpenFieldsOnly(route.category, route.prefix, route.title)
 	}

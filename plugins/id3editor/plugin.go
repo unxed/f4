@@ -16,6 +16,7 @@ import (
 type ID3EditorPlugin struct {
 	api                  vfs.HostAPI
 	registration         vfs.Registration
+	configRegistration   vfs.Registration
 	settingsRegistration vfs.Registration
 }
 
@@ -46,6 +47,30 @@ func (p *ID3EditorPlugin) Init(api vfs.HostAPI) error {
 			return fmt.Errorf("ID3 editor: register command: %w", err)
 		}
 		p.registration = registration
+		configRegistration, err := contributions.RegisterPluginCommand(vfs.PluginCommand{
+			ID:             "id3editor.configure",
+			Location:       vfs.PluginCommandConfig,
+			Label:          "ID3 Tag Editor",
+			LabelKey:       "ID3Editor.ConfigMenu",
+			Description:    "Configure ID3 Tag Editor",
+			DescriptionKey: "ID3Editor.ConfigDescription",
+			Run: func(vfs.App) {
+				if settingsHost, ok := api.(vfs.SettingsNavigationHost); ok {
+					settingsHost.OpenSettings("metadata", "", "id3editor.PreserveModTime", false)
+				}
+			},
+		})
+		if err != nil {
+			p.registration.Unregister()
+			p.registration = nil
+			if p.settingsRegistration != nil {
+				p.settingsRegistration.Unregister()
+				p.settingsRegistration = nil
+			}
+			p.api = nil
+			return fmt.Errorf("ID3 editor: register configuration command: %w", err)
+		}
+		p.configRegistration = configRegistration
 		return nil
 	}
 	api.RegisterPluginMenuItem(vtui.Msg("ID3Editor.Menu"), func(app vfs.App) {
@@ -58,6 +83,10 @@ func (p *ID3EditorPlugin) Close() error {
 	if p.settingsRegistration != nil {
 		p.settingsRegistration.Unregister()
 		p.settingsRegistration = nil
+	}
+	if p.configRegistration != nil {
+		p.configRegistration.Unregister()
+		p.configRegistration = nil
 	}
 	if p.registration != nil {
 		p.registration.Unregister()

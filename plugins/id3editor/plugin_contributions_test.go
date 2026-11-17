@@ -36,9 +36,15 @@ func (registration *id3RegistrationMock) Unregister() {
 
 type id3ContributionHostMock struct {
 	*id3HostMock
-	command      vfs.PluginCommand
-	registration *id3RegistrationMock
-	err          error
+	commands      []vfs.PluginCommand
+	registrations []*id3RegistrationMock
+	settingsRoute []string
+	err           error
+}
+
+func (host *id3ContributionHostMock) OpenSettings(category, collection, record string, create bool) bool {
+	host.settingsRoute = []string{category, collection, record}
+	return !create
 }
 
 func (*id3ContributionHostMock) RegisterQuickViewProvider(vfs.QuickViewProvider) (vfs.Registration, error) {
@@ -46,14 +52,13 @@ func (*id3ContributionHostMock) RegisterQuickViewProvider(vfs.QuickViewProvider)
 }
 
 func (host *id3ContributionHostMock) RegisterPluginCommand(command vfs.PluginCommand) (vfs.Registration, error) {
-	host.command = command
+	host.commands = append(host.commands, command)
 	if host.err != nil {
 		return nil, host.err
 	}
-	if host.registration == nil {
-		host.registration = &id3RegistrationMock{}
-	}
-	return host.registration, nil
+	registration := &id3RegistrationMock{}
+	host.registrations = append(host.registrations, registration)
+	return registration, nil
 }
 
 func (*id3ContributionHostMock) RegisterCommandPrefix(string, string, func(vfs.App, string)) (vfs.CommandPrefixRegistration, error) {
@@ -84,12 +89,25 @@ func TestPluginPrefersRichCommandAndUnregistersIt(t *testing.T) {
 	if host.legacyLabel != "" || host.legacyHandler != nil {
 		t.Fatal("rich host also received a duplicate legacy menu item")
 	}
-	command := host.command
+	if len(host.commands) != 2 {
+		t.Fatalf("registered commands = %#v", host.commands)
+	}
+	command := host.commands[0]
 	if command.ID != "id3editor.edit" || command.Location != vfs.PluginCommandPanel ||
 		command.Label != "ID3 Tag &Editor" || command.LabelKey != "ID3Editor.Menu" ||
 		command.Description == "" || command.DescriptionKey != "ID3Editor.Command.Edit.Desc" ||
 		len(command.SearchKeys) != 3 || command.Run == nil {
 		t.Fatalf("rich command metadata = %#v", command)
+	}
+	configCommand := host.commands[1]
+	if configCommand.ID != "id3editor.configure" || configCommand.Location != vfs.PluginCommandConfig ||
+		configCommand.LabelKey != "ID3Editor.ConfigMenu" || configCommand.DescriptionKey != "ID3Editor.ConfigDescription" ||
+		configCommand.Run == nil {
+		t.Fatalf("configuration command metadata = %#v", configCommand)
+	}
+	configCommand.Run(nil)
+	if got := host.settingsRoute; len(got) != 3 || got[0] != "metadata" || got[2] != "id3editor.PreserveModTime" {
+		t.Fatalf("configuration command opened settings route %v", got)
 	}
 	// Enabled dims the menu item/command-palette entry instead of letting
 	// it pop an error dialog on a file the editor cannot handle (f4#1356).
@@ -102,8 +120,8 @@ func TestPluginPrefersRichCommandAndUnregistersIt(t *testing.T) {
 	if err := plugin.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if host.registration == nil || host.registration.unregistered != 1 {
-		t.Fatalf("unregister calls = %#v", host.registration)
+	if len(host.registrations) != 2 || host.registrations[0].unregistered != 1 || host.registrations[1].unregistered != 1 {
+		t.Fatalf("unregister calls = %#v", host.registrations)
 	}
 	if plugin.api != nil || plugin.registration != nil {
 		t.Fatal("Close retained host or registration state")
