@@ -69,6 +69,7 @@ type ViewerView struct {
 	// cache and off the UI thread.
 	lineEndCache lineEndCache
 	lineEndScan  *lineEndScan
+	lineMoveScan *lineMoveScan
 
 	// For Text mode: offsets of lines currently on screen
 	lineOffsets         []int64
@@ -916,6 +917,8 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 			vv.TopOffset -= 1
 		} else if vv.HexMode {
 			vv.TopOffset -= step
+		} else if !vv.WrapMode {
+			vv.moveUpRows(1)
 		} else {
 			vv.TopOffset = vv.Backend.FindLineStart(vv.TopOffset - 1)
 		}
@@ -951,7 +954,9 @@ func (vv *ViewerView) ProcessKey(e *vtinput.InputEvent) bool {
 		} else if vv.HexMode {
 			vv.TopOffset -= step * contentHeight
 		} else {
-			if !vv.pageUpWrappedText(contentHeight) {
+			if !vv.WrapMode {
+				vv.moveUpRows(contentHeight)
+			} else if !vv.pageUpWrappedText(contentHeight) {
 				for i := 0; i < int(contentHeight); i++ {
 					vv.TopOffset = vv.Backend.FindLineStart(vv.TopOffset - 1)
 				}
@@ -1150,6 +1155,7 @@ func (vv *ViewerView) jumpToEnd() {
 	}
 	wrapMode := vv.WrapMode
 	ansiMode := vv.AnsiMode
+	decodeMode := vv.DecodeMode
 	rowRead := vv.rowReadSize(width)
 	tabSize := 8
 	if config.App.EditorTabSize > 0 {
@@ -1165,6 +1171,18 @@ func (vv *ViewerView) jumpToEnd() {
 		// wait for it forever. Stop instead, as holdUntilCached does.
 		stopped := func() bool {
 			return ctx.Err() != nil || backend.ctx.Err() != nil
+		}
+		if !wrapMode && !ansiMode && !decodeMode {
+			start, ok := backend.LastTextRowsStart(ctx.Context, backend.Size(), contentHeight)
+			if !ok || stopped() {
+				return
+			}
+			ctx.RunOnUI(func() {
+				vv.TopOffset = start
+				vv.eofVisible = false
+				vtui.FrameManager.Redraw()
+			})
+			return
 		}
 
 		chunkSize := contentHeight * int64(width) * 4
@@ -1289,6 +1307,8 @@ func (vv *ViewerView) ReloadWithCodepage(cpID int) {
 		oldSize = oldBackend.Size()
 	}
 	vv.Backend = backend
+	vv.lineMoveScan = nil
+	vv.Busy = false
 	vv.Codepage = cpID
 	vv.HexMode = hexMode
 	newSize := vv.Backend.Size()

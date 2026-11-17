@@ -60,6 +60,33 @@ func (vv *ViewerView) lineEndAt(start int64) (int64, bool) {
 	return 0, false
 }
 
+func (vv *ViewerView) moveUpRows(rows int64) {
+	if vv.Backend == nil || rows <= 0 || vv.lineMoveScan != nil {
+		return
+	}
+	backend := vv.Backend
+	scan := &lineMoveScan{backend: backend}
+	start := vv.TopOffset
+	vv.lineMoveScan = scan
+	vv.Busy = true
+	vtui.RunAsync(func(ctx *vtui.TaskContext) {
+		offset, ok := backend.PreviousRowsStart(ctx.Context, start, rows)
+		ctx.RunOnUI(func() {
+			if vv.lineMoveScan != scan {
+				return
+			}
+			vv.lineMoveScan = nil
+			vv.Busy = false
+			if !ok || vv.Backend != backend {
+				return
+			}
+			vv.TopOffset = offset
+			vv.eofVisible = false
+			vtui.FrameManager.Redraw()
+		})
+	})
+}
+
 type lineEndScan struct {
 	start, size int64
 	codepage    int
@@ -70,4 +97,8 @@ type lineEndCache struct {
 	start, end int64
 	size       int64
 	codepage   int
+}
+
+type lineMoveScan struct {
+	backend *ViewerBackend
 }

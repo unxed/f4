@@ -434,3 +434,92 @@ func (b *ViewerBackend) FindLineStart(offset int64) int64 {
 	}
 	return 0
 }
+
+// PreviousRowsStart finds the start of the rows immediately above offset
+// without moving the display cache. Viewer navigation calls it in a
+// background task because the preceding newline may be arbitrarily far away.
+func (b *ViewerBackend) PreviousRowsStart(ctx context.Context, offset, rows int64) (int64, bool) {
+	if offset <= 0 || rows <= 0 {
+		return 0, true
+	}
+
+	remaining := rows
+	curr := offset - 1
+	skipBoundary := true
+	for curr >= 0 {
+		if err := ctx.Err(); err != nil {
+			return 0, false
+		}
+		start := curr - 64*1024 + 1
+		if start < 0 {
+			start = 0
+		}
+		data, err := b.readAtWithoutCache(ctx, start, int(curr-start+1))
+		if err != nil {
+			return 0, false
+		}
+		for i := len(data) - 1; i >= 0; i-- {
+			if data[i] != '\n' {
+				continue
+			}
+			newline := start + int64(i)
+			if skipBoundary && newline == offset-1 {
+				skipBoundary = false
+				continue
+			}
+			skipBoundary = false
+			remaining--
+			if remaining == 0 {
+				return newline + 1, true
+			}
+		}
+		curr = start - 1
+	}
+	return 0, true
+}
+
+// LastTextRowsStart returns the first of the last rows in a plain-text view.
+// It scans backwards so a single very long line cannot turn fixed-size tail
+// chunks into fake display rows.
+func (b *ViewerBackend) LastTextRowsStart(ctx context.Context, end, rows int64) (int64, bool) {
+	if end <= 0 || rows <= 0 {
+		return 0, true
+	}
+	if end > b.Size() {
+		end = b.Size()
+	}
+	last, err := b.readAtWithoutCache(ctx, end-1, 1)
+	if err != nil {
+		return 0, false
+	}
+	if len(last) > 0 && last[0] == '\n' {
+		end--
+	}
+
+	remaining := rows
+	curr := end - 1
+	for curr >= 0 {
+		if err := ctx.Err(); err != nil {
+			return 0, false
+		}
+		start := curr - 64*1024 + 1
+		if start < 0 {
+			start = 0
+		}
+		data, err := b.readAtWithoutCache(ctx, start, int(curr-start+1))
+		if err != nil {
+			return 0, false
+		}
+		for i := len(data) - 1; i >= 0; i-- {
+			if data[i] != '\n' {
+				continue
+			}
+			remaining--
+			if remaining == 0 {
+				return start + int64(i) + 1, true
+			}
+		}
+		curr = start - 1
+	}
+	return 0, true
+}
