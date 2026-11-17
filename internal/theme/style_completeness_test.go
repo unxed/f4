@@ -54,11 +54,21 @@ func TestBuiltInThemesCoverAllColorSlots(t *testing.T) {
 			continue
 		}
 		for _, slot := range ColorSlots {
+			// Terminal colors were added after the built-in themes were
+			// authored. They are optional in legacy themes and use the
+			// application defaults until a theme explicitly defines them.
+			if isTerminalThemeSlot(slot) {
+				continue
+			}
 			if !slotDefinedInIni(style.ini, slot) {
 				t.Errorf("theme %q is missing %s in [farcolors]", style.Name, slot.Canonical)
 			}
 		}
 	}
+}
+
+func isTerminalThemeSlot(slot ColorSlot) bool {
+	return strings.HasPrefix(slot.Canonical, "Terminal.Text") || strings.HasPrefix(slot.Canonical, "Terminal.Ansi.")
 }
 
 // slotDefinedInIni reports whether the given colour slot has any entry
