@@ -77,6 +77,24 @@ const (
 	// Only the foreground half is used: the caret travels across panels,
 	// dialogs and the editor, so it has no background of its own.
 	ColTerminalCursor
+	ColTerminalText
+	ColTerminalTextSelected
+	ColTerminalAnsiBlack
+	ColTerminalAnsiRed
+	ColTerminalAnsiGreen
+	ColTerminalAnsiYellow
+	ColTerminalAnsiBlue
+	ColTerminalAnsiMagenta
+	ColTerminalAnsiCyan
+	ColTerminalAnsiWhite
+	ColTerminalAnsiBrightBlack
+	ColTerminalAnsiBrightRed
+	ColTerminalAnsiBrightGreen
+	ColTerminalAnsiBrightYellow
+	ColTerminalAnsiBrightBlue
+	ColTerminalAnsiBrightMagenta
+	ColTerminalAnsiBrightCyan
+	ColTerminalAnsiBrightWhite
 
 	LastF4PaletteColor
 )
@@ -186,6 +204,21 @@ func SetDefaultF4Palette() {
 
 	// White reads over every background the far palette puts under the caret.
 	vtui.Palette[ColTerminalCursor] = vtui.SetRGBBoth(0, 0xFFFFFF, 0)
+	// Terminal theme slots start at the current built-in terminal colors. They
+	// are independent palette entries for now; runtime layering is added in the
+	// follow-up steps of f4#2071.
+	vtui.Palette[ColTerminalText] = vtui.SetRGBBoth(0, vtui.ThemePalette[7], vtui.ThemePalette[0])
+	vtui.Palette[ColTerminalTextSelected] = vtui.SetRGBBoth(0, vtui.ThemePalette[0], vtui.ThemePalette[7])
+	for i, slot := range terminalAnsiColorSlots {
+		vtui.Palette[slot] = vtui.SetRGBBoth(0, vtui.ThemePalette[i], 0)
+	}
+}
+
+var terminalAnsiColorSlots = [...]int{
+	ColTerminalAnsiBlack, ColTerminalAnsiRed, ColTerminalAnsiGreen, ColTerminalAnsiYellow,
+	ColTerminalAnsiBlue, ColTerminalAnsiMagenta, ColTerminalAnsiCyan, ColTerminalAnsiWhite,
+	ColTerminalAnsiBrightBlack, ColTerminalAnsiBrightRed, ColTerminalAnsiBrightGreen, ColTerminalAnsiBrightYellow,
+	ColTerminalAnsiBrightBlue, ColTerminalAnsiBrightMagenta, ColTerminalAnsiBrightCyan, ColTerminalAnsiBrightWhite,
 }
 
 type ColorSlot struct {
@@ -382,6 +415,24 @@ var ColorSlots = []ColorSlot{
 	// Terminal Group
 	// Not "Cursor": that key already names the item under the panel cursor.
 	{Canonical: "Terminal.Cursor", Index: ColTerminalCursor, Group: "Terminal", ConstantName: "ColTerminalCursor"},
+	{Canonical: "Terminal.Text", Index: ColTerminalText, Group: "Terminal", ConstantName: "ColTerminalText"},
+	{Canonical: "Terminal.Text.Selected", Index: ColTerminalTextSelected, Group: "Terminal", ConstantName: "ColTerminalTextSelected"},
+	{Canonical: "Terminal.Ansi.Black", Index: ColTerminalAnsiBlack, Group: "Terminal", ConstantName: "ColTerminalAnsiBlack"},
+	{Canonical: "Terminal.Ansi.Red", Index: ColTerminalAnsiRed, Group: "Terminal", ConstantName: "ColTerminalAnsiRed"},
+	{Canonical: "Terminal.Ansi.Green", Index: ColTerminalAnsiGreen, Group: "Terminal", ConstantName: "ColTerminalAnsiGreen"},
+	{Canonical: "Terminal.Ansi.Yellow", Index: ColTerminalAnsiYellow, Group: "Terminal", ConstantName: "ColTerminalAnsiYellow"},
+	{Canonical: "Terminal.Ansi.Blue", Index: ColTerminalAnsiBlue, Group: "Terminal", ConstantName: "ColTerminalAnsiBlue"},
+	{Canonical: "Terminal.Ansi.Magenta", Index: ColTerminalAnsiMagenta, Group: "Terminal", ConstantName: "ColTerminalAnsiMagenta"},
+	{Canonical: "Terminal.Ansi.Cyan", Index: ColTerminalAnsiCyan, Group: "Terminal", ConstantName: "ColTerminalAnsiCyan"},
+	{Canonical: "Terminal.Ansi.White", Index: ColTerminalAnsiWhite, Group: "Terminal", ConstantName: "ColTerminalAnsiWhite"},
+	{Canonical: "Terminal.Ansi.BrightBlack", Index: ColTerminalAnsiBrightBlack, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightBlack"},
+	{Canonical: "Terminal.Ansi.BrightRed", Index: ColTerminalAnsiBrightRed, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightRed"},
+	{Canonical: "Terminal.Ansi.BrightGreen", Index: ColTerminalAnsiBrightGreen, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightGreen"},
+	{Canonical: "Terminal.Ansi.BrightYellow", Index: ColTerminalAnsiBrightYellow, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightYellow"},
+	{Canonical: "Terminal.Ansi.BrightBlue", Index: ColTerminalAnsiBrightBlue, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightBlue"},
+	{Canonical: "Terminal.Ansi.BrightMagenta", Index: ColTerminalAnsiBrightMagenta, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightMagenta"},
+	{Canonical: "Terminal.Ansi.BrightCyan", Index: ColTerminalAnsiBrightCyan, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightCyan"},
+	{Canonical: "Terminal.Ansi.BrightWhite", Index: ColTerminalAnsiBrightWhite, Group: "Terminal", ConstantName: "ColTerminalAnsiBrightWhite"},
 }
 
 // colorMap links farcolors.ini keys to vtui.Palette indices dynamically.
