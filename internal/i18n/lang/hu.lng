@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=A * billentyűvel történő kijelölésfordítás a mappákat is tartalmazza. A szülőkönyvtár .. bejegyzése soha nem lesz kijelölve.
+SettingsCenter.SelectFolders.Label=Mappák kijelölése
 [Language]
 Name=Magyar
 Code=hu

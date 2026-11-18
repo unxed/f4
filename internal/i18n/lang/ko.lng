@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=* 키로 선택을 반전할 때 폴더도 포함합니다. 상위 디렉터리 .. 항목은 선택되지 않습니다.
+SettingsCenter.SelectFolders.Label=폴더 선택
 [Language]
 Name=한국어
 Code=ko

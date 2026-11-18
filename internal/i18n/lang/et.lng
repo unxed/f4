@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Kaasa kaustad valiku ümberpööramisel klahviga *. Ülemkausta kirjet .. ei valita kunagi.
+SettingsCenter.SelectFolders.Label=Vali kaustu
 [Language]
 Name=Eesti
 Code=et

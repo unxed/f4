@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Iekļaut mapes, apvēršot atlasi ar *. Vecākdirektorija .. ieraksts nekad netiek atlasīts.
+SettingsCenter.SelectFolders.Label=Atlasīt mapes
 [Language]
 Name=Latviešu
 Code=lv

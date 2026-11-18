@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Включать папки при инверсии выделения клавишей *. Запись родительского каталога .. никогда не выделяется.
+SettingsCenter.SelectFolders.Label=Выделять папки
 [Language]
 Name=Русский
 Code=ru

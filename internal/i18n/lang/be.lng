@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Уключаць папкі ў інвертаванне вылучэння клавішай *. Запіс бацькоўскага каталога .. не вылучаецца.
+SettingsCenter.SelectFolders.Label=Выбіраць папкі
 [Language]
 Name=Беларуская
 Code=be

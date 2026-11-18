@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Uwzględniaj foldery przy odwracaniu zaznaczenia klawiszem *. Wpis katalogu nadrzędnego .. nigdy nie jest zaznaczany.
+SettingsCenter.SelectFolders.Label=Zaznaczaj foldery
 [Language]
 Name=Polski
 Code=pl

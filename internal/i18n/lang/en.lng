@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Include folders when inverting the file selection with *. The parent-directory entry is never selected.
+SettingsCenter.SelectFolders.Label=Select folders
 [Language]
 Name=English
 Code=en

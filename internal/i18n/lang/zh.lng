@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=使用 * 反转选择时同时包含文件夹。父目录 .. 条目始终不会被选中。
+SettingsCenter.SelectFolders.Label=选择文件夹
 [Language]
 Name=中文
 Code=zh

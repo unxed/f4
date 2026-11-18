@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=* で選択を反転するときにフォルダーも含めます。親ディレクトリ .. は選択されません。
+SettingsCenter.SelectFolders.Label=フォルダーを選択
 [Language]
 Name=日本語
 Code=ja

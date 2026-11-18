@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Sisällytä kansiot, kun valinta käännetään *-näppäimellä. Yläkansion merkintää .. ei koskaan valita.
+SettingsCenter.SelectFolders.Label=Valitse kansiot
 [Language]
 Name=Suomi
 Code=fi

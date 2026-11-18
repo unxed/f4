@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=* ile seçimi tersine çevirirken klasörleri de dahil et. Üst dizin .. girdisi hiçbir zaman seçilmez.
+SettingsCenter.SelectFolders.Label=Klasörleri seç
 [Language]
 Name=Türkçe
 Code=tr

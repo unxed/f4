@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=* से चयन उलटते समय फ़ोल्डर शामिल करें। मूल निर्देशिका .. का चयन कभी नहीं होगा।
+SettingsCenter.SelectFolders.Label=फ़ोल्डर चुनें
 [Language]
 Name=Hindi (हिन्दी)
 Code=hi

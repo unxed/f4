@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Incluir carpetas al invertir la selección con *. La entrada del directorio padre .. nunca se selecciona.
+SettingsCenter.SelectFolders.Label=Seleccionar carpetas
 [Language]
 Name=Español
 Code=es

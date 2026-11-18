@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Ordner beim Umkehren der Auswahl mit * einbeziehen. Der Eintrag für das übergeordnete Verzeichnis .. wird nie ausgewählt.
+SettingsCenter.SelectFolders.Label=Ordner auswählen
 [Language]
 Name=Deutsch
 Code=de

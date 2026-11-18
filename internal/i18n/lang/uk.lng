@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Включати теки під час інверсії виділення клавішею *. Запис батьківського каталогу .. ніколи не виділяється.
+SettingsCenter.SelectFolders.Label=Виділяти теки
 [Language]
 Name=Українська
 Code=uk

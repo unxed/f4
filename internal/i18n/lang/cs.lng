@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=Při invertování výběru klávesou * zahrnout i složky. Položka nadřazené složky .. se nikdy nevybere.
+SettingsCenter.SelectFolders.Label=Vybírat složky
 [Language]
 Name=Čeština
 Code=cs

@@ -1,3 +1,5 @@
+SettingsCenter.SelectFolders.Description=* দিয়ে নির্বাচন উল্টানোর সময় ফোল্ডারও অন্তর্ভুক্ত করুন। অভিভাবক ডিরেক্টরি .. নির্বাচন করা হবে না।
+SettingsCenter.SelectFolders.Label=ফোল্ডার নির্বাচন করুন
 [Language]
 Name=বাংলা
 Code=bn
