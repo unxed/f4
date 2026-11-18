@@ -339,9 +339,9 @@ func actionCommandHistory(pf *panel.PanelsFrame) {
 		showCommandHistoryDetails(pf, rec, search, menu)
 	}
 
-	// Shared "paste selected command" path used by Enter and mouse click.
+	// Shared "paste selected command" path used by Ctrl+Enter and mouse click.
 	// The record is passed in because VMenu.Close restores its initial
-	// selection, which would otherwise make Enter paste a different row.
+	// selection, which would otherwise make Ctrl+Enter paste a different row.
 	pasteRecord := func(rec history.HistoryRecord) {
 		search.cleanup()
 		pf.CmdLine.Edit.SetText(rec.Name)
@@ -384,8 +384,20 @@ func actionCommandHistory(pf *panel.PanelsFrame) {
 				}
 				return true
 			}
-			menu.Close()
-			pasteRecord(rec)
+			if ctrl && !shift && !alt {
+				menu.Close()
+				pasteRecord(rec)
+				return true
+			}
+			if !ctrl && !shift && !alt {
+				search.cleanup()
+				menu.Close()
+				pf.CmdLine.Edit.SetText(rec.Name)
+				pf.CmdLine.Edit.HistoryPos = -1
+				pf.SetCommandLineFocus(true)
+				pf.ProcessKey(e)
+				return true
+			}
 			return true
 		}
 
