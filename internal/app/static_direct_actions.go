@@ -122,21 +122,6 @@ func runFixedPanelSortGroups(index int) bool {
 	return true
 }
 
-func fixedPanelSortNumericChecked(index int) bool {
-	_, fsp, ok := fixedRegularPanel(index)
-	return ok && fsp.SortNumeric
-}
-
-func runFixedPanelSortNumeric(index int) bool {
-	pf, fsp, ok := fixedRegularPanel(index)
-	if !ok {
-		return false
-	}
-	fsp.ToggleSortNumeric()
-	pf.UpdateMenuCheckmarks()
-	return true
-}
-
 func fixedPanelSortSelectedFirstChecked(index int) bool {
 	_, fsp, ok := fixedRegularPanel(index)
 	return ok && fsp.SortSelectedFirst
@@ -324,23 +309,6 @@ func init() {
 			},
 			Checked: func() bool { return fixedPanelSortGroupsChecked(side.index) },
 			Handler: func() bool { return runFixedPanelSortGroups(side.index) },
-		})
-
-		registerAction(action.Action{
-			Name:         "Panel." + side.id + ".SortNumeric",
-			Area:         "Shell",
-			Label:        "Numeric Sort",
-			LabelKey:     "Menu.SortNumeric",
-			Description:  fmt.Sprintf("Sort the %s panel by treating digit runs in names as numbers", strings.ToLower(side.id)),
-			DescKey:      "Action.Panel.SortNumeric.Desc",
-			MenuPath:     side.menuPath,
-			HideFromMenu: true,
-			Visible: func() bool {
-				_, _, ok := fixedRegularPanel(side.index)
-				return ok
-			},
-			Checked: func() bool { return fixedPanelSortNumericChecked(side.index) },
-			Handler: func() bool { return runFixedPanelSortNumeric(side.index) },
 		})
 
 		registerAction(action.Action{

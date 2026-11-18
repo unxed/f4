@@ -476,6 +476,7 @@ type F4Config struct {
 	SeparateFileExtensions   bool
 	PanelScrollbarMode       PanelScrollbarMode
 	ShowPanelFileInfo        bool
+	SortNumeric              bool
 	SavePanelPaths           bool
 	DriveMenuOptions         uint32 // display/filter flags for the Alt+F1/Alt+F2 menu
 	InfoPanelBytes           bool   // Ctrl+L info panel: true = raw bytes, false = human (GiB/MiB…)
@@ -765,6 +766,7 @@ var App = F4Config{
 	SeparateFileExtensions:   false,
 	PanelScrollbarMode:       PanelScrollbarMinimal,
 	ShowPanelFileInfo:        false,
+	SortNumeric:              false,
 	SavePanelPaths:           true,
 	DriveMenuOptions:         DefaultDriveMenuOptions,
 	InfoPanelBytes:           false,
@@ -964,6 +966,7 @@ func normalizeHighlighter(name string) string {
 // "nobody chose anything, so Radiola is the fallback", which is what lets a
 // first start pick a style that suits the console (see app.firstRunColorStyle).
 var colorStyleConfigured atomic.Bool
+var sortNumericConfigured atomic.Bool
 
 // ColorStyleConfigured reports whether the last LoadConfig found a ColorStyle
 // in a settings.ini. False means the value in App.ColorStyle is only the
@@ -972,10 +975,18 @@ func ColorStyleConfigured() bool {
 	return colorStyleConfigured.Load()
 }
 
+// SortNumericConfigured reports whether a settings.ini explicitly chose the
+// global numeric-sort preference. A saved false must take precedence over the
+// legacy per-panel values in session.ini.
+func SortNumericConfigured() bool {
+	return sortNumericConfigured.Load()
+}
+
 func LoadConfig() {
 	merged := loadSettingsIni()
 	parseConfigInto(&App, merged)
 	colorStyleConfigured.Store(merged.GetString("Interface", "ColorStyle", "") != "")
+	sortNumericConfigured.Store(merged.GetString("Panel", "SortNumeric", "\x00") != "\x00")
 	// What was read takes effect only here. parseConfigInto itself touches
 	// nothing outside the struct it fills, which is what lets f4:config work
 	// out defaults and try an edit without disturbing the running f4.
@@ -1061,6 +1072,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 		}
 	}
 	cfg.ShowPanelFileInfo = merged.GetString("Panel", "ShowPanelFileInfo", "0") == "1"
+	cfg.SortNumeric = merged.GetString("Panel", "SortNumeric", "0") == "1"
 	cfg.SavePanelPaths = merged.GetString("Panel", "SavePanelPaths", "1") == "1"
 	cfg.DriveMenuOptions = ParseDriveMenuOptions(merged.GetString("Panel", "DriveMenuOptions", ""))
 	cfg.InfoPanelBytes = merged.GetString("Panel", "InfoPanelBytes", "0") == "1"
@@ -1440,6 +1452,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "SeparateFileExtensions = %d\n", map[bool]int{true: 1, false: 0}[cfg.SeparateFileExtensions])
 	fmt.Fprintf(&sb, "PanelScrollbarMode = %s\n", cfg.PanelScrollbarMode.String())
 	fmt.Fprintf(&sb, "ShowPanelFileInfo = %d\n", map[bool]int{true: 1, false: 0}[cfg.ShowPanelFileInfo])
+	fmt.Fprintf(&sb, "SortNumeric = %d\n", map[bool]int{true: 1, false: 0}[cfg.SortNumeric])
 	fmt.Fprintf(&sb, "SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[cfg.SavePanelPaths])
 	fmt.Fprintf(&sb, "DriveMenuOptions = %d\n", cfg.DriveMenuOptions)
 	fmt.Fprintf(&sb, "InfoPanelBytes = %d\n", map[bool]int{true: 1, false: 0}[cfg.InfoPanelBytes])

@@ -1571,8 +1571,27 @@ func LoadSession() {
 	panel.LastShowLeft = ini.GetString("Session", "ShowLeft", "1") == "1"
 	panel.LastShowRight = ini.GetString("Session", "ShowRight", "1") == "1"
 	panel.LastWorkspaceSessions, panel.LastActiveWorkspace = panel.LoadWorkspaceSessions(ini)
+	config.App.SortNumeric = globalNumericSortPreference(
+		config.SortNumericConfigured(), config.App.SortNumeric,
+		panel.LastLeftSortNumeric, panel.LastRightSortNumeric, panel.LastWorkspaceSessions,
+	)
 
 	vtui.DebugLog("SESSION: Loaded state from %s", path)
+}
+
+func globalNumericSortPreference(configured, current, left, right bool, workspaces []panel.WorkspaceSessionState) bool {
+	if configured {
+		return current
+	}
+	if left || right {
+		return true
+	}
+	for _, workspace := range workspaces {
+		if workspace.Left.SortNumeric || workspace.Right.SortNumeric {
+			return true
+		}
+	}
+	return false
 }
 
 func SaveSession() {
@@ -1749,7 +1768,6 @@ func saveSessionFileError(path string, savePanelSettings, saveCurrentPanel bool)
 	fmt.Fprintf(&sb, "SortMode = %d\n", panel.LastLeftSortMode)
 	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[panel.LastLeftSortRev])
 	fmt.Fprintf(&sb, "UseSortGroups = %d\n", map[bool]int{true: 1, false: 0}[panel.LastLeftSortGroups])
-	fmt.Fprintf(&sb, "SortNumeric = %d\n", map[bool]int{true: 1, false: 0}[panel.LastLeftSortNumeric])
 	fmt.Fprintf(&sb, "SortSelectedFirst = %d\n", map[bool]int{true: 1, false: 0}[panel.LastLeftSortSelectedFirst])
 	fmt.Fprintf(&sb, "GroupBy = %d\nGroupReverse = %d\nGroupFoldersSeparately = %d\n", panel.LastLeftGroupBy, map[bool]int{true: 1}[panel.LastLeftGroupReverse], map[bool]int{true: 1}[panel.LastLeftGroupFoldersSeparately])
 
@@ -1760,7 +1778,6 @@ func saveSessionFileError(path string, savePanelSettings, saveCurrentPanel bool)
 	fmt.Fprintf(&sb, "SortMode = %d\n", panel.LastRightSortMode)
 	fmt.Fprintf(&sb, "SortReverse = %d\n", map[bool]int{true: 1, false: 0}[panel.LastRightSortRev])
 	fmt.Fprintf(&sb, "UseSortGroups = %d\n", map[bool]int{true: 1, false: 0}[panel.LastRightSortGroups])
-	fmt.Fprintf(&sb, "SortNumeric = %d\n", map[bool]int{true: 1, false: 0}[panel.LastRightSortNumeric])
 	fmt.Fprintf(&sb, "SortSelectedFirst = %d\n", map[bool]int{true: 1, false: 0}[panel.LastRightSortSelectedFirst])
 	fmt.Fprintf(&sb, "GroupBy = %d\nGroupReverse = %d\nGroupFoldersSeparately = %d\n", panel.LastRightGroupBy, map[bool]int{true: 1}[panel.LastRightGroupReverse], map[bool]int{true: 1}[panel.LastRightGroupFoldersSeparately])
 	panel.WriteWorkspaceSessions(&sb, panel.LastWorkspaceSessions, panel.LastActiveWorkspace)

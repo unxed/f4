@@ -640,14 +640,6 @@ type FileSystemPanel struct {
 	// UseSortGroups clusters the panel by the Group-bearing highlight.ini
 	// rules before the sort mode is applied (far's Shift+F11).
 	UseSortGroups bool
-	// SortNumeric makes name comparisons treat runs of digits inside a file
-	// name as numbers instead of plain text (far3's "numeric sort" checkbox
-	// next to sort-by-name, f4#1471): "2.Track_2" then sorts before
-	// "10.Track_10" instead of after it. It modifies how names compare
-	// everywhere a name is the sort key or its tie-break, the same way
-	// UseSortGroups modifies clustering regardless of SortMode.
-	SortNumeric bool
-
 	// SortSelectedFirst makes selected entries sort ahead of unselected ones
 	// regardless of the sort mode (far's Shift+F12 "show selected first").
 	// It is a key between the directories rule and the sort groups, the
@@ -970,28 +962,6 @@ func (fp *FileSystemPanel) ToggleSortGroups() {
 	fp.SetUseSortGroups(!fp.UseSortGroups)
 }
 
-// SetSortNumeric switches whether name comparisons treat digit runs as
-// numbers. Like a sort mode change it goes through ReadDirectory, so the
-// cursor is kept on the same file while the rows move under it.
-func (fp *FileSystemPanel) SetSortNumeric(numeric bool) {
-	if fp == nil || fp.SortNumeric == numeric {
-		return
-	}
-	fp.SortNumeric = numeric
-	if fp.GroupBy != GroupNone {
-		fp.SetGrouping(fp.GroupBy, fp.GroupReverse, fp.GroupFoldersSeparately)
-		return
-	}
-	fp.ReadDirectory()
-}
-
-func (fp *FileSystemPanel) ToggleSortNumeric() {
-	if fp == nil {
-		return
-	}
-	fp.SetSortNumeric(!fp.SortNumeric)
-}
-
 // SetSortSelectedFirst switches whether marked rows sort ahead of unmarked
 // ones (far's Shift+F12). Like the other sort modifiers it goes through a
 // re-sort, so the cursor stays on its file while the rows move under it.
@@ -1065,7 +1035,7 @@ func (fp *FileSystemPanel) sortEntriesAt(now time.Time) {
 	nameCompare := newNameComparer()
 	primaryNameCompare := newNamePrimaryComparer()
 	compareName := func(left, right string) int {
-		if fp.SortNumeric {
+		if config.App.SortNumeric {
 			if cmp := naturalCompare(left, right, primaryNameCompare); cmp != 0 {
 				return cmp
 			}

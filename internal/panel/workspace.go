@@ -124,7 +124,7 @@ func CaptureWorkspaceSession(pf *PanelsFrame) WorkspaceSessionState {
 		state.Left = PanelSessionState{
 			Path: path, Cursor: cursor, ViewMode: int(left.ViewMode),
 			SortMode: int(left.SortMode), SortReverse: left.SortReverse,
-			UseSortGroups: left.UseSortGroups, SortNumeric: left.SortNumeric,
+			UseSortGroups:     left.UseSortGroups,
 			SortSelectedFirst: left.SortSelectedFirst,
 			GroupBy:           left.GroupBy, GroupReverse: left.GroupReverse, GroupFoldersSeparately: left.GroupFoldersSeparately,
 		}
@@ -142,7 +142,7 @@ func CaptureWorkspaceSession(pf *PanelsFrame) WorkspaceSessionState {
 		state.Right = PanelSessionState{
 			Path: path, Cursor: cursor, ViewMode: int(right.ViewMode),
 			SortMode: int(right.SortMode), SortReverse: right.SortReverse,
-			UseSortGroups: right.UseSortGroups, SortNumeric: right.SortNumeric,
+			UseSortGroups:     right.UseSortGroups,
 			SortSelectedFirst: right.SortSelectedFirst,
 			GroupBy:           right.GroupBy, GroupReverse: right.GroupReverse, GroupFoldersSeparately: right.GroupFoldersSeparately,
 		}
@@ -288,7 +288,6 @@ func writePanelSession(sb *strings.Builder, section string, state PanelSessionSt
 	fmt.Fprintf(sb, "SortMode = %d\n", state.SortMode)
 	fmt.Fprintf(sb, "SortReverse = %d\n", map[bool]int{true: 1}[state.SortReverse])
 	fmt.Fprintf(sb, "UseSortGroups = %d\n", map[bool]int{true: 1}[state.UseSortGroups])
-	fmt.Fprintf(sb, "SortNumeric = %d\n", map[bool]int{true: 1}[state.SortNumeric])
 	fmt.Fprintf(sb, "SortSelectedFirst = %d\n", map[bool]int{true: 1}[state.SortSelectedFirst])
 	fmt.Fprintf(sb, "GroupBy = %d\nGroupReverse = %d\nGroupFoldersSeparately = %d\n", ValidGroupMode(state.GroupBy), map[bool]int{true: 1}[state.GroupReverse], map[bool]int{true: 1}[state.GroupFoldersSeparately])
 }
@@ -402,7 +401,6 @@ func ApplyWorkspaceSession(pf *PanelsFrame, state WorkspaceSessionState, width, 
 	left.SortMode, right.SortMode = SortMode(state.Left.SortMode), SortMode(state.Right.SortMode)
 	left.SortReverse, right.SortReverse = state.Left.SortReverse, state.Right.SortReverse
 	left.UseSortGroups, right.UseSortGroups = state.Left.UseSortGroups, state.Right.UseSortGroups
-	left.SortNumeric, right.SortNumeric = state.Left.SortNumeric, state.Right.SortNumeric
 	left.SortSelectedFirst, right.SortSelectedFirst = state.Left.SortSelectedFirst, state.Right.SortSelectedFirst
 
 	left.SetGrouping(state.Left.GroupBy, state.Left.GroupReverse, state.Left.GroupFoldersSeparately)

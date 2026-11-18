@@ -3539,6 +3539,8 @@ func TestFileSystemPanel_SortExtSortsDirectoriesByName(t *testing.T) {
 // sort must treat the leading track number as a number ("2" before "10")
 // instead of comparing it as plain text ("10" before "2").
 func TestFileSystemPanel_SortNumeric(t *testing.T) {
+	wasSortNumeric := config.App.SortNumeric
+	t.Cleanup(func() { config.App.SortNumeric = wasSortNumeric })
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	v := vfs.NewOSVFS(t.TempDir())
 	fp := NewFileSystemPanel(0, 0, 80, 24, v)
@@ -3553,7 +3555,7 @@ func TestFileSystemPanel_SortNumeric(t *testing.T) {
 
 	fp.SortMode = SortName
 	fp.SortReverse = false
-	fp.SortNumeric = false
+	config.App.SortNumeric = false
 	fp.SortEntries()
 	// Plain text order does not know "10" is bigger than "2" — that is
 	// precisely the bug reported in f4#1471.
@@ -3574,7 +3576,7 @@ func TestFileSystemPanel_SortNumeric(t *testing.T) {
 		&FileEntry{VFSItem: vfs.VFSItem{Name: "%"}},
 		&FileEntry{VFSItem: vfs.VFSItem{Name: "&"}},
 	)
-	fp.SortNumeric = true
+	config.App.SortNumeric = true
 	fp.SortEntries()
 	gotNumeric := make([]string, len(fp.Entries)-1)
 	for i, entry := range fp.Entries[1:] {
@@ -3585,20 +3587,18 @@ func TestFileSystemPanel_SortNumeric(t *testing.T) {
 		t.Fatalf("numeric name sort = %v, want %v", gotNumeric, wantNumeric)
 	}
 
-	// SetSortNumeric/ToggleSortNumeric flip the flag the same way the
-	// UseSortGroups setters do, and are a no-op on a nil panel.
-	var nilPanel *FileSystemPanel
-	nilPanel.SetSortNumeric(true)
-	nilPanel.ToggleSortNumeric()
+	// The File listing preference applies to every panel.
+	config.App.SortNumeric = true
+	fp.SortEntries()
+	gotNumeric = make([]string, len(fp.Entries)-1)
+	for i, entry := range fp.Entries[1:] {
+		gotNumeric[i] = entry.Name
+	}
+	if !reflect.DeepEqual(gotNumeric, wantNumeric) {
+		t.Fatalf("global numeric name sort = %v, want %v", gotNumeric, wantNumeric)
+	}
+	config.App.SortNumeric = false
 
-	fp.SetSortNumeric(false)
-	if fp.SortNumeric {
-		t.Error("SetSortNumeric(false) left SortNumeric set")
-	}
-	fp.ToggleSortNumeric()
-	if !fp.SortNumeric {
-		t.Error("ToggleSortNumeric did not turn numeric sort on")
-	}
 }
 
 // Shift+F12 (f4 selected-first): marked entries sort ahead of unmarked ones,

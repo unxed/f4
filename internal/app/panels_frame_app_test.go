@@ -1344,11 +1344,10 @@ func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 	if !ok {
 		t.Fatalf("Ctrl+F12 top frame = %T, want *vtui.VMenu", vtui.FrameManager.GetTopFrame())
 	}
-	// Five sort modes, a rule, the legacy sort-group toggle, the numeric-sort
-	// toggle (f4#1471), the selected-first toggle (Shift+F12) and the grouping
-	// menu (f4#1769 added the rule between the modes and the options).
-	if len(menu.Items) != 10 {
-		t.Fatalf("sort menu has %d items, want 10", len(menu.Items))
+	// Five sort modes, a rule, the legacy sort-group toggle, the selected-first
+	// toggle (Shift+F12) and the grouping menu.
+	if len(menu.Items) != 9 {
+		t.Fatalf("sort menu has %d items, want 9", len(menu.Items))
 	}
 	if !menu.Items[5].Separator {
 		t.Fatalf("row 5 = %q, want a rule between the modes and the options", menu.Items[5].Text)
@@ -1356,11 +1355,8 @@ func TestPanelsFrame_CtrlF12SortMenu(t *testing.T) {
 	if !strings.Contains(menu.Items[6].Text, i18n.Msg("Menu.SortUseGroups")) {
 		t.Fatalf("sort-group toggle row = %q, want the sort-group toggle", menu.Items[6].Text)
 	}
-	if !strings.Contains(menu.Items[7].Text, i18n.Msg("Menu.SortNumeric")) {
-		t.Fatalf("numeric-sort toggle row = %q, want the numeric-sort toggle", menu.Items[7].Text)
-	}
-	if !strings.Contains(menu.Items[8].Text, i18n.Msg("Menu.SortSelectedFirst")) {
-		t.Fatalf("selected-first toggle row = %q, want the selected-first toggle", menu.Items[8].Text)
+	if !strings.Contains(menu.Items[7].Text, i18n.Msg("Menu.SortSelectedFirst")) {
+		t.Fatalf("selected-first toggle row = %q, want the selected-first toggle", menu.Items[7].Text)
 	}
 	panelX1, panelY1, panelX2, panelY2 := fsp.GetPosition()
 	menuX1, menuY1, menuX2, menuY2 := menu.GetPosition()

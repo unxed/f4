@@ -68,6 +68,7 @@ ShowHighlightMarks|panels|File listing|Show highlight marks|Show markers from ma
 ShowSymlinkArrow|panels|File listing|Arrow before symbolic links|Prefix the name of a symbolic link with an arrow when no highlight rule marks it. The link target shown beside the focused entry is not affected.||live
 SeparateFileExtensions|panels|File listing|Separate filename extensions|Align the final extension separately in the name column. Excludes folders, extensionless names and leading dots alone.||live
 ShowPanelFileInfo|panels|File listing|Focused-file status row|Reserve a bottom row for the focused name, size and modification time. Short panels suppress this row.||live
+SortNumeric|panels|File listing|Numeric sort|Compare digit runs by their numeric value in both panels.||live
 PanelScrollbarMode|panels|File listing|Panel scrollbar|Hide the scrollbar, show a minimal one, or show the full scrollbar with arrows.|0:Off;1:Minimal;2:Full|live
 ArchiveTarIndexCache|panels|Directory loading|Cache tar archive indexes|Keep the file index of an opened tar archive in the cache, so opening it again is instant. Off rebuilds the index each time the archive is opened: slower, but never out of date.||live
 ArchiveUseRatarmountIfAvailable|panels|Directory loading|Prefer ratarmount when installed|Use the external ratarmount tool as a faster tar-index backend when it is found on PATH, instead of f4's own index cache. Has no effect if ratarmount is not installed.||live

@@ -203,22 +203,20 @@ func TestWorkspaceSessionRoundTripsSortGroupFlag(t *testing.T) {
 	}
 }
 
-// TestWorkspaceSessionRoundTripsSortNumericFlag mirrors the sort-group flag
-// test above for f4#1471's numeric-sort toggle: it must persist across a
-// session save/load the same way every other per-panel sort setting does.
-func TestWorkspaceSessionRoundTripsSortNumericFlag(t *testing.T) {
-	states := []panel.WorkspaceSessionState{{
-		Number: 1, ActivePanel: 0, WidePanel: -1,
-		ShowPanels: true, ShowLeft: true, ShowRight: true,
-		Left:  panel.PanelSessionState{Path: "/left", ViewMode: int(panel.ViewModeMedium), SortMode: int(panel.SortName), SortNumeric: true},
-		Right: panel.PanelSessionState{Path: "/right", ViewMode: int(panel.ViewModeMedium), SortMode: int(panel.SortName)},
-	}}
+// Workspace sessions may still contain legacy per-panel choices. They are
+// read so startup can migrate them into the global preference, but new saves
+// no longer write per-panel settings.
+func TestWorkspaceSessionReadsLegacySortNumericFlags(t *testing.T) {
+	legacy := "[Workspaces]\nCount = 1\n[Workspace/0/Left]\nSortNumeric = 1\n[Workspace/0/Right]\nSortNumeric = 0\n"
+	got, _ := panel.LoadWorkspaceSessions(ini.Parse(strings.NewReader(legacy)))
+	if len(got) != 1 || !got[0].Left.SortNumeric || got[0].Right.SortNumeric {
+		t.Fatalf("legacy numeric-sort choices = %#v, want left enabled and right disabled", got)
+	}
 
 	var encoded strings.Builder
-	panel.WriteWorkspaceSessions(&encoded, states, 0)
-	got, _ := panel.LoadWorkspaceSessions(ini.Parse(strings.NewReader(encoded.String())))
-	if !reflect.DeepEqual(got, states) {
-		t.Fatalf("numeric-sort flag did not survive the session round trip:\n got: %#v\nwant: %#v", got, states)
+	panel.WriteWorkspaceSessions(&encoded, got, 0)
+	if strings.Contains(encoded.String(), "SortNumeric =") {
+		t.Fatalf("new workspace save still writes per-panel numeric sort:\n%s", encoded.String())
 	}
 }
 

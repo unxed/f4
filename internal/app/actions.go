@@ -640,20 +640,8 @@ func actionSortMenuForPanel(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel) {
 		Shortcut: keymap.MenuShortcutsForAction("Shell", "Panel.SortUseGroups"),
 	})
 
-	// Numeric ("natural") name sort (f4#1471): far3 shows this as a checkbox
-	// next to sort-by-name; f4's sort menu keeps every boolean modifier in the
-	// same toggle-row style as "use sort groups" instead.
-	numericPrefix := "  "
-	if fsp.SortNumeric {
-		numericPrefix = panel.MenuCheckMark + " "
-	}
-	menu.AddItem(vtui.MenuItem{
-		Text:     numericPrefix + i18n.Msg("Menu.SortNumeric"),
-		Shortcut: keymap.MenuShortcutsForAction("Shell", "Panel.SortNumeric"),
-	})
-
-	// "Show selected first" (far's Shift+F12): the same toggle-row style,
-	// third of the boolean modifiers between the sort modes and the group menu.
+	// "Show selected first" (far's Shift+F12): the same toggle-row style as
+	// the sort-group option, between the sort modes and the group menu.
 	selectedPrefix := "  "
 	if fsp.SortSelectedFirst {
 		selectedPrefix = panel.MenuCheckMark + " "
@@ -669,12 +657,10 @@ func actionSortMenuForPanel(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel) {
 		switch {
 		case idx >= 0 && idx < len(entries):
 			fsp.SetSortMode(entries[idx].mode)
-		case idx == len(entries)+4:
-			fsp.ShowGroupMenu()
 		case idx == len(entries)+3:
-			fsp.ToggleSortSelectedFirst()
+			fsp.ShowGroupMenu()
 		case idx == len(entries)+2:
-			fsp.ToggleSortNumeric()
+			fsp.ToggleSortSelectedFirst()
 		case idx == len(entries)+1:
 			fsp.ToggleSortGroups()
 		default:
@@ -684,7 +670,7 @@ func actionSortMenuForPanel(pf *panel.PanelsFrame, fsp *panel.FileSystemPanel) {
 		vtui.FrameManager.Redraw()
 	}
 
-	w, h := 36, len(entries)+7
+	w, h := 36, len(entries)+6
 	panelX1, panelY1, panelX2, panelY2 := fsp.GetPosition()
 	panelW := panelX2 - panelX1 + 1
 	panelH := panelY2 - panelY1 + 1
