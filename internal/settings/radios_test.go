@@ -26,6 +26,43 @@ func TestSettingsRadioPresentationAudit(t *testing.T) {
 		t.Fatal("custom values need an editor")
 	}
 }
+
+func TestTerminalThemeIsInAppearanceColors(t *testing.T) {
+	catalog := (coreSettingsProvider{}).Catalog()
+	var themeField *f4settings.Field
+	for i := range catalog.Fields {
+		if catalog.Fields[i].ID == terminalThemeID {
+			themeField = &catalog.Fields[i]
+			break
+		}
+	}
+	if themeField == nil || themeField.Category != "appearance" || themeField.Group != "Colors" {
+		t.Fatalf("TerminalTheme location = %#v, want appearance / Colors", themeField)
+	}
+
+	d, err := (coreSettingsProvider{}).Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	c := newSettingsCenter([]*settingsSession{{catalog: catalog, draft: d}})
+	c.selectCategory("appearance")
+	var found bool
+	for _, row := range c.page.rows {
+		if row.field.ID == terminalThemeID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("terminal theme selector is not shown with application colors")
+	}
+	c.applyTerminalTheme("Github")
+	if got := d.Values[config.AnsiColorKeys[0]]; got != "#484F58" {
+		t.Fatalf("selecting a theme from Appearance did not update its draft: black = %q", got)
+	}
+}
+
 func TestSettingsRadiosInteractionLayoutAndPalette(t *testing.T) {
 	old := config.App
 	defer func() { config.App = old; InitLang() }()
