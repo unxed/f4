@@ -4839,7 +4839,7 @@ func (fp *FileSystemPanel) InvertSelection() {
 func (fp *FileSystemPanel) InvertFileSelection() {
 	fp.SaveSelection()
 	for i, e := range fp.Entries {
-		if e.Name != ".." && !e.IsDir {
+		if e.Name != ".." && (config.App.SelectFolders || !e.IsDir) {
 			fp.SetItemSelected(i, !e.Selected)
 		}
 	}

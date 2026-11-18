@@ -3270,6 +3270,9 @@ func TestFileSystemPanel_MaskSelection(t *testing.T) {
 }
 
 func TestFileSystemPanel_InvertFileSelectionLeavesFoldersAlone(t *testing.T) {
+	wasSelectFolders := config.App.SelectFolders
+	config.App.SelectFolders = false
+	t.Cleanup(func() { config.App.SelectFolders = wasSelectFolders })
 	fp := &FileSystemPanel{
 		Table: vtui.NewTable(0, 0, 10, 10, nil),
 		Entries: []*FileEntry{
@@ -3291,6 +3294,34 @@ func TestFileSystemPanel_InvertFileSelectionLeavesFoldersAlone(t *testing.T) {
 	}
 	if selectedByName["selected.txt"] || !selectedByName["plain.txt"] {
 		t.Fatal("inverting file selection must toggle files")
+	}
+}
+
+func TestFileSystemPanel_InvertFileSelectionCanIncludeFolders(t *testing.T) {
+	wasSelectFolders := config.App.SelectFolders
+	config.App.SelectFolders = true
+	t.Cleanup(func() { config.App.SelectFolders = wasSelectFolders })
+	fp := &FileSystemPanel{
+		Table: vtui.NewTable(0, 0, 10, 10, nil),
+		Entries: []*FileEntry{
+			{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "folder", IsDir: true}},
+			{VFSItem: vfs.VFSItem{Name: "selected.txt"}, Selected: true},
+			{VFSItem: vfs.VFSItem{Name: "plain.txt"}},
+		},
+	}
+
+	fp.InvertFileSelection()
+
+	selectedByName := make(map[string]bool, len(fp.Entries))
+	for _, entry := range fp.Entries {
+		selectedByName[entry.Name] = entry.Selected
+	}
+	if selectedByName[".."] || !selectedByName["folder"] {
+		t.Fatal("folder-inclusive inversion must toggle folders but never the parent entry")
+	}
+	if selectedByName["selected.txt"] || !selectedByName["plain.txt"] {
+		t.Fatal("folder-inclusive inversion must still toggle files")
 	}
 }
 

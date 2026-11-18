@@ -45,6 +45,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	App.ArchiveUseRatarmountIfAvailable = true
 	App.PanelScrollbarMode = PanelScrollbarMinimal
 	App.ShowPanelFileInfo = true
+	App.SelectFolders = true
 	App.MacroRecordFormat = 1
 	App.UseTrash = true
 	App.TerminalCtrlNWorkspace = false
@@ -86,6 +87,7 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	App.ArchiveUseRatarmountIfAvailable = false
 	App.PanelScrollbarMode = PanelScrollbarOff
 	App.ShowPanelFileInfo = false
+	App.SelectFolders = false
 	App.MacroRecordFormat = 0
 	App.UseTrash = false
 	App.TerminalCtrlNWorkspace = true
@@ -179,6 +181,9 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	}
 	if !App.ShowPanelFileInfo {
 		t.Error("LoadConfig failed to restore ShowPanelFileInfo")
+	}
+	if !App.SelectFolders {
+		t.Error("LoadConfig failed to restore SelectFolders")
 	}
 	if App.MacroRecordFormat != 1 {
 		t.Error("LoadConfig failed to restore MacroRecordFormat")

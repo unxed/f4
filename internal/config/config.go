@@ -476,6 +476,7 @@ type F4Config struct {
 	SeparateFileExtensions   bool
 	PanelScrollbarMode       PanelScrollbarMode
 	ShowPanelFileInfo        bool
+	SelectFolders            bool
 	SortNumeric              bool
 	SavePanelPaths           bool
 	DriveMenuOptions         uint32 // display/filter flags for the Alt+F1/Alt+F2 menu
@@ -766,6 +767,7 @@ var App = F4Config{
 	SeparateFileExtensions:   false,
 	PanelScrollbarMode:       PanelScrollbarMinimal,
 	ShowPanelFileInfo:        false,
+	SelectFolders:            false,
 	SortNumeric:              false,
 	SavePanelPaths:           true,
 	DriveMenuOptions:         DefaultDriveMenuOptions,
@@ -1072,6 +1074,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 		}
 	}
 	cfg.ShowPanelFileInfo = merged.GetString("Panel", "ShowPanelFileInfo", "0") == "1"
+	cfg.SelectFolders = merged.GetString("Panel", "SelectFolders", "0") == "1"
 	cfg.SortNumeric = merged.GetString("Panel", "SortNumeric", "0") == "1"
 	cfg.SavePanelPaths = merged.GetString("Panel", "SavePanelPaths", "1") == "1"
 	cfg.DriveMenuOptions = ParseDriveMenuOptions(merged.GetString("Panel", "DriveMenuOptions", ""))
@@ -1452,6 +1455,7 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 	fmt.Fprintf(&sb, "SeparateFileExtensions = %d\n", map[bool]int{true: 1, false: 0}[cfg.SeparateFileExtensions])
 	fmt.Fprintf(&sb, "PanelScrollbarMode = %s\n", cfg.PanelScrollbarMode.String())
 	fmt.Fprintf(&sb, "ShowPanelFileInfo = %d\n", map[bool]int{true: 1, false: 0}[cfg.ShowPanelFileInfo])
+	fmt.Fprintf(&sb, "SelectFolders = %d\n", map[bool]int{true: 1, false: 0}[cfg.SelectFolders])
 	fmt.Fprintf(&sb, "SortNumeric = %d\n", map[bool]int{true: 1, false: 0}[cfg.SortNumeric])
 	fmt.Fprintf(&sb, "SavePanelPaths = %d\n", map[bool]int{true: 1, false: 0}[cfg.SavePanelPaths])
 	fmt.Fprintf(&sb, "DriveMenuOptions = %d\n", cfg.DriveMenuOptions)
