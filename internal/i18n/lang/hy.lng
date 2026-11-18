@@ -2253,3 +2253,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=Տերմինալի լռելյայն գույները
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=16 ANSI գույներին վերադարձնում է լռելյայն արժեքները և մաքրում տերմինալի սեփական գույների դաշտերը, որպեսզի դրանք վերցնեն թեմայի գույները։ Apply-ը պահում է փոփոխությունը, Cancel-ը՝ չեղարկում։
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=մուտքագրեք գույնը #RRGGBB տեսքով կամ թողեք դաշտը դատարկ՝ լռելյայն գույնի համար
+SettingsCenter.SortNumeric.Label=Թվային տեսակավորում
+SettingsCenter.SortNumeric.Description=Երկու վահանակներում թվանշանների խմբերը համեմատել ըստ դրանց թվային արժեքի։

@@ -4556,6 +4556,8 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=Цвета терминала по умолчанию
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=Возвращает 16 ANSI-цветам значения по умолчанию и очищает поля собственных цветов терминала, чтобы они взяли цвета темы. Apply сохраняет изменение, Cancel отменяет его.
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=введите цвет в виде #RRGGBB или оставьте поле пустым, чтобы вернуть цвет по умолчанию
+SettingsCenter.SortNumeric.Label=Числовая сортировка
+SettingsCenter.SortNumeric.Description=Сравнивать группы цифр по их числовому значению в обеих панелях.
 
 Group.Menu=Группировать по…
 Group.Menu.Desc=Открыть меню группировки панели
