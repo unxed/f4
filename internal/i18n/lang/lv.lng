@@ -2332,3 +2332,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=Termināļa noklusējuma krāsas
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=Atjauno 16 ANSI krāsu noklusējuma vērtības un iztukšo termināļa pašu krāsu laukus, lai tie ņemtu tēmas krāsas. Apply saglabā izmaiņu, Cancel to atmet.
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=ievadiet krāsu kā #RRGGBB vai atstājiet lauku tukšu noklusējuma krāsai
+SettingsCenter.SortNumeric.Label=Skaitliskā kārtošana
+SettingsCenter.SortNumeric.Description=Abos paneļos ciparu virknes salīdzināt pēc to skaitliskās vērtības.

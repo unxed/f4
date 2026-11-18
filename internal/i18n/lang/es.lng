@@ -2335,3 +2335,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=Colores predeterminados del terminal
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=Devuelve los 16 colores ANSI a sus valores predeterminados y vacía los campos de los colores propios del terminal, para que tomen los del tema. Apply conserva el cambio, Cancel lo descarta.
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=introduzca un color como #RRGGBB o deje el campo vacío para el valor predeterminado
+SettingsCenter.SortNumeric.Label=Ordenación numérica
+SettingsCenter.SortNumeric.Description=Comparar grupos de dígitos por su valor numérico en ambos paneles.

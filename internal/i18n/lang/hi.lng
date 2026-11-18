@@ -1994,3 +1994,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=टर्मिनल के डिफ़ॉल्ट रंग
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=16 ANSI रंगों को उनके डिफ़ॉल्ट पर लौटाता है और टर्मिनल के अपने रंगों के फ़ील्ड खाली करता है, ताकि वे थीम के रंग लें। Apply बदलाव रखता है, Cancel उसे छोड़ देता है।
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=रंग #RRGGBB रूप में लिखें, या डिफ़ॉल्ट रंग के लिए फ़ील्ड खाली छोड़ें
+SettingsCenter.SortNumeric.Label=संख्यात्मक क्रम
+SettingsCenter.SortNumeric.Description=दोनों पैनलों में अंकों के समूहों की तुलना उनके संख्यात्मक मान के अनुसार करें।

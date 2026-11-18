@@ -2256,3 +2256,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=A terminál alapértelmezett színei
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=Visszaállítja a 16 ANSI-szín alapértékét, és kiüríti a terminál saját színeinek mezőit, hogy a téma színeit vegyék fel. Az Apply megtartja a változást, a Cancel elveti.
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=adjon meg színt #RRGGBB formában, vagy hagyja üresen az alapértelmezetthez
+SettingsCenter.SortNumeric.Label=Numerikus rendezés
+SettingsCenter.SortNumeric.Description=A számjegysorozatokat numerikus értékük szerint hasonlítja össze mindkét panelen.

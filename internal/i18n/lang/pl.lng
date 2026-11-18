@@ -2335,3 +2335,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=Domyślne kolory terminala
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=Przywraca 16 kolorom ANSI wartości domyślne i czyści pola własnych kolorów terminala, aby przyjęły kolory motywu. Apply zachowuje zmianę, Cancel ją odrzuca.
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=wpisz kolor jako #RRGGBB lub zostaw pole puste, aby użyć koloru domyślnego
+SettingsCenter.SortNumeric.Label=Sortowanie numeryczne
+SettingsCenter.SortNumeric.Description=Porównuj ciągi cyfr według ich wartości liczbowej w obu panelach.

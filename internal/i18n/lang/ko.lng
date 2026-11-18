@@ -2327,3 +2327,5 @@ SettingsCenter.Text.494ca78f7374e46fb2de9ad9f2dbd4aaae89b50b2ca044177a1566a59e06
 SettingsCenter.Text.68a3a5c37c14fdf7456be5f885c24326c82ad174e2d2bedbc2e170af6c8b5fca=터미널 기본 색
 SettingsCenter.Text.2992700d1e314e8faffef85f0038f19aa57bfa63fa16f768c21d64742288d764=16가지 ANSI 색을 기본값으로 되돌리고 터미널 자체 색 칸을 비워 테마의 색을 쓰게 합니다. Apply는 변경을 유지하고 Cancel은 버립니다.
 SettingsCenter.Text.33eda3510e877f36f141cc98c94203e4a3cde63f294d2215bf6d463a4f2be7ae=색을 #RRGGBB 형식으로 입력하거나 기본 색을 쓰려면 비워 두세요
+SettingsCenter.SortNumeric.Label=숫자 기준 정렬
+SettingsCenter.SortNumeric.Description=두 패널에서 숫자 문자열을 숫자 값으로 비교합니다.
