@@ -1,6 +1,8 @@
 package cmdline
 
 import (
+	"fmt"
+
 	"github.com/unxed/f4/internal/config"
 	"github.com/unxed/f4/internal/theme"
 	"github.com/unxed/vtinput"
@@ -101,6 +103,21 @@ func TestCommandLine_History(t *testing.T) {
 		t.Error("History browsing state should reset after typing")
 	}
 }
+
+func TestCommandLine_HistoryKeepsFiveThousandEntries(t *testing.T) {
+	cl := NewCommandLine("> ")
+	for i := 0; i < commandHistoryLimit+2; i++ {
+		cl.Edit.AddHistory(fmt.Sprintf("command-%d", i))
+	}
+
+	if len(cl.Edit.History) != commandHistoryLimit {
+		t.Fatalf("history length = %d, want %d", len(cl.Edit.History), commandHistoryLimit)
+	}
+	if cl.Edit.History[0] != "command-5001" || cl.Edit.History[len(cl.Edit.History)-1] != "command-2" {
+		t.Fatalf("history retained unexpected bounds: first=%q last=%q", cl.Edit.History[0], cl.Edit.History[len(cl.Edit.History)-1])
+	}
+}
+
 func TestCommandLine_HistoryBoundaries(t *testing.T) {
 	cl := NewCommandLine("> ")
 	cl.Edit.AddHistory("cmd1")

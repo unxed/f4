@@ -9,6 +9,8 @@ import (
 	"github.com/unxed/vtui"
 )
 
+const commandHistoryLimit = 5000
+
 // CommandLine is a simplified Edit control used for shell input.
 type CommandLine struct {
 	vtui.ScreenObject
@@ -33,7 +35,7 @@ func NewCommandLine(prompt string) *CommandLine {
 		Edit:   vtui.NewEdit(0, 0, 10, ""),
 	}
 	cl.Edit.DeduplicateHistory = true
-	cl.Edit.HistoryLimit = 100
+	cl.Edit.HistoryLimit = commandHistoryLimit
 	cl.Edit.PathHintsEnabled = config.App.CommandLineAutoComplete
 	// CommandLine.ProcessKey drives the completion menu itself, under
 	// gating that vtui knows nothing about: CommandLineAutoComplete,
