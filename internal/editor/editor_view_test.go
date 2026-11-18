@@ -1217,6 +1217,16 @@ func TestEditorView_LongLinePerformance(t *testing.T) {
 	}
 }
 
+func TestEditorFragmentRuneCountSkipsUnwrappedLongLine(t *testing.T) {
+	line := []byte(strings.Repeat("a", 1<<20))
+	if got := editorFragmentRuneCount(line, false); got != 0 {
+		t.Fatalf("final unwrapped fragment rune count = %d, want no scan", got)
+	}
+	if got := editorFragmentRuneCount([]byte("a🙂"), true); got != 2 {
+		t.Fatalf("fragment rune count = %d, want 2", got)
+	}
+}
+
 func TestEditorView_WordNavigation(t *testing.T) {
 	Pt := piecetable.New([]byte("hello world  test"))
 	ev := NewEditorView(Pt, nil, "")

@@ -1849,7 +1849,7 @@ func (ev *EditorView) DisplayObject(scr *vtui.ScreenBuf) {
 			var err error
 			ev.renderBytes, err = ev.Pt.AppendRange(ev.renderBytes, frag.ByteOffsetStart, frag.ByteOffsetEnd-frag.ByteOffsetStart)
 
-			fragRuneCount := len([]rune(string(ev.renderBytes)))
+			fragRuneCount := editorFragmentRuneCount(ev.renderBytes, fIdx+1 < len(frags))
 
 			if err == piecetable.ErrLoading {
 				scr.Write(ev.X1-ev.ScrollLeft, currY, vtui.StringToCharInfo(" [ Loading... ] ", bgAttr))
@@ -3035,6 +3035,16 @@ func editorRenderColumns(text string) int {
 
 func (ev *EditorView) fillCells(target []vtui.CharInfo, data []byte, defaultAttr, selAttr uint64, offset int, SelActive bool, selMin, selMax int, syntax []uint64, startVisualCol int, isCrossRow bool, crossVCol int, horzCrossAttr, vertCrossAttr uint64, visualRow int) []vtui.CharInfo {
 	return ev.fillCellsWithLinks(target, data, defaultAttr, selAttr, offset, SelActive, selMin, selMax, syntax, nil, startVisualCol, 0, isCrossRow, crossVCol, horzCrossAttr, vertCrossAttr, visualRow)
+}
+
+// editorFragmentRuneCount is needed only to align syntax attributes on a later
+// wrapped fragment. An unwrapped logical line is one fragment, so counting its
+// runes on every redraw needlessly scans and allocates for the whole long line.
+func editorFragmentRuneCount(data []byte, hasFollowingFragment bool) int {
+	if !hasFollowingFragment {
+		return 0
+	}
+	return utf8.RuneCount(data)
 }
 
 // maxVisualCol is the column past which the caller will not show anything, so
