@@ -1119,6 +1119,21 @@ func (c *settingsCenter) Show(scr *vtui.ScreenBuf) {
 		scr.Write(x, separatorY, vtui.StringToCharInfo(label, vtui.Palette[vtui.ColDialogBoxTitle]))
 	}
 	c.paintContentBackground(scr)
+	// Controls and the content-surface pass can repaint cells after the page
+	// draws its labels. Keep inline labels in sync with the dimmed control.
+	for _, row := range c.page.rows {
+		if row.heading || row.match || len(row.label) == 0 {
+			continue
+		}
+		x := c.page.X1 + 2 + row.labelX
+		y := c.page.Y1 + row.y - c.page.scroll
+		for j, line := range row.label {
+			if y+j < c.page.Y1 || y+j > c.page.Y2 {
+				continue
+			}
+			scr.Write(x, y+j, vtui.StringToCharInfo(line, vtui.DimColor(vtui.Palette[vtui.ColDialogText])))
+		}
+	}
 	if c.status != "" {
 		scr.Write(c.X1+2, c.apply.Y1, vtui.StringToCharInfo(vtui.TruncateString(c.status, max(0, c.apply.X1-c.X1-3), "…"), vtui.Palette[vtui.ColDialogHighlightText]))
 	}
