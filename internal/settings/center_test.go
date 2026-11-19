@@ -591,7 +591,7 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 			if _, ok := row.control.(*vtui.ComboBox); !ok {
 				continue
 			}
-			if first == nil {
+			if first == nil && len(row.label) > 0 {
 				first = row
 			}
 			x, y, x2, _ := row.control.GetPosition()
@@ -603,23 +603,24 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 			}
 			previous = row
 		}
-		if previous == nil {
-			t.Fatal("missing combos")
+		if previous == nil || first == nil {
+			t.Fatal("missing labeled combos")
 		}
 		c.query = ""
 		c.updateMatches()
 		c.Show(scr)
 		x, y, _, _ := first.control.GetPosition()
 		controlAttr := scr.GetCell(x, y).Attributes
-		if vtui.GetIndexFore(scr.GetCell(c.page.X1+2, y).Attributes) != vtui.GetIndexFore(vtui.Palette[vtui.ColDialogText]) {
+		labelX := c.page.X1 + 2 + first.labelX
+		if vtui.GetIndexFore(scr.GetCell(labelX, y).Attributes) != vtui.GetIndexFore(vtui.Palette[vtui.ColDialogText]) {
 			t.Fatal("inline label palette mismatch")
 		}
 		c.query = "no-such-setting-xyz"
 		c.updateMatches()
 		c.Show(scr)
 		x, y, _, _ = first.control.GetPosition()
-		if vtui.GetIndexFore(scr.GetCell(c.page.X1+2, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText])) || vtui.GetIndexFore(scr.GetCell(x, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(controlAttr)) {
-			t.Fatalf("inline label/control did not dim with live palette: iteration=%d width=%d label=%x want=%x control=%x want=%x pos=%d,%d", iteration, width, scr.GetCell(c.page.X1+2, y).Attributes, vtui.DimColor(vtui.Palette[vtui.ColDialogText]), scr.GetCell(x, y).Attributes, vtui.DimColor(controlAttr), x, y)
+		if vtui.GetIndexFore(scr.GetCell(labelX, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText])) || vtui.GetIndexFore(scr.GetCell(x, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(controlAttr)) {
+			t.Fatalf("inline label/control did not dim with live palette: field=%s iteration=%d width=%d label=%x want=%x control=%x want=%x pos=%d,%d labelX=%d", first.field.ID, iteration, width, scr.GetCell(labelX, y).Attributes, vtui.DimColor(vtui.Palette[vtui.ColDialogText]), scr.GetCell(x, y).Attributes, vtui.DimColor(controlAttr), x, y, labelX)
 		}
 	}
 }
