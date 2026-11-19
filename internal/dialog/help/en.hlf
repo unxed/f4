@@ -550,6 +550,7 @@ Press Backspace to return to the VisRen contents.
 $f4 Help Index (Version: %Ver)
 f4 is an experimental Far Manager / far2l clone in Go.
 
+~Quick start~PanelQuickStart@
 ~Viewer / Editor keys~ViewerEditor@
 ~Panel navigation~PanelNav@
 ~Panel modes~PanelModes@
@@ -558,6 +559,24 @@ f4 is an experimental Far Manager / far2l clone in Go.
 ~Console modes (Ctrl+O)~ConsoleModes@
 ~Environment Manager plugin~EnvironmentManager@
 ~View README.md~README@
+
+@PanelQuickStart
+$Quick start
+
+Use the two panels to browse folders and work with files:
+
+  1. Enter opens the selected folder; Backspace goes to its parent.
+  2. Tab switches the active panel. Use Ctrl+Left/Right to change its drive
+     or filesystem, when available.
+  3. Insert marks or unmarks an item. Mark several items to work on them
+     together; with no marks, commands use the item under the cursor.
+  4. F3 views a file, F4 edits it, F5 copies, F6 moves or renames, and F8
+     deletes. Check the confirmation dialog before a destructive operation.
+  5. Type to find a name in the current folder. Press Esc to leave the search.
+
+For more keys, see ~Panel navigation~PanelNav@. F1 opens help for the current
+screen; the links above lead to the other help topics. The README has a
+~Getting Started~README@ guide and installation instructions.
 
 @ViewerEditor
 $Viewer & Editor Keys
