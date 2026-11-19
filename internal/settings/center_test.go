@@ -622,7 +622,7 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		x, y, _, _ = first.control.GetPosition()
 		labelY = y - first.controlY
 		if vtui.GetIndexFore(scr.GetCell(labelX, labelY).Attributes) != vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText])) || vtui.GetIndexFore(scr.GetCell(x, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(controlAttr)) {
-			t.Fatalf("inline label/control did not dim with live palette: iteration=%d width=%d label=%x want=%x control=%x want=%x pos=%d,%d", iteration, width, scr.GetCell(labelX, labelY).Attributes, vtui.DimColor(vtui.Palette[vtui.ColDialogText]), scr.GetCell(x, y).Attributes, vtui.DimColor(controlAttr), x, y)
+			t.Fatalf("inline label/control did not dim with live palette: iteration=%d width=%d field=%q match=%t labelX=%d labelY=%d controlY=%d label=%x want=%x control=%x want=%x pos=%d,%d", iteration, width, first.field.ID, first.match, labelX, labelY, first.controlY, scr.GetCell(labelX, labelY).Attributes, vtui.DimColor(vtui.Palette[vtui.ColDialogText]), scr.GetCell(x, y).Attributes, vtui.DimColor(controlAttr), x, y)
 		}
 	}
 }
