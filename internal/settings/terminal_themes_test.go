@@ -17,13 +17,12 @@ func themeCenter(t *testing.T) (*settingsCenter, *settingsSession) {
 	t.Cleanup(func() { ops.Close() })
 	s := &settingsSession{catalog: (coreSettingsProvider{}).Catalog(), draft: core}
 	c := newSettingsCenter([]*settingsSession{s, {catalog: (settingsOperationsProvider{}).Catalog(), draft: ops}})
-	c.selectCategory("appearance")
+	c.selectCategory("terminal")
 	return c, s
 }
 
 func themeCombo(t *testing.T, c *settingsCenter) *vtui.ComboBox {
 	t.Helper()
-	c.selectCategory("appearance")
 	for _, r := range c.page.rows {
 		if r.field.ID == terminalThemeID {
 			combo, ok := r.control.(*vtui.ComboBox)
@@ -33,13 +32,12 @@ func themeCombo(t *testing.T, c *settingsCenter) *vtui.ComboBox {
 			return combo
 		}
 	}
-	t.Fatal("no theme list on the Appearance page")
+	t.Fatal("no theme list on the Terminal & environment page")
 	return nil
 }
 
 func colourEdit(t *testing.T, c *settingsCenter, id string) *settingsEdit {
 	t.Helper()
-	c.selectCategory("terminal")
 	for _, r := range c.page.rows {
 		if r.field.ID == id {
 			return r.control.(*settingsEdit)

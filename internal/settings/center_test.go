@@ -586,13 +586,9 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		vtui.Palette[vtui.ColDialogEditUnchanged] = uint64(0x22 + iteration*16)
 		vtui.Palette[vtui.ColDialogBox] = uint64(0x23 + iteration*16)
 		var previous *settingsRow
-		var first *settingsRow
 		for _, row := range c.page.rows {
 			if _, ok := row.control.(*vtui.ComboBox); !ok {
 				continue
-			}
-			if first == nil {
-				first = row
 			}
 			x, y, x2, _ := row.control.GetPosition()
 			if y != c.page.Y1+row.y-c.page.scroll || x <= c.page.X1+2 || x > x2 || row.gap != 0 {
@@ -609,17 +605,18 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		c.query = ""
 		c.updateMatches()
 		c.Show(scr)
+		first := previous
 		x, y, _, _ := first.control.GetPosition()
 		controlAttr := scr.GetCell(x, y).Attributes
-		if vtui.GetIndexFore(scr.GetCell(c.page.X1+2, y).Attributes) != vtui.GetIndexFore(vtui.Palette[vtui.ColDialogText]) {
+		if scr.GetCell(c.page.X1+2, y).Attributes != vtui.Palette[vtui.ColDialogText] {
 			t.Fatal("inline label palette mismatch")
 		}
 		c.query = "no-such-setting-xyz"
 		c.updateMatches()
 		c.Show(scr)
 		x, y, _, _ = first.control.GetPosition()
-		if vtui.GetIndexFore(scr.GetCell(c.page.X1+2, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText])) || vtui.GetIndexFore(scr.GetCell(x, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(controlAttr)) {
-			t.Fatalf("inline label/control did not dim with live palette: iteration=%d width=%d label=%x want=%x control=%x want=%x pos=%d,%d", iteration, width, scr.GetCell(c.page.X1+2, y).Attributes, vtui.DimColor(vtui.Palette[vtui.ColDialogText]), scr.GetCell(x, y).Attributes, vtui.DimColor(controlAttr), x, y)
+		if scr.GetCell(c.page.X1+2, y).Attributes != vtui.DimColor(vtui.Palette[vtui.ColDialogText]) || scr.GetCell(x, y).Attributes != vtui.DimColor(controlAttr) {
+			t.Fatal("inline label/control did not dim with live palette")
 		}
 	}
 }
