@@ -582,6 +582,10 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		scr.AllocBuf(width, 35)
 		c.ResizeConsole(width, 35)
 		c.SetPosition(0, 0, width-1, 34)
+		// Prior tests may persist Appearance's scroll offset; keep the row
+		// under test inside the viewport on every platform and shuffle seed.
+		c.page.scroll = 0
+		c.page.positionRows()
 		vtui.Palette[vtui.ColDialogText] = uint64(0x21 + iteration*16)
 		vtui.Palette[vtui.ColDialogEditUnchanged] = uint64(0x22 + iteration*16)
 		vtui.Palette[vtui.ColDialogBox] = uint64(0x23 + iteration*16)
@@ -620,8 +624,12 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		c.Show(scr)
 		x, y, _, _ = first.control.GetPosition()
 		labelY = c.page.Y1 + first.y - c.page.scroll
-		if vtui.GetIndexFore(scr.GetCell(labelX, labelY).Attributes) != vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText])) || vtui.GetIndexFore(scr.GetCell(x, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(controlAttr)) {
-			t.Fatal("inline label/control did not dim with live palette")
+		labelGot := vtui.GetIndexFore(scr.GetCell(labelX, labelY).Attributes)
+		labelWant := vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText]))
+		controlGot := vtui.GetIndexFore(scr.GetCell(x, y).Attributes)
+		controlWant := vtui.GetIndexFore(vtui.DimColor(controlAttr))
+		if labelGot != labelWant || controlGot != controlWant {
+			t.Fatalf("inline label/control did not dim with live palette: label %d != %d, control %d != %d", labelGot, labelWant, controlGot, controlWant)
 		}
 	}
 }
