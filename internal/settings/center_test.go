@@ -585,10 +585,13 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		vtui.Palette[vtui.ColDialogText] = uint64(0x21 + iteration*16)
 		vtui.Palette[vtui.ColDialogEditUnchanged] = uint64(0x22 + iteration*16)
 		vtui.Palette[vtui.ColDialogBox] = uint64(0x23 + iteration*16)
-		var previous *settingsRow
+		var previous, first *settingsRow
 		for _, row := range c.page.rows {
-			if _, ok := row.control.(*vtui.ComboBox); !ok {
+			if _, ok := row.control.(*vtui.ComboBox); !ok || len(row.label) == 0 {
 				continue
+			}
+			if first == nil {
+				first = row
 			}
 			x, y, x2, _ := row.control.GetPosition()
 			if y != c.page.Y1+row.y-c.page.scroll || x <= c.page.X1+2 || x > x2 || row.gap != 0 {
@@ -599,23 +602,25 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 			}
 			previous = row
 		}
-		if previous == nil {
+		if previous == nil || first == nil {
 			t.Fatal("missing combos")
 		}
 		c.query = ""
 		c.updateMatches()
 		c.Show(scr)
-		first := previous
 		x, y, _, _ := first.control.GetPosition()
+		labelX := c.page.X1 + 2 + first.labelX
+		labelY := c.page.Y1 + first.y - c.page.scroll
 		controlAttr := scr.GetCell(x, y).Attributes
-		if scr.GetCell(c.page.X1+2, y).Attributes != vtui.Palette[vtui.ColDialogText] {
+		if vtui.GetIndexFore(scr.GetCell(labelX, labelY).Attributes) != vtui.GetIndexFore(vtui.Palette[vtui.ColDialogText]) {
 			t.Fatal("inline label palette mismatch")
 		}
 		c.query = "no-such-setting-xyz"
 		c.updateMatches()
 		c.Show(scr)
 		x, y, _, _ = first.control.GetPosition()
-		if scr.GetCell(c.page.X1+2, y).Attributes != vtui.DimColor(vtui.Palette[vtui.ColDialogText]) || scr.GetCell(x, y).Attributes != vtui.DimColor(controlAttr) {
+		labelY = c.page.Y1 + first.y - c.page.scroll
+		if vtui.GetIndexFore(scr.GetCell(labelX, labelY).Attributes) != vtui.GetIndexFore(vtui.DimColor(vtui.Palette[vtui.ColDialogText])) || vtui.GetIndexFore(scr.GetCell(x, y).Attributes) != vtui.GetIndexFore(vtui.DimColor(controlAttr)) {
 			t.Fatal("inline label/control did not dim with live palette")
 		}
 	}
