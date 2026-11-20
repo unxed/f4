@@ -1161,6 +1161,7 @@ func setupUI(firstRunStyle func() (string, bool)) {
 		_ = theme.ApplyColorStyle(config.App.ColorStyle)
 	}
 	vtui.GlobalHistoryProvider = history.NewF4HistoryProvider(config.GetF4ConfigDir())
+	history.ApplyDisabledBuckets(vtui.GlobalHistoryProvider.(*history.F4HistoryProvider), config.App.HistoryDisabledBuckets)
 	history.SamePath = panel.SameFolderHistoryPath
 	fileops.GlobalFileState = fileops.NewF4FileStateProvider()
 	// A file operation sent to the background keeps its progress dialog; the

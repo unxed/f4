@@ -117,6 +117,7 @@ var configOptionExtraDocs = map[string]string{
 	"Editor.MemoryMap": "Let the editor map a local file into memory instead of reading it in chunks. " +
 		"Off, every file takes the chunked path: the way out on a file system where mapping misbehaves.",
 	"History.ShowTimes":           "The timestamp column of three histories, one comma-separated value each: 0 date and time, 1 date, 2 none. Positions:",
+	"History.DisabledBuckets":     "Input-history bucket IDs that f4 does not load or save, separated by commas. Existing entries remain on disk.",
 	"Images.SlideShowDelay":       "Seconds between pictures in the slide show of the image viewer (Ctrl+S). A value below 1 means 5.",
 	"Images.ExternalTimeout":      "Seconds an external converter (magick, convert or ffmpeg) may take to decode a picture. A value below 1 means 20.",
 	"Images.DecoderPriority":      "Priorities of the image decoders, overriding the built-in ones: name:number pairs separated by commas, semicolons or vertical bars. Empty keeps the built-in order.",

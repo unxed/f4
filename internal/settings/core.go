@@ -6,6 +6,7 @@ import (
 	"github.com/unxed/f4/internal/dialog"
 	"github.com/unxed/f4/internal/editor"
 	"github.com/unxed/f4/internal/gui"
+	"github.com/unxed/f4/internal/history"
 	"github.com/unxed/f4/internal/i18n"
 	"github.com/unxed/f4/internal/terminal"
 
@@ -57,6 +58,10 @@ func coreSettingValue(cfg config.F4Config, id string) string {
 	if id == "ConsoleMode" {
 		return terminal.ConsoleViewStyleOf(terminal.ShellModeConfig{ConsoleMode: cfg.ConsoleMode, ConsoleOverlayUI: cfg.ConsoleOverlayUI})
 	}
+	if strings.HasPrefix(id, "HistoryDisabledBuckets.") {
+		bucketID := strings.TrimPrefix(id, "HistoryDisabledBuckets.")
+		return strconv.FormatBool(!historyBucketDisabled(cfg.HistoryDisabledBuckets, bucketID))
+	}
 	v := settingsConfigField(reflect.ValueOf(cfg), id)
 	switch v.Kind() {
 	case reflect.Bool:
@@ -74,6 +79,11 @@ func setCoreSetting(cfg *config.F4Config, id, value string) error {
 	}
 	if id == "StartupMode" {
 		cfg.StartupMode = config.ParseStartupMode(value)
+		return nil
+	}
+	if strings.HasPrefix(id, "HistoryDisabledBuckets.") {
+		bucketID := strings.TrimPrefix(id, "HistoryDisabledBuckets.")
+		cfg.HistoryDisabledBuckets = setHistoryBucketDisabled(cfg.HistoryDisabledBuckets, bucketID, value != "true")
 		return nil
 	}
 	if strings.HasPrefix(id, "DriveMenuOptions.") {
@@ -152,6 +162,17 @@ func coreSettingsStaticFields() []f4settings.Field {
 	})
 	for i, label := range []string{"Command history timestamps", "Folder history timestamps", "Viewer/editor history timestamps"} {
 		fields = append(fields, f4settings.Field{ID: fmt.Sprintf("HistoryShowTimes.%d", i), Category: "history", Group: "Presentation", Label: f4settings.Text{English: label}, Description: f4settings.Text{English: "Choose the timestamp presentation independently for this history."}, Kind: f4settings.ChoiceKind, Choices: settingsChoices("0:Date and time;1:Date;2:None"), Timing: "new history dialogs"})
+	}
+	for _, bucket := range history.PreferenceBuckets {
+		fields = append(fields, f4settings.Field{
+			ID: "HistoryDisabledBuckets." + bucket.ID, Category: "history", Group: "Presentation",
+			Label: f4settings.Text{English: "Save " + bucket.Label + " history", Translations: map[string]string{"ru": "Сохранять историю: " + bucket.Russian}},
+			Description: f4settings.Text{
+				English:      "Read and save this input history. Turning it off keeps existing entries on disk but stops using or changing them.",
+				Translations: map[string]string{"ru": "Читать и сохранять эту историю ввода. При отключении записи остаются на диске, но больше не используются и не изменяются."},
+			},
+			Kind: f4settings.Boolean, Timing: "live",
+		})
 	}
 	driveDescriptions := []string{"Add the drive-kind column.", "Display the filesystem volume label.", "This stored compatibility flag currently has no consumer.", "Display filesystem type.", "Display total and free capacity columns.", "Use fractional human-readable capacity instead of integer binary units.", "Display the mount target when different from the drive path.", "Include registered plugin drives and providers.", "Order plugin drive rows by their assigned shortcut.", "Include removable drives.", "Include optical drives.", "Include mapped and network drives.", "This stored compatibility flag has no consumer. SUBST detection runs independently.", "Include saved bookmarks.", "Display the Links section in the drive menu."}
 	driveLabels := []string{"Show disk type", "Show disk label", "Use shell name", "Show file system type", "Show size", "Show size float", "Show network path", "Show tools", "Sort tools by hot key", "Show removable drive parameters", "Show CD drive parameters", "Show remote drive parameters", "Detect virtual drives", "Show bookmarks", "Show links"}
@@ -428,6 +449,9 @@ func (p coreSettingsProvider) Begin(context.Context) (*f4settings.Draft, error) 
 				config.App.ExternalEditorCommand = config.App.ExternalEditorConsole
 			}
 			host.ApplyRuntime(previous, changed)
+			if hp, ok := vtui.GlobalHistoryProvider.(*history.F4HistoryProvider); ok {
+				history.ApplyDisabledBuckets(hp, config.App.HistoryDisabledBuckets)
+			}
 			palette = append(palette[:0], vtui.Palette...)
 			previewed = false
 		})
@@ -435,6 +459,30 @@ func (p coreSettingsProvider) Begin(context.Context) (*f4settings.Draft, error) 
 	}
 
 	return d, nil
+}
+
+func historyBucketDisabled(list, id string) bool {
+	for _, part := range strings.FieldsFunc(list, func(r rune) bool { return r == ',' || r == ';' || r == ' ' || r == '\t' }) {
+		if part == id {
+			return true
+		}
+	}
+	return false
+}
+
+func setHistoryBucketDisabled(list, id string, disabled bool) string {
+	var ids []string
+	seen := map[string]bool{}
+	for _, part := range strings.FieldsFunc(list, func(r rune) bool { return r == ',' || r == ';' || r == ' ' || r == '\t' }) {
+		if part != id && !seen[part] {
+			ids = append(ids, part)
+			seen[part] = true
+		}
+	}
+	if disabled {
+		ids = append(ids, id)
+	}
+	return strings.Join(ids, ",")
 }
 
 // settingsColorerSchemes lists the colour styles of the applied Colorer

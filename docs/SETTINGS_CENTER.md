@@ -148,6 +148,7 @@ The original-dialog column links to the original implementation and its backing 
 |---|---|---|---|---|
 | `Wheel{Panel,Editor,Viewer,Menu,Table}{Up,Down}` (10 independent controls) | Options → Mouse wheel → context/direction | keyboard | settings.ini; `applyWheelSettings` | Rows per wheel notch; zero follows the system value. |
 | `HistoryShowTimes.0`, `.1`, `.2` | Command / folder / viewer-editor history → timestamp format | history | settings.ini; `history_dialog.go`, `actions.go` | Independent date/time, date-only or hidden timestamps for each history. |
+| `HistoryDisabledBuckets.<id>` (14 independent controls) | History → Input history | history | settings.ini / History / DisabledBuckets; `history/edit.go`, `history/provider.go` | Stop loading and saving one input-history bucket without deleting its existing entries. Applies live. |
 | `DriveMenuOptions.0`–`.13` | Drive chooser → options → each checkbox | drives | settings.ini bit mask; `drive_menu_options.go` | See the per-bit mapping below; all other bits are retained. |
 
 | Bit | Canonical meaning | Availability |

@@ -644,7 +644,9 @@ type F4Config struct {
 	DialogAutoComplete  bool // drop-down while typing in fields that have history
 	// HistoryShowTimes controls the timestamp presentation in command, folder,
 	// and viewer/editor history dialogs: date+time, date, or hidden.
-	HistoryShowTimes             [HistoryTypeCount]int
+	HistoryShowTimes [HistoryTypeCount]int
+	// HistoryDisabledBuckets is the list of input-history IDs not read or saved.
+	HistoryDisabledBuckets       string
 	HistoryDirsPrefixLen         int // command-history directory prefix width
 	SlideShowDelay               int
 	ImageOverlay                 bool
@@ -1300,6 +1302,7 @@ func parseConfigInto(cfg *F4Config, merged *ini.File) {
 	if configured := merged.GetString("History", "HistoryShowTimes", ""); configured != "" {
 		cfg.HistoryShowTimes = parseHistoryShowTimes(configured)
 	}
+	cfg.HistoryDisabledBuckets = merged.GetString("History", "DisabledBuckets", "")
 	cfg.HistoryDirsPrefixLen = 24
 	_, _ = fmt.Sscanf(merged.GetString("History", "DirsPrefixLen", "24"), "%d", &cfg.HistoryDirsPrefixLen)
 	if configured := merged.GetString("History", "HistoryDirsPrefixLen", ""); configured != "" {
@@ -1626,6 +1629,9 @@ func SerializeSettingsConfig(cfg F4Config) []byte {
 
 	sb.WriteString("\n[History]\n")
 	fmt.Fprintf(&sb, "ShowTimes = %d,%d,%d\n", cfg.HistoryShowTimes[0], cfg.HistoryShowTimes[1], cfg.HistoryShowTimes[2])
+	if cfg.HistoryDisabledBuckets != "" {
+		fmt.Fprintf(&sb, "DisabledBuckets = %s\n", cfg.HistoryDisabledBuckets)
+	}
 	fmt.Fprintf(&sb, "DirsPrefixLen = %d\n", cfg.HistoryDirsPrefixLen)
 	sb.WriteString("\n[Images]\n")
 	fmt.Fprintf(&sb, "SlideShowDelay = %d\n", cfg.SlideShowDelay)

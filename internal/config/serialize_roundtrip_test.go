@@ -18,11 +18,12 @@ func TestSaveConfigKeepsTheSettingsThatHaveNoDialog(t *testing.T) {
 	cfg.VideoPauseOnFocusLoss = true
 	cfg.TTYXKeys = false
 	cfg.TTYXKeyList = "Ctrl+Enter, Ctrl+Tab"
+	cfg.HistoryDisabledBuckets = "cmdline,folders"
 
 	back := DefaultConfig()
 	parseConfigInto(&back, ini.Parse(bytes.NewReader(SerializeSettingsConfig(cfg))))
 	if back.ImageOverlay || back.ImageX11OffsetX != 3 || back.ImageX11OffsetY != -2 ||
-		!back.VideoPauseOnFocusLoss || back.TTYXKeys || back.TTYXKeyList != "Ctrl+Enter, Ctrl+Tab" {
+		!back.VideoPauseOnFocusLoss || back.TTYXKeys || back.TTYXKeyList != "Ctrl+Enter, Ctrl+Tab" || back.HistoryDisabledBuckets != "cmdline,folders" {
 		t.Fatalf("after a save and a load: overlay %v, offsets %d,%d, pause %v, ttyx %v %q",
 			back.ImageOverlay, back.ImageX11OffsetX, back.ImageX11OffsetY,
 			back.VideoPauseOnFocusLoss, back.TTYXKeys, back.TTYXKeyList)

@@ -72,6 +72,7 @@ func TestConfigOptionDocFollowsKeysWhoseNamesDiffer(t *testing.T) {
 		{"Startup", "Mode", "Setting.StartupMode"},
 		{"Compare", "MaxDepth", "Setting.Compare.MaxDepth"},
 		{"History", "ShowTimes", "Setting.HistoryShowTimes.0"},
+		{"History", "DisabledBuckets", "Setting.HistoryDisabledBuckets.cmdline"},
 		{"Panel", "VimHotkeys", "Setting.NavigationMode"},
 	} {
 		if got := ConfigOptionDoc(tc.section, tc.key).HelpTopic; got != tc.topic {

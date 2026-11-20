@@ -1,6 +1,10 @@
 package history
 
-import "github.com/unxed/vtui"
+import (
+	"strings"
+
+	"github.com/unxed/vtui"
+)
 
 // History bucket names follow Far's SavedDialogHistory naming. Sharing the
 // buckets is the point: a string typed into the editor's search dialog shows
@@ -16,6 +20,48 @@ const (
 	ExternalEditorHistoryID = "ExternalEditor"
 	CalculatorHistoryID     = "Calculator"
 )
+
+// PreferenceBuckets is the complete set of stable input-history buckets f4
+// can disable independently. Keep the labels user-facing; IDs are persisted
+// in history.json and are not translated.
+var PreferenceBuckets = []struct{ ID, Label, Russian string }{
+	{"cmdline", "Command line", "Командная строка"},
+	{"cmdline.paths", "Command directory hints", "Каталоги команд"},
+	{"folders", "Folder navigation", "Переходы по папкам"},
+	{"viewer-editor", "Viewer and editor", "Просмотр и редактор"},
+	{"command-palette", "Command palette", "Палитра команд"},
+	{"SearchText", "Search text", "Текст поиска"},
+	{"ReplaceText", "Replace text", "Текст замены"},
+	{"Masks", "File masks", "Маски файлов"},
+	{"Copy", "Copy and move destination", "Назначение копирования и перемещения"},
+	{"NewFolder", "New folder name", "Имя новой папки"},
+	{"NewEdit", "New file name", "Имя нового файла"},
+	{"ExternalEditor", "External editor command", "Команда внешнего редактора"},
+	{"Calculator", "Calculator", "Калькулятор"},
+	{"ApplyCmd", "Apply command", "Команда применения"},
+}
+
+// ApplyDisabledBuckets configures the persistent provider from a comma- or
+// semicolon-separated settings.ini value. Unknown IDs remain supported so a
+// future bucket can be disabled before its UI is upgraded.
+func ApplyDisabledBuckets(provider *F4HistoryProvider, disabled string) {
+	if provider == nil {
+		return
+	}
+	set := make(map[string]bool)
+	for _, id := range strings.FieldsFunc(disabled, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t'
+	}) {
+		set[id] = true
+	}
+	for _, bucket := range PreferenceBuckets {
+		provider.SetHistoryEnabled(bucket.ID, !set[bucket.ID])
+		delete(set, bucket.ID)
+	}
+	for id := range set {
+		provider.SetHistoryEnabled(id, false)
+	}
+}
 
 // AttachHistory turns a plain dialog input into a history backed one, the
 // equivalent of Far's DIF_HISTORY. The stored entries are loaded eagerly
