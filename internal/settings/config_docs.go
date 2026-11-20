@@ -160,8 +160,8 @@ func deriveConfigOptionFields(base config.F4Config, fields []f4settings.Field) m
 		for _, variant := range configFieldVariants(base, field) {
 			for _, option := range config.Options(variant) {
 				name := option.Section + "." + option.Key
-				old, ok := before[name]
-				if !ok || old == option.Value || seen[name] {
+				old := before[name]
+				if old == option.Value || seen[name] {
 					continue
 				}
 				seen[name] = true

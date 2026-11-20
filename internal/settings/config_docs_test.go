@@ -14,6 +14,7 @@ func configEditorKeys() map[string]bool {
 	cfg := config.DefaultConfig()
 	cfg.GuiPositionSaved = true
 	cfg.TTYXKeyList = config.DefaultTTYXKeyList + ", Ctrl+Shift+Down"
+	cfg.HistoryDisabledBuckets = "cmdline"
 	keys := make(map[string]bool)
 	for _, option := range config.Options(cfg) {
 		keys[option.Section+"."+option.Key] = true
