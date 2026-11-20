@@ -1420,6 +1420,7 @@ Menu.Viewer.Search=&Search
 Menu.Viewer.Options=&Options
 Menu.Shell.Files=&Files
 Menu.Shell.Commands=&Commands
+Menu.Shell.Plugins=&Plugins
 Menu.Shell.Commands.History=&History
 Menu.Shell.Commands.Navigation=Na&vigation
 Menu.Shell.Commands.Paths=Copy &path or name

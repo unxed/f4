@@ -1478,7 +1478,7 @@ func init() {
 		Description: "Show plugin commands menu",
 		DescKey:     "Action.Panel.PluginMenu.Desc",
 		DefaultKeys: []string{"F11"},
-		MenuPath:    "Commands",
+		MenuPath:    "Plugins",
 		Handler:     withPF(func(pf *panel.PanelsFrame) { pf.ShowPluginMenu() }),
 	})
 	registerAction(action.Action{

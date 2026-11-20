@@ -563,6 +563,48 @@ func TestBuildMenuBarItemsFoldsRareCommandsIntoSubMenus(t *testing.T) {
 	}
 }
 
+func TestBuildMenuBarItemsPlacesPluginCommandsInPluginsMenu(t *testing.T) {
+	old := keymap.GlobalHotkeysMgr
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
+	defer func() { keymap.GlobalHotkeysMgr = old }()
+
+	items := BuildMenuBarItems("Shell")
+	var plugins, commands *vtui.MenuBarItem
+	for index := range items {
+		switch action.PlainLabel(items[index].Label) {
+		case action.PlainLabel(i18n.Msg("Menu.Shell.Plugins")):
+			plugins = &items[index]
+		case action.PlainLabel(i18n.Msg("Menu.Shell.Commands")):
+			commands = &items[index]
+		}
+	}
+	if plugins == nil {
+		t.Fatal("Plugins menu is missing")
+	}
+	if commands == nil {
+		t.Fatal("Commands menu is missing")
+	}
+
+	pluginMenu, ok := GetAction("Panel.PluginMenu")
+	if !ok {
+		t.Fatal("Panel.PluginMenu is not registered")
+	}
+	find := func(items []vtui.MenuItem, label string) bool {
+		for _, item := range items {
+			if action.PlainLabel(item.Text) == action.PlainLabel(label) {
+				return true
+			}
+		}
+		return false
+	}
+	if !find(plugins.SubItems, pluginMenu.DisplayLabel()) {
+		t.Fatalf("Plugins menu is missing %q: %+v", pluginMenu.DisplayLabel(), plugins.SubItems)
+	}
+	if find(commands.SubItems, pluginMenu.DisplayLabel()) {
+		t.Fatalf("Commands menu still contains %q", pluginMenu.DisplayLabel())
+	}
+}
+
 func TestSettingsFirstInEveryOptionsMenu(t *testing.T) {
 	for _, area := range []string{"Shell", "Editor", "Viewer", "Terminal"} {
 		found := false
