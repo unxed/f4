@@ -9,8 +9,7 @@ package cmdline
 // follows far2l/src/cmdline.cpp GetPrompt: codes are case-insensitive, and a
 // code nobody knows expands to nothing rather than to itself.
 //
-// Four of far2l's codes are not here. $z (git branch) would read from disk on
-// every redraw and wants a cache of its own; $e, $v, $_ and $m far2l does not
+// Four of far2l's codes are not here. $e, $v, $_ and $m far2l does not
 // implement either. $+ is accepted and reads the folder stack depth the
 // caller passes, which is zero until f4 grows a pushd stack.
 //
@@ -59,6 +58,7 @@ type PromptContext struct {
 	Home       string // "" leaves $p unabbreviated
 	User       string
 	Host       string
+	GitBranch  string // current branch, empty outside a Git worktree
 	Admin      bool
 	AdminLabel string // what $@xx puts between its two brackets
 	StackDepth int    // folder stack depth, for $+
@@ -122,6 +122,8 @@ func ExpandPrompt(format string, ctx PromptContext) []PromptSpan {
 			add(ctx.User, PromptIdentity)
 		case 'n':
 			add(ctx.Host, PromptIdentity)
+		case 'z':
+			add(ctx.GitBranch, PromptLiteral)
 		case '#':
 			if ctx.Admin {
 				add("#", PromptLiteral)

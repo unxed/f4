@@ -11,6 +11,7 @@ func promptCtx() PromptContext {
 		Home:       "/home/nz",
 		User:       "nz",
 		Host:       "nz-en",
+		GitBranch:  "feature/prompt",
 		AdminLabel: "Root",
 		Now:        time.Date(2026, 9, 12, 13, 38, 7, 0, time.UTC),
 	}
@@ -33,6 +34,8 @@ func TestExpandPromptCodes(t *testing.T) {
 		{"$r", "/home/nz/src/f4"},
 		{"$u", "nz"},
 		{"$n", "nz-en"},
+		{"$z", "feature/prompt"},
+		{"$Z", "feature/prompt"},
 		{"$t", "13:38:07"},
 		{"$d", "09/12/26"},
 		{"$a$b$c$f$g$l$q$$", "&|()><=$"},

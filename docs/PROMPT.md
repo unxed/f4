@@ -27,6 +27,7 @@ far2l.
 | `$#`    | `#` for root, `$` for everyone else                              |
 | `$t`    | current time, `HH:MM:SS`                                         |
 | `$d`    | current date, `MM/DD/YY`                                         |
+| `$z`    | current Git branch (empty outside a Git worktree)                  |
 | `$h`    | erases the character before it                                   |
 | `$@xx`  | for root only: the label `Root` (`Administrator` on Windows) between the two characters `xx`, e.g. `$@[]` gives `[Root]` |
 | `$+`    | one `+` per entry on the folder stack                            |
@@ -58,8 +59,6 @@ writes `13:38:07` and each `$h` rubs out one character.
 
 ## What is not supported
 
-- `$z` (git branch). It reads from disk, and the prompt is rebuilt on every
-  redraw, so it needs a cache of its own.
 - `$e`, `$v`, `$_` and `$m`. far2l does not implement these either.
 - Environment variables in the format string. far2l expands them before it
   reads the codes, which makes `$HOSTNAME` work but also makes `$s` mean

@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"strings"
 	"time"
 
 	"github.com/unxed/f4/internal/cmdline"
@@ -26,11 +27,16 @@ func promptFormatSpans(path, home, username, host string, maxPromptLen int) []cm
 	if format == "" {
 		format = cmdline.DefaultPromptFormat
 	}
+	gitBranch := ""
+	if strings.Contains(strings.ToLower(format), "$z") {
+		gitBranch = promptGitBranch(path)
+	}
 	spans := cmdline.ExpandPrompt(format, cmdline.PromptContext{
 		Path:       path,
 		Home:       home,
 		User:       username,
 		Host:       host,
+		GitBranch:  gitBranch,
 		Admin:      cmdline.PromptUserIsAdmin(),
 		AdminLabel: cmdline.PromptAdminLabel(),
 		Now:        time.Now(),
