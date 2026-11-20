@@ -582,13 +582,17 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 		scr.AllocBuf(width, 35)
 		c.ResizeConsole(width, 35)
 		c.SetPosition(0, 0, width-1, 34)
+		// Prior tests may persist Appearance's scroll offset; keep the row
+		// under test inside the viewport on every platform and shuffle seed.
+		c.page.scroll = 0
+		c.page.positionRows()
 		vtui.Palette[vtui.ColDialogText] = uint64(0x21 + iteration*16)
 		vtui.Palette[vtui.ColDialogEditUnchanged] = uint64(0x22 + iteration*16)
 		vtui.Palette[vtui.ColDialogBox] = uint64(0x23 + iteration*16)
 		var previous *settingsRow
 		var first *settingsRow
 		for _, row := range c.page.rows {
-			if _, ok := row.control.(*vtui.ComboBox); !ok {
+			if _, ok := row.control.(*vtui.ComboBox); !ok || len(row.label) == 0 {
 				continue
 			}
 			if first == nil {
@@ -603,7 +607,7 @@ func TestSettingsComboInlineLayout(t *testing.T) {
 			}
 			previous = row
 		}
-		if previous == nil {
+		if previous == nil || first == nil {
 			t.Fatal("missing combos")
 		}
 		c.query = ""
