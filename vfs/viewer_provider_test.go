@@ -121,7 +121,7 @@ func TestOpenViewerFromProvidersReturnsOpenedFrame(t *testing.T) {
 	}
 	t.Cleanup(registration.Unregister)
 
-	frame, handled, err := OpenViewerFromProviders(nil, ViewerRequest{})
+	frame, handled, err := OpenViewerFromProviders(context.Background(), ViewerRequest{})
 	if err != nil || !handled || frame != wantFrame {
 		t.Fatalf("OpenViewerFromProviders() = (%v, %v, %v), want (test frame, true, nil)", frame, handled, err)
 	}
