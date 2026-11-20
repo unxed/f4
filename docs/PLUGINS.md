@@ -236,6 +236,17 @@ Once you've built something cool, share it with the community via **PlugRing**:
 
 For Go developers building high-performance or complex native subprocess plugins, an SDK is provided in `sdk/f4plugin`. It handles all the MessagePack multiplexing and exposes a clean, synchronous Go interface. Check `plugins/dummy_rpc/main.go` for a reference implementation.
 
+## 6. Full-screen viewer providers
+
+In-process plugins may optionally implement `vfs.ViewerContributionHost` on the
+host and register a `vfs.ViewerProvider`. `CanView` is a quick, local check;
+providers are tried by descending priority. `OpenViewer` may return
+`vfs.ErrViewerUnsupported` if it cannot handle the selected file after all;
+the next matching provider is tried. If every provider declines, the caller
+falls back to f4's ordinary viewer. Other errors are returned to the caller so
+it can report a real plugin failure rather than silently masking it. A
+successful provider returns a `vtui.Frame` for the host to display.
+
 ## Grouping virtual panels
 
 Any ordinary file panel backed by a VFS supports the same independent Group by
