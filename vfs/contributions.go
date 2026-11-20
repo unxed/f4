@@ -111,6 +111,13 @@ type ContributionHost interface {
 	RegisterMacroCallProvider(MacroCallProvider) (Registration, error)
 }
 
+// ViewerContributionHost is an optional extension for plugins that can open
+// selected files in their own full-screen viewer. It is separate from
+// ContributionHost so existing hosts and plugin test doubles remain compatible.
+type ViewerContributionHost interface {
+	RegisterViewerProvider(ViewerProvider) (Registration, error)
+}
+
 // PanelState is the immutable, UI-safe snapshot of one file panel exposed to
 // a panel plugin. VFS handles are deliberately omitted: a panel plugin gets
 // paths and selection metadata, while file operations continue to go through
