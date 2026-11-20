@@ -70,10 +70,11 @@ func (r HistoryRecord) DisplayText() string {
 var SamePath = func(a, b string) bool { return a != "" && a == b }
 
 type F4HistoryProvider struct {
-	mu   sync.Mutex
-	path string
-	data map[string][]string
-	rich map[string][]HistoryRecord
+	mu       sync.Mutex
+	path     string
+	data     map[string][]string
+	rich     map[string][]HistoryRecord
+	disabled map[string]bool
 	// gen counts the saves, so a caller that derives something from the
 	// history can tell when it must derive it again.
 	gen uint64
@@ -181,6 +182,9 @@ func (hp *F4HistoryProvider) save() {
 func (hp *F4HistoryProvider) LoadHistory(id string) []string {
 	hp.mu.Lock()
 	defer hp.mu.Unlock()
+	if hp.disabled[id] {
+		return nil
+	}
 	if items, ok := hp.data[id]; ok {
 		// Return a copy to avoid concurrent slice modification issues
 		res := make([]string, len(items))
@@ -192,6 +196,10 @@ func (hp *F4HistoryProvider) LoadHistory(id string) []string {
 
 func (hp *F4HistoryProvider) SaveHistory(id string, history []string) {
 	hp.mu.Lock()
+	if hp.disabled[id] {
+		hp.mu.Unlock()
+		return
+	}
 	if hp.data == nil {
 		hp.data = make(map[string][]string)
 	}
@@ -209,6 +217,9 @@ func (hp *F4HistoryProvider) SaveHistory(id string, history []string) {
 func (hp *F4HistoryProvider) LoadRichHistory(id string) []HistoryRecord {
 	hp.mu.Lock()
 	defer hp.mu.Unlock()
+	if hp.disabled[id] {
+		return nil
+	}
 	if items, ok := hp.rich[id]; ok {
 		res := make([]HistoryRecord, len(items))
 		copy(res, items)
@@ -219,6 +230,10 @@ func (hp *F4HistoryProvider) LoadRichHistory(id string) []HistoryRecord {
 
 func (hp *F4HistoryProvider) SaveRichHistory(id string, history []HistoryRecord) {
 	hp.mu.Lock()
+	if hp.disabled[id] {
+		hp.mu.Unlock()
+		return
+	}
 	if hp.rich == nil {
 		hp.rich = make(map[string][]HistoryRecord)
 	}
@@ -232,6 +247,25 @@ func (hp *F4HistoryProvider) SaveRichHistory(id string, history []HistoryRecord)
 	hp.gen++
 	hp.mu.Unlock()
 	hp.save()
+}
+
+// SetHistoryEnabled controls whether a named history bucket can be read or
+// written. Disabled buckets remain on disk so temporarily turning history off
+// does not destroy entries the user may later choose to restore.
+func (hp *F4HistoryProvider) SetHistoryEnabled(id string, enabled bool) {
+	if id == "" {
+		return
+	}
+	hp.mu.Lock()
+	defer hp.mu.Unlock()
+	if enabled {
+		delete(hp.disabled, id)
+		return
+	}
+	if hp.disabled == nil {
+		hp.disabled = make(map[string]bool)
+	}
+	hp.disabled[id] = true
 }
 
 func RecordsFromNames(names []string) []HistoryRecord {

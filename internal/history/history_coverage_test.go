@@ -98,6 +98,41 @@ func TestProviderPersistsPlainAndRichHistory(t *testing.T) {
 	}
 }
 
+func TestProviderCanDisableHistoryBucketWithoutDiscardingIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	hp := NewProviderAtPath(path)
+	hp.SaveHistory("SearchText", []string{"old query"})
+	hp.SaveRichHistory("folders", []HistoryRecord{{Name: "/old", Lock: true}})
+
+	hp.SetHistoryEnabled("SearchText", false)
+	hp.SetHistoryEnabled("folders", false)
+	if got := hp.LoadHistory("SearchText"); got != nil {
+		t.Fatalf("disabled plain history = %#v, want nil", got)
+	}
+	if got := hp.LoadRichHistory("folders"); got != nil {
+		t.Fatalf("disabled rich history = %#v, want nil", got)
+	}
+	hp.SaveHistory("SearchText", []string{"new query"})
+	hp.SaveRichHistory("folders", []HistoryRecord{{Name: "/new"}})
+
+	reloaded := NewProviderAtPath(path)
+	if got := reloaded.LoadHistory("SearchText"); !reflect.DeepEqual(got, []string{"old query"}) {
+		t.Fatalf("disabled save changed persisted plain history: %#v", got)
+	}
+	if got := reloaded.LoadRichHistory("folders"); len(got) != 1 || got[0].Name != "/old" || !got[0].Lock {
+		t.Fatalf("disabled save changed persisted rich history: %#v", got)
+	}
+
+	hp.SetHistoryEnabled("SearchText", true)
+	hp.SetHistoryEnabled("folders", true)
+	if got := hp.LoadHistory("SearchText"); !reflect.DeepEqual(got, []string{"old query"}) {
+		t.Fatalf("re-enabled plain history = %#v", got)
+	}
+	if got := hp.LoadRichHistory("folders"); len(got) != 1 || got[0].Name != "/old" || !got[0].Lock {
+		t.Fatalf("re-enabled rich history = %#v", got)
+	}
+}
+
 func TestProviderMigratesLegacyPlainBuckets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.json")
 	data, err := json.Marshal(map[string][]string{"folders": {"/one", "/two"}})
