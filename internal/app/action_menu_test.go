@@ -139,8 +139,18 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 	}
 
 	// Options menu honors MenuSeparatorBefore.
+	var optionsMenu []vtui.MenuItem
+	for _, item := range items {
+		if item.Label == i18n.Msg("Menu.Shell.Options") {
+			optionsMenu = item.SubItems
+			break
+		}
+	}
+	if optionsMenu == nil {
+		t.Fatal("Options menu is missing")
+	}
 	var sawSeparator bool
-	for _, it := range items[2].SubItems {
+	for _, it := range optionsMenu {
 		if it.Separator {
 			sawSeparator = true
 			break
@@ -151,7 +161,7 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 	}
 
 	count := 0
-	for _, item := range items[2].SubItems {
+	for _, item := range optionsMenu {
 		if item.UserData == history.MenuHistoryItemKey("Settings.Open") {
 			count++
 		}
