@@ -153,6 +153,78 @@ func TestViewerBackendRefreshDropsStaleTailCache(t *testing.T) {
 	}
 }
 
+type blockingSizeRefresh struct {
+	vfs.ReadAtCloser
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (f *blockingSizeRefresh) RefreshSize(ctx context.Context) (int64, error) {
+	f.once.Do(func() { close(f.started) })
+	select {
+	case <-f.release:
+		return f.ReadAtCloser.Size(), nil
+	case <-ctx.Done():
+		return f.ReadAtCloser.Size(), ctx.Err()
+	}
+}
+
+func TestViewerEndDoesNotWaitForSizeRefresh(t *testing.T) {
+	scr := vtui.NewSilentScreenBuf()
+	scr.AllocBuf(40, 6)
+	vtui.FrameManager.Init(scr)
+
+	root := t.TempDir()
+	path := filepath.Join(root, "log.txt")
+	if err := os.WriteFile(path, []byte("line one\nline two\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	vv, err := NewViewerView(context.Background(), vfs.NewOSVFS(root), path)
+	if err != nil {
+		t.Fatalf("NewViewerView: %v", err)
+	}
+	defer vv.Close()
+	vv.SetPosition(0, 0, 39, 5)
+	vv.SetVisible(true)
+	vv.Show(scr)
+	pumpTasks(vv, scr, 100*time.Millisecond)
+
+	f := &blockingSizeRefresh{
+		ReadAtCloser: vv.Backend.File,
+		started:      make(chan struct{}),
+		release:      make(chan struct{}),
+	}
+	vv.Backend.File = f
+	defer func() {
+		select {
+		case <-f.release:
+		default:
+			close(f.release)
+		}
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		close(f.release)
+		<-done
+		t.Fatal("End blocked on a slow file-size refresh")
+	}
+	select {
+	case <-f.started:
+	case <-time.After(time.Second):
+		t.Fatal("End did not refresh the file size in the background")
+	}
+	close(f.release)
+	pumpTasks(vv, scr, 500*time.Millisecond)
+}
+
 // A viewer parked at the end of a file follows it as it grows; the reader does
 // not have to reopen it and scroll down again.
 func TestViewerFollowsGrowingFileFromEnd(t *testing.T) {
