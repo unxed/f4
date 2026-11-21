@@ -643,7 +643,7 @@ func TestPanelsFrame_MenuCommands(t *testing.T) {
 		t.Error("Right panel mode not changed to Detailed")
 	}
 
-	for _, menuIndex := range []int{0, 4} {
+	for _, menuIndex := range []int{0, len(pf.MenuBar.Items) - 1} {
 		items := pf.MenuBar.Items[menuIndex].SubItems
 		for i, shortcut := range []string{"Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"} {
 			if items[i].Shortcut != shortcut {
@@ -1900,7 +1900,7 @@ func TestPanelsFrame_F9HiddenPanels_UsesShellMenuAndKeepsTerminalLog(t *testing.
 	pf.ShowPanels = false
 
 	items := pf.GetMenuBar().Items
-	wantLabels := []string{i18n.Msg("Menu.Shell.Files"), i18n.Msg("Menu.Shell.Commands"), i18n.Msg("Menu.Shell.Options")}
+	wantLabels := []string{i18n.Msg("Menu.Shell.Files"), i18n.Msg("Menu.Shell.Commands"), i18n.Msg("Menu.Shell.Plugins"), i18n.Msg("Menu.Shell.Options")}
 	if len(items) != len(wantLabels) {
 		t.Fatalf("hidden-panels F9 menu has %d top-level items, want %d: %+v", len(items), len(wantLabels), items)
 	}

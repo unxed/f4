@@ -1113,7 +1113,7 @@ func (pf *PanelsFrame) GetMenuBar() *vtui.MenuBar {
 	}
 	pf.UpdateMenuCheckmarks()
 	// After the checkmarks: they set the text of the left and right side
-	// menus' rows again (indices 0 and 4 — see UpdateMenuCheckmarks), which is
+	// menus' rows again (the first and last menus — see UpdateMenuCheckmarks), which is
 	// the only thing that can leave a bare autoMarker in the text since
 	// BuildMenuItems last ran menuhotkeys.UniqueBar over the whole bar. Redo
 	// that letter assignment for just those two menus rather than the whole
@@ -1121,9 +1121,9 @@ func (pf *PanelsFrame) GetMenuBar() *vtui.MenuBar {
 	// which UpdateMenuCheckmarks did not touch, is idempotent (they are
 	// already conflict-free) but not free, and doing it on every frame is
 	// exactly what made #884 slow.
-	if len(pf.MenuBar.Items) >= 5 {
+	if pf.ShowPanels && len(pf.MenuBar.Items) >= 2 {
 		menuhotkeys.Unique(pf.MenuBar.Items[0].SubItems)
-		menuhotkeys.Unique(pf.MenuBar.Items[4].SubItems)
+		menuhotkeys.Unique(pf.MenuBar.Items[len(pf.MenuBar.Items)-1].SubItems)
 	}
 	return pf.MenuBar
 }
@@ -1265,10 +1265,11 @@ var commandShortcutActionName = map[int]string{
 }
 
 func (pf *PanelsFrame) UpdateMenuCheckmarks() {
-	if pf.Panels[0] == nil || pf.Panels[1] == nil || pf.MenuBar == nil || len(pf.MenuBar.Items) < 5 {
+	if pf.Panels[0] == nil || pf.Panels[1] == nil || pf.MenuBar == nil || !pf.ShowPanels || len(pf.MenuBar.Items) < 2 {
 		return
 	}
-	if len(pf.MenuBar.Items[0].SubItems) < 10 || len(pf.MenuBar.Items[4].SubItems) < 10 {
+	rightMenuIndex := len(pf.MenuBar.Items) - 1
+	if len(pf.MenuBar.Items[0].SubItems) < 10 || len(pf.MenuBar.Items[rightMenuIndex].SubItems) < 10 {
 		return
 	}
 
@@ -1311,18 +1312,18 @@ func (pf *PanelsFrame) UpdateMenuCheckmarks() {
 			label = menuhotkeys.Auto(name)
 		}
 		pf.MenuBar.Items[0].SubItems[i].Text = getMenuText(lMode, item.mode, label)
-		pf.MenuBar.Items[4].SubItems[i].Text = getMenuText(rMode, item.mode, label)
+		pf.MenuBar.Items[rightMenuIndex].SubItems[i].Text = getMenuText(rMode, item.mode, label)
 	}
 	// The rows for far2l's other six modes (f4#410) sit right after the four
 	// above; the sort rows follow the separator that ends the mode rows.
-	lModeRows, rModeRows := sideMenuModeRows(pf.MenuBar.Items[0].SubItems), sideMenuModeRows(pf.MenuBar.Items[4].SubItems)
+	lModeRows, rModeRows := sideMenuModeRows(pf.MenuBar.Items[0].SubItems), sideMenuModeRows(pf.MenuBar.Items[rightMenuIndex].SubItems)
 	for i, mode := range extraViewModes {
 		label := menuhotkeys.Auto(panelViewModeName(mode.Key()))
 		if lModeRows > sideMenuBuiltinModeRows {
 			pf.MenuBar.Items[0].SubItems[sideMenuBuiltinModeRows+i].Text = getMenuText(lMode, mode, label)
 		}
 		if rModeRows > sideMenuBuiltinModeRows {
-			pf.MenuBar.Items[4].SubItems[sideMenuBuiltinModeRows+i].Text = getMenuText(rMode, mode, label)
+			pf.MenuBar.Items[rightMenuIndex].SubItems[sideMenuBuiltinModeRows+i].Text = getMenuText(rMode, mode, label)
 		}
 	}
 	for i, item := range []struct {
@@ -1330,24 +1331,24 @@ func (pf *PanelsFrame) UpdateMenuCheckmarks() {
 		key  string
 	}{{SortName, "SortName"}, {SortExt, "SortExt"}, {SortTime, "SortTime"}, {SortSize, "SortSize"}, {SortUnsorted, "SortUnsorted"}} {
 		pf.MenuBar.Items[0].SubItems[lModeRows+1+i].Text = getSortMenuText(lSort, item.mode, menuhotkeys.Auto(i18n.Msg("Menu."+item.key)))
-		pf.MenuBar.Items[4].SubItems[rModeRows+1+i].Text = getSortMenuText(rSort, item.mode, menuhotkeys.Auto(i18n.Msg("Menu."+item.key)))
+		pf.MenuBar.Items[rightMenuIndex].SubItems[rModeRows+1+i].Text = getSortMenuText(rSort, item.mode, menuhotkeys.Auto(i18n.Msg("Menu."+item.key)))
 	}
 
 	// The sort-group toggle sits right after the sort modes; a mock menu bar
 	// built with fewer rows (tests) simply keeps its own text.
 	lGroupRow, rGroupRow := lModeRows+6, rModeRows+6
-	if len(pf.MenuBar.Items[0].SubItems) > lGroupRow && len(pf.MenuBar.Items[4].SubItems) > rGroupRow {
+	if len(pf.MenuBar.Items[0].SubItems) > lGroupRow && len(pf.MenuBar.Items[rightMenuIndex].SubItems) > rGroupRow {
 		groupLabel := menuhotkeys.Auto(i18n.Msg("Menu.SortUseGroups"))
 		pf.MenuBar.Items[0].SubItems[lGroupRow].Text = getToggleMenuText(lGroups, groupLabel)
-		pf.MenuBar.Items[4].SubItems[rGroupRow].Text = getToggleMenuText(rGroups, groupLabel)
+		pf.MenuBar.Items[rightMenuIndex].SubItems[rGroupRow].Text = getToggleMenuText(rGroups, groupLabel)
 	}
 
 	// The "selected first" toggle sits right after the sort-group toggle, for the
 	// same reason and with the same test-friendly guard.
-	if len(pf.MenuBar.Items[0].SubItems) > lGroupRow+1 && len(pf.MenuBar.Items[4].SubItems) > rGroupRow+1 {
+	if len(pf.MenuBar.Items[0].SubItems) > lGroupRow+1 && len(pf.MenuBar.Items[rightMenuIndex].SubItems) > rGroupRow+1 {
 		selectedLabel := menuhotkeys.Auto(i18n.Msg("Menu.SortSelectedFirst"))
 		pf.MenuBar.Items[0].SubItems[lGroupRow+1].Text = getToggleMenuText(lSelectedFirst, selectedLabel)
-		pf.MenuBar.Items[4].SubItems[rGroupRow+1].Text = getToggleMenuText(rSelectedFirst, selectedLabel)
+		pf.MenuBar.Items[rightMenuIndex].SubItems[rGroupRow+1].Text = getToggleMenuText(rSelectedFirst, selectedLabel)
 	}
 
 	// Update shortcuts dynamically from the action registry. Framework-owned

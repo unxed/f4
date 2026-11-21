@@ -85,7 +85,7 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 
 	items := BuildMenuBarItems("Shell")
 
-	wantTitles := []string{"&Files", "&Commands", "&Options"}
+	wantTitles := []string{"&Files", "&Commands", "&Plugins", "&Options"}
 	if len(items) != len(wantTitles) {
 		t.Fatalf("Expected %d top-level menus, got %d: %+v", len(wantTitles), len(items), items)
 	}
@@ -416,6 +416,9 @@ func TestBuildMenuBarItemsGroupsShellMenus(t *testing.T) {
 	defer func() { keymap.GlobalHotkeysMgr = old }()
 
 	for _, menu := range BuildMenuBarItems("Shell") {
+		if len(menu.SubItems) <= 1 {
+			continue // A standalone command does not need group separators.
+		}
 		separators := 0
 		for index, item := range menu.SubItems {
 			if !item.Separator {
