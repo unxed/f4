@@ -1159,6 +1159,18 @@ func (vv *ViewerView) jumpToEnd() {
 				if start < 0 {
 					start = 0
 				}
+				// Hex rendering reads its rows from the backend cache. Keep
+				// Busy set until the first row is ready, or the frame after a
+				// tail-follow can expose a transient Loading placeholder.
+				for !stopped() {
+					if _, err := backend.ReadAt(start, 16); err != piecetable.ErrLoading {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+			if stopped() {
+				return
 			}
 			ctx.RunOnUI(func() { vv.TopOffset = start })
 			return
