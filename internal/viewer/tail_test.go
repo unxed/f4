@@ -164,9 +164,9 @@ func (f *blockingSizeRefresh) RefreshSize(ctx context.Context) (int64, error) {
 	f.once.Do(func() { close(f.started) })
 	select {
 	case <-f.release:
-		return f.ReadAtCloser.Size(), nil
+		return f.Size(), nil
 	case <-ctx.Done():
-		return f.ReadAtCloser.Size(), ctx.Err()
+		return f.Size(), ctx.Err()
 	}
 }
 
