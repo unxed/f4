@@ -1152,6 +1152,13 @@ func (vv *ViewerView) jumpToEnd() {
 		backend.Refresh(ctx.Context)
 		size := backend.Size()
 		ctx.RunOnUI(func() { vv.lastKnownSize = size })
+		// A closed backend -- the viewer closed, or a codepage switch
+		// replaced it -- cancels its context, and its fetches then never
+		// land: ReadAt keeps answering ErrLoading and both loops below would
+		// wait for it forever. Stop instead, as holdUntilCached does.
+		stopped := func() bool {
+			return ctx.Err() != nil || backend.ctx.Err() != nil
+		}
 		if hexMode {
 			start := int64(0)
 			if size > 0 {
@@ -1178,13 +1185,6 @@ func (vv *ViewerView) jumpToEnd() {
 		if size == 0 {
 			ctx.RunOnUI(func() { vv.TopOffset = 0 })
 			return
-		}
-		// A closed backend -- the viewer closed, or a codepage switch
-		// replaced it -- cancels its context, and its fetches then never
-		// land: ReadAt keeps answering ErrLoading and both loops below would
-		// wait for it forever. Stop instead, as holdUntilCached does.
-		stopped := func() bool {
-			return ctx.Err() != nil || backend.ctx.Err() != nil
 		}
 		if !wrapMode && !ansiMode && !decodeMode {
 			start, ok := backend.LastTextRowsStart(ctx.Context, backend.Size(), contentHeight)
