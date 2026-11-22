@@ -1115,13 +1115,31 @@ func (vv *ViewerView) jumpToEnd() {
 	// way to catch up with a growing log even where the automatic follow does
 	// not apply -- after scrolling up, say, or on a file system whose handles
 	// cannot re-measure themselves.
-	backend := vv.Backend
-	if backend == nil {
-		return
+	if vv.Backend != nil {
+		vv.Backend.Refresh(context.Background())
+		// The end about to be shown is the end as measured now, so this size
+		// is known and DisplayObject has nothing left to follow.
+		vv.lastKnownSize = vv.Backend.Size()
 	}
 
 	contentHeight := int64(vv.Y2 - vv.Y1)
-	hexMode := vv.HexMode
+	if vv.HexMode {
+		if vv.Backend.Size() == 0 {
+			vv.TopOffset = 0
+		} else {
+			lastLineOffset := (vv.Backend.Size() - 1) &^ 0xF
+			vv.TopOffset = lastLineOffset - (contentHeight-1)*16
+			if vv.TopOffset < 0 {
+				vv.TopOffset = 0
+			}
+		}
+		return
+	}
+
+	if vv.Backend.Size() == 0 {
+		vv.TopOffset = 0
+		return
+	}
 
 	// Everything the layout needs from the viewer is read here, on the UI
 	// goroutine that starts the task, and not inside it. The viewer's fields
@@ -1130,6 +1148,7 @@ func (vv *ViewerView) jumpToEnd() {
 	// Backend, all while this layout may still be running. The task used to
 	// read them itself, and -race caught it reading ScrollBar after the
 	// viewer had been closed under it.
+	backend := vv.Backend
 	width := vv.X2 - vv.X1 + 1
 	if vv.ScrollBar != nil {
 		width--
@@ -1146,45 +1165,12 @@ func (vv *ViewerView) jumpToEnd() {
 	vv.Busy = true
 	vtui.RunAsync(func(ctx *vtui.TaskContext) {
 		defer ctx.RunOnUI(func() { vv.Busy = false })
-		// RefreshSize may stat a local file or take a fresh terminal-log
-		// snapshot. Neither belongs on the input thread: End should remain
-		// responsive while the backend measures the current tail.
-		backend.Refresh(ctx.Context)
-		size := backend.Size()
-		ctx.RunOnUI(func() { vv.lastKnownSize = size })
 		// A closed backend -- the viewer closed, or a codepage switch
 		// replaced it -- cancels its context, and its fetches then never
 		// land: ReadAt keeps answering ErrLoading and both loops below would
 		// wait for it forever. Stop instead, as holdUntilCached does.
 		stopped := func() bool {
 			return ctx.Err() != nil || backend.ctx.Err() != nil
-		}
-		if hexMode {
-			start := int64(0)
-			if size > 0 {
-				start = (size-1)&^0xF - (contentHeight-1)*16
-				if start < 0 {
-					start = 0
-				}
-				// Hex rendering reads its rows from the backend cache. Keep
-				// Busy set until the first row is ready, or the frame after a
-				// tail-follow can expose a transient Loading placeholder.
-				for !stopped() {
-					if _, err := backend.ReadAt(start, 16); err != piecetable.ErrLoading {
-						break
-					}
-					time.Sleep(10 * time.Millisecond)
-				}
-			}
-			if stopped() {
-				return
-			}
-			ctx.RunOnUI(func() { vv.TopOffset = start })
-			return
-		}
-		if size == 0 {
-			ctx.RunOnUI(func() { vv.TopOffset = 0 })
-			return
 		}
 		if !wrapMode && !ansiMode && !decodeMode {
 			start, ok := backend.LastTextRowsStart(ctx.Context, backend.Size(), contentHeight)
@@ -1214,7 +1200,7 @@ func (vv *ViewerView) jumpToEnd() {
 		if chunkSize < tailWindow {
 			chunkSize = tailWindow
 		}
-		startOff := size - chunkSize
+		startOff := backend.Size() - chunkSize
 		if startOff < 0 {
 			startOff = 0
 		}
