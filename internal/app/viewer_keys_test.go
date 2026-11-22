@@ -120,8 +120,22 @@ func TestViewerView_ScrollbarEOFAlignment(t *testing.T) {
 
 	// --- 2. Проверка в Hex режиме ---
 	pressKey(vv, &vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_F4})
-	// В Hex режиме jumpToEnd отрабатывает мгновенно, если данные в кэше
+	// jumpToEnd is asynchronous in both modes; process its UI tasks before
+	// checking the final offset and scrollbar range.
 	vv.ProcessKey(&vtinput.InputEvent{Type: vtinput.KeyEventType, KeyDown: true, VirtualKeyCode: vtinput.VK_END})
+	hexEOF := int64((vv.Backend.Size()-1)&^0xF - (int64(vv.Y2-vv.Y1)-1)*16)
+	if hexEOF < 0 {
+		hexEOF = 0
+	}
+	timeout = time.After(2 * time.Second)
+	for vv.Busy || vv.TopOffset != hexEOF {
+		select {
+		case task := <-fm.TaskChan:
+			task()
+		case <-timeout:
+			t.Fatalf("Timeout waiting for Hex jumpToEnd: Busy=%v TopOffset=%d want %d", vv.Busy, vv.TopOffset, hexEOF)
+		}
+	}
 	vv.Show(scr)
 
 	if int(vv.TopOffset) != vv.ScrollBar.Max {
