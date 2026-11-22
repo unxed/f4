@@ -2363,6 +2363,21 @@ func actionViewFileMode(pf *panel.PanelsFrame, forceHex bool) {
 		}
 		name := fsp.GetSelectedName()
 		path := fsp.Vfs.Join(fsp.Vfs.GetPath(), name)
+		if !forceHex {
+			frame, handled, err := vfs.OpenViewerFromProviders(context.Background(), vfs.ViewerRequest{
+				VFS: fsp.Vfs, Path: path, Item: fsp.Entries[idx],
+			})
+			if err != nil {
+				vtui.ShowMessage(i18n.Msg("Error.Title"), err.Error(), []string{i18n.Msg("vtui.Ok")})
+				return
+			}
+			if handled {
+				if vtui.FrameManager != nil {
+					vtui.FrameManager.AddScreen(frame)
+				}
+				return
+			}
+		}
 		actionOpenViewerMode(pf, fsp.Vfs, path, forceHex)
 	}
 }

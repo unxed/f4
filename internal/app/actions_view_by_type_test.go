@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -19,6 +20,23 @@ import (
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
 )
+
+type actionTestViewerProvider struct {
+	name     string
+	frame    vtui.Frame
+	err      error
+	request  vfs.ViewerRequest
+	openCall int
+}
+
+func (provider *actionTestViewerProvider) Name() string                   { return provider.name }
+func (provider *actionTestViewerProvider) Priority() int                  { return 1 }
+func (provider *actionTestViewerProvider) CanView(vfs.ViewerRequest) bool { return true }
+func (provider *actionTestViewerProvider) OpenViewer(_ context.Context, request vfs.ViewerRequest) (vtui.Frame, error) {
+	provider.request = request
+	provider.openCall++
+	return provider.frame, provider.err
+}
 
 // viewByTypeRenderer draws nothing and claims to display images, which is all
 // ScreenBuf.SupportsGraphics asks of a renderer.
@@ -144,6 +162,50 @@ func TestOpenViewerInternalForceHex(t *testing.T) {
 	if !vv.HexMode {
 		t.Fatal("forced hex viewer opened in text mode")
 	}
+}
+
+func TestActionViewFileOpensRegisteredViewerProvider(t *testing.T) {
+	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
+	testutil.DrainPendingTasks()
+	provider := &actionTestViewerProvider{name: "action-test-viewer", frame: vtui.NewMarkdownView("provider", "")}
+	registration, err := vfs.RegisterViewerProvider(provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registration.Unregister)
+
+	pf, _ := setupPanelWithFile(t, "picture.png")
+	defer pf.Close()
+	actionViewFile(pf)
+
+	if provider.openCall != 1 {
+		t.Fatalf("provider OpenViewer called %d times, want 1", provider.openCall)
+	}
+	if provider.request.Path != filepath.Join(provider.request.VFS.GetPath(), "picture.png") || provider.request.Item.Name != "picture.png" {
+		t.Fatalf("provider received request %#v, want selected path and item", provider.request)
+	}
+	if got := vtui.FrameManager.GetTopFrame(); got != provider.frame {
+		t.Fatalf("top frame = %T, want registered provider frame %T", got, provider.frame)
+	}
+}
+
+func TestActionViewFileFallsBackWhenViewerProviderDeclines(t *testing.T) {
+	withStubHistoryProvider(t)
+	provider := &actionTestViewerProvider{name: "action-test-viewer-decline", err: vfs.ErrViewerUnsupported}
+	registration, err := vfs.RegisterViewerProvider(provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(registration.Unregister)
+
+	pf, _ := setupPanelWithFile(t, "note.txt")
+	defer pf.Close()
+	actionViewFile(pf)
+
+	if provider.openCall != 1 {
+		t.Fatalf("provider OpenViewer called %d times, want 1", provider.openCall)
+	}
+	assertViewerOpened(t, pf, "note.txt")
 }
 
 func writeViewByTypePNG(t *testing.T, path string) {
