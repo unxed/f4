@@ -85,7 +85,7 @@ func TestBuildMenuBarItems_Shell(t *testing.T) {
 
 	items := BuildMenuBarItems("Shell")
 
-	wantTitles := []string{"&Files", "&Commands", "&Plugins", "&Options"}
+	wantTitles := []string{"&Files", "&Commands", "&Plugins", "&Windows", "&Options"}
 	if len(items) != len(wantTitles) {
 		t.Fatalf("Expected %d top-level menus, got %d: %+v", len(wantTitles), len(items), items)
 	}
@@ -428,6 +428,9 @@ func TestBuildMenuBarItemsGroupsShellMenus(t *testing.T) {
 	for _, menu := range BuildMenuBarItems("Shell") {
 		if len(menu.SubItems) <= 1 {
 			continue // A standalone command does not need group separators.
+		}
+		if action.PlainLabel(menu.Label) == action.PlainLabel(i18n.Msg("Menu.Shell.Windows")) {
+			continue // Workspace actions form one cohesive group.
 		}
 		separators := 0
 		for index, item := range menu.SubItems {

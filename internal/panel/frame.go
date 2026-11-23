@@ -3477,7 +3477,7 @@ func (pf *PanelsFrame) processKey(e *vtinput.InputEvent) bool {
 	// vtui's MenuBar already handles while Active (f4 issue #1144).
 	if e.VirtualKeyCode == vtinput.VK_F9 && !alt {
 		pos := 0 // Left
-		if pf.ActiveIdx == 1 {
+		if pf.ActiveIdx == 1 && pf.ShowPanels {
 			pos = 4 // Right
 		}
 		pf.GetMenuBar()
