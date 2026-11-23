@@ -2365,7 +2365,7 @@ func actionViewFileMode(pf *panel.PanelsFrame, forceHex bool) {
 		path := fsp.Vfs.Join(fsp.Vfs.GetPath(), name)
 		if !forceHex {
 			frame, handled, err := vfs.OpenViewerFromProviders(context.Background(), vfs.ViewerRequest{
-				VFS: fsp.Vfs, Path: path, Item: fsp.Entries[idx],
+				VFS: fsp.Vfs, Path: path, Item: fsp.Entries[idx].VFSItem,
 			})
 			if err != nil {
 				vtui.ShowMessage(i18n.Msg("Error.Title"), err.Error(), []string{i18n.Msg("vtui.Ok")})
