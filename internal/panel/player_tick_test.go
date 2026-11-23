@@ -73,6 +73,29 @@ func redrawRequested() bool {
 	}
 }
 
+func TestMusicCommandRoutesTransportControlsToActiveSession(t *testing.T) {
+	s, eng, _ := tickFixture(t, false)
+	previous := activePlayerSession
+	activePlayerSession = s
+	t.Cleanup(func() { activePlayerSession = previous })
+
+	if !MusicCommand(PlayerPlayPause) || eng.playing {
+		t.Fatalf("play/pause command: playing=%v", eng.playing)
+	}
+	if !MusicCommand(PlayerNext) || eng.path != s.root.Children[1].Path || !eng.playing {
+		t.Fatalf("next command: engine=%+v", *eng)
+	}
+	if !MusicCommand(PlayerPrevious) || eng.path != s.root.Children[0].Path || !eng.playing {
+		t.Fatalf("previous command: engine=%+v", *eng)
+	}
+	if !MusicCommand(PlayerStop) || eng.IsLoaded() {
+		t.Fatalf("stop command: engine=%+v", *eng)
+	}
+	if MusicCommand(PlayerVolumeUp) {
+		t.Fatal("unsupported system command was accepted")
+	}
+}
+
 // A paused track repainted the whole window six times a second, a couple of
 // per cent of a core for a screen on which nothing moved.
 func TestPlayerTickIdlesWhilePaused(t *testing.T) {
