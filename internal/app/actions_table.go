@@ -675,6 +675,7 @@ func init() {
 		Description: "Clone the current panels into a new workspace",
 		DescKey:     "Action.Workspace.Fork.Desc",
 		DefaultKeys: []string{"CtrlF11"},
+		MenuPath:    "Windows",
 		Handler:     actionWorkspaceNew,
 	})
 	registerAction(action.Action{
@@ -738,6 +739,7 @@ func init() {
 		Description: "Show all workspaces",
 		DescKey:     "Action.Workspace.List.Desc",
 		NativeKeys:  []string{"F12:FrameworkNoTerminalApp"},
+		MenuPath:    "Windows",
 		Handler:     actionWorkspaceList,
 	})
 	registerAction(action.Action{
@@ -1489,7 +1491,7 @@ func init() {
 		Description: "Open the temporary panel or switch its saved list",
 		DescKey:     "Action.Panel.TempPanel.Desc",
 		DefaultKeys: []string{"AltShiftF12"},
-		MenuPath:    "Commands",
+		MenuPath:    "Windows",
 		Handler:     withPF(func(pf *panel.PanelsFrame) { panel.ActionOpenTempPanel(pf) }),
 	})
 	registerAction(action.Action{

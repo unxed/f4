@@ -1900,7 +1900,7 @@ func TestPanelsFrame_F9HiddenPanels_UsesShellMenuAndKeepsTerminalLog(t *testing.
 	pf.ShowPanels = false
 
 	items := pf.GetMenuBar().Items
-	wantLabels := []string{i18n.Msg("Menu.Shell.Files"), i18n.Msg("Menu.Shell.Commands"), i18n.Msg("Menu.Shell.Plugins"), i18n.Msg("Menu.Shell.Options")}
+	wantLabels := []string{i18n.Msg("Menu.Shell.Files"), i18n.Msg("Menu.Shell.Commands"), i18n.Msg("Menu.Shell.Plugins"), i18n.Msg("Menu.Shell.Windows"), i18n.Msg("Menu.Shell.Options")}
 	if len(items) != len(wantLabels) {
 		t.Fatalf("hidden-panels F9 menu has %d top-level items, want %d: %+v", len(items), len(wantLabels), items)
 	}

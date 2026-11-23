@@ -618,6 +618,46 @@ func TestBuildMenuBarItemsPlacesPluginCommandsInPluginsMenu(t *testing.T) {
 	}
 }
 
+func TestBuildMenuBarItemsPlacesWorkspaceActionsInWindowsMenu(t *testing.T) {
+	old := keymap.GlobalHotkeysMgr
+	keymap.GlobalHotkeysMgr = keymap.NewHotkeyManager("")
+	defer func() { keymap.GlobalHotkeysMgr = old }()
+
+	items := BuildMenuBarItems("Shell")
+	var windows, commands, files *vtui.MenuBarItem
+	for index := range items {
+		switch action.PlainLabel(items[index].Label) {
+		case action.PlainLabel(i18n.Msg("Menu.Shell.Windows")):
+			windows = &items[index]
+		case action.PlainLabel(i18n.Msg("Menu.Shell.Commands")):
+			commands = &items[index]
+		case action.PlainLabel(i18n.Msg("Menu.Shell.Files")):
+			files = &items[index]
+		}
+	}
+	if windows == nil || commands == nil || files == nil {
+		t.Fatalf("expected Windows, Commands and Files menus; got %+v", items)
+	}
+
+	hasAction := func(items []vtui.MenuItem, name string) bool {
+		want := history.MenuHistoryItemKey(name)
+		for _, item := range items {
+			if item.UserData == want {
+				return true
+			}
+		}
+		return false
+	}
+	for _, name := range []string{"Panel.TempPanel", "Workspace.Fork", "Workspace.List"} {
+		if !hasAction(windows.SubItems, name) {
+			t.Errorf("Windows menu is missing %q", name)
+		}
+		if hasAction(commands.SubItems, name) || hasAction(files.SubItems, name) {
+			t.Errorf("%q remains in Commands or Files", name)
+		}
+	}
+}
+
 func TestSettingsFirstInEveryOptionsMenu(t *testing.T) {
 	for _, area := range []string{"Shell", "Editor", "Viewer", "Terminal"} {
 		found := false
