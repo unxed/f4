@@ -123,7 +123,9 @@ func ExpandPrompt(format string, ctx PromptContext) []PromptSpan {
 		case 'n':
 			add(ctx.Host, PromptIdentity)
 		case 'z':
-			add(ctx.GitBranch, PromptLiteral)
+			if ctx.GitBranch != "" {
+				add("{"+ctx.GitBranch+"}", PromptLiteral)
+			}
 		case '#':
 			if ctx.Admin {
 				add("#", PromptLiteral)

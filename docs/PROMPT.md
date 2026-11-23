@@ -27,7 +27,7 @@ far2l.
 | `$#`    | `#` for root, `$` for everyone else                              |
 | `$t`    | current time, `HH:MM:SS`                                         |
 | `$d`    | current date, `MM/DD/YY`                                         |
-| `$z`    | current Git branch (empty outside a Git worktree)                  |
+| `$z`    | current Git branch in braces, e.g. `{main}` (empty outside a Git worktree) |
 | `$h`    | erases the character before it                                   |
 | `$@xx`  | for root only: the label `Root` (`Administrator` on Windows) between the two characters `xx`, e.g. `$@[]` gives `[Root]` |
 | `$+`    | one `+` per entry on the folder stack                            |
@@ -51,6 +51,7 @@ else the character itself works just as well.
 |---------------------|-------------------------------|
 | `$u@$n:$p$#` + space| `nz@nz-en:~/src/f4$ `         |
 | `$p$#` + space      | `~/src/f4$ `                  |
+| `$p$z$#` + space    | `~/src/f4{main}$ `            |
 | `[$t$h$h$h]$s$p$g`  | `[13:38] ~/src/f4>`           |
 | `$@[]$s$r$g`        | `[Root] /etc>` when root      |
 

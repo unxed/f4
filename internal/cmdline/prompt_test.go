@@ -34,8 +34,9 @@ func TestExpandPromptCodes(t *testing.T) {
 		{"$r", "/home/nz/src/f4"},
 		{"$u", "nz"},
 		{"$n", "nz-en"},
-		{"$z", "feature/prompt"},
-		{"$Z", "feature/prompt"},
+		{"$z", "{feature/prompt}"},
+		{"$Z", "{feature/prompt}"},
+		{"$p$z$#", "~/src/f4{feature/prompt}$"},
 		{"$t", "13:38:07"},
 		{"$d", "09/12/26"},
 		{"$a$b$c$f$g$l$q$$", "&|()><=$"},
@@ -55,6 +56,14 @@ func TestExpandPromptCodes(t *testing.T) {
 		if got := PromptText(ExpandPrompt(tc.format, ctx)); got != tc.want {
 			t.Errorf("ExpandPrompt(%q) = %q, want %q", tc.format, got, tc.want)
 		}
+	}
+}
+
+func TestExpandPromptGitBranchOutsideWorktree(t *testing.T) {
+	ctx := promptCtx()
+	ctx.GitBranch = ""
+	if got := PromptText(ExpandPrompt("$p$z$#", ctx)); got != "~/src/f4$" {
+		t.Errorf("prompt outside a Git worktree = %q, want no branch or braces", got)
 	}
 }
 
