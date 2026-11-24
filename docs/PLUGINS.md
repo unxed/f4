@@ -247,6 +247,14 @@ falls back to f4's ordinary viewer. Other errors are returned to the caller so
 it can report a real plugin failure rather than silently masking it. A
 successful provider returns a `vtui.Frame` for the host to display.
 
+`ViewerRequest.Panel` is a captured snapshot of the source panel: entries in
+display order with their host URIs and metadata, the cursor URI, and selected
+URIs. It remains tied to the panel that opened the viewer even if the user
+changes the active panel. `ViewerRequest.HostVFS` is the optional read-only
+host-URI opener; its handles support size and random-access reads and should be
+closed by the provider. Pass the viewer context to open/read calls so the host
+can cancel outstanding I/O when it cancels that context.
+
 ## Grouping virtual panels
 
 Any ordinary file panel backed by a VFS supports the same independent Group by

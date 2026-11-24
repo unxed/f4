@@ -126,3 +126,36 @@ func TestOpenViewerFromProvidersReturnsOpenedFrame(t *testing.T) {
 		t.Fatalf("OpenViewerFromProviders() = (%v, %v, %v), want (test frame, true, nil)", frame, handled, err)
 	}
 }
+
+func TestNewViewerPanelSnapshotCopiesPanelSlices(t *testing.T) {
+	items := []ViewerPanelItem{{URI: "archive://one", Item: VFSItem{Name: "one"}}}
+	selected := []string{"archive://one"}
+	snapshot := NewViewerPanelSnapshot(items, "archive://one", selected)
+
+	items[0].URI = "changed"
+	selected[0] = "changed"
+	if snapshot.Items[0].URI != "archive://one" || snapshot.SelectedURI[0] != "archive://one" {
+		t.Fatalf("snapshot changed with caller slices: %#v", snapshot)
+	}
+}
+
+type viewerHostTestVFS struct {
+	VFS
+	opened string
+}
+
+func (filesystem *viewerHostTestVFS) Open(_ context.Context, path string) (ReadAtCloser, error) {
+	filesystem.opened = path
+	return nil, nil
+}
+
+func TestViewerHostVFSPreservesHostURI(t *testing.T) {
+	filesystem := &viewerHostTestVFS{}
+	host := NewViewerHostVFS(filesystem)
+	if _, err := host.OpenFile(context.Background(), "archive://drive/image.png"); err != nil {
+		t.Fatal(err)
+	}
+	if filesystem.opened != "archive://drive/image.png" {
+		t.Fatalf("OpenFile path = %q", filesystem.opened)
+	}
+}

@@ -2364,8 +2364,20 @@ func actionViewFileMode(pf *panel.PanelsFrame, forceHex bool) {
 		name := fsp.GetSelectedName()
 		path := fsp.Vfs.Join(fsp.Vfs.GetPath(), name)
 		if !forceHex {
+			panelItems := make([]vfs.ViewerPanelItem, 0, len(fsp.Entries))
+			for _, entry := range fsp.Entries {
+				panelItems = append(panelItems, vfs.ViewerPanelItem{
+					URI:  fsp.Vfs.Join(fsp.Vfs.GetPath(), entry.Name),
+					Item: entry.VFSItem,
+				})
+			}
+			selectedURI := make([]string, 0)
+			for _, selected := range fsp.GetMarkedNames() {
+				selectedURI = append(selectedURI, fsp.Vfs.Join(fsp.Vfs.GetPath(), selected))
+			}
 			frame, handled, err := vfs.OpenViewerFromProviders(context.Background(), vfs.ViewerRequest{
-				VFS: fsp.Vfs, Path: path, Item: fsp.Entries[idx].VFSItem,
+				VFS: fsp.Vfs, HostVFS: vfs.NewViewerHostVFS(fsp.Vfs), Path: path, Item: fsp.Entries[idx].VFSItem,
+				Panel: vfs.NewViewerPanelSnapshot(panelItems, path, selectedURI),
 			})
 			if err != nil {
 				vtui.ShowMessage(i18n.Msg("Error.Title"), err.Error(), []string{i18n.Msg("vtui.Ok")})

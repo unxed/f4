@@ -21,9 +21,63 @@ var ErrViewerUnsupported = errors.New("viewer provider: unsupported")
 // providers may read through it but must not change its current path or close it.
 // Item is the panel's immutable metadata snapshot for the selection.
 type ViewerRequest struct {
-	VFS  VFS
-	Path string
+	VFS     VFS
+	HostVFS ViewerHostVFS
+	Path    string
+	Item    VFSItem
+	Panel   ViewerPanelSnapshot
+}
+
+// ViewerHostVFS lets a viewer provider read another file addressed by the
+// host's URI namespace. The returned handle supports random access, reports
+// its size, and is closed by the provider. Passing the request context to
+// OpenFile and ReadAt lets the host cancel work when it cancels that context.
+type ViewerHostVFS interface {
+	OpenFile(context.Context, string) (ReadAtCloser, error)
+}
+
+type viewerHostVFS struct{ source VFS }
+
+func (host viewerHostVFS) OpenFile(ctx context.Context, uri string) (ReadAtCloser, error) {
+	return host.source.Open(ctx, uri)
+}
+
+// NewViewerHostVFS exposes the source panel's VFS through a read-only viewer
+// capability. The provider can open panel URIs without receiving mutation
+// methods or changing the VFS's current directory.
+func NewViewerHostVFS(source VFS) ViewerHostVFS {
+	if source == nil {
+		return nil
+	}
+	return viewerHostVFS{source: source}
+}
+
+// ViewerPanelItem is one entry in the source panel's captured display order.
+// URI identifies the entry in the host's VFS namespace; Item is its metadata
+// snapshot at the time the viewer was opened.
+type ViewerPanelItem struct {
+	URI  string
 	Item VFSItem
+}
+
+// ViewerPanelSnapshot is an immutable snapshot of the panel that opened the
+// viewer. Providers must not retain or mutate its slices. URIs, rather than
+// row indexes, identify entries so later panel navigation cannot change the
+// meaning of the captured cursor or selection.
+type ViewerPanelSnapshot struct {
+	Items       []ViewerPanelItem
+	CursorURI   string
+	SelectedURI []string
+}
+
+// NewViewerPanelSnapshot copies the supplied slices so the caller can safely
+// continue using its panel-owned buffers after opening a viewer.
+func NewViewerPanelSnapshot(items []ViewerPanelItem, cursorURI string, selectedURI []string) ViewerPanelSnapshot {
+	return ViewerPanelSnapshot{
+		Items:       append([]ViewerPanelItem(nil), items...),
+		CursorURI:   cursorURI,
+		SelectedURI: append([]string(nil), selectedURI...),
+	}
 }
 
 // ViewerProvider contributes a full-screen viewer for files it recognises.
