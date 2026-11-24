@@ -5,6 +5,11 @@ the prompt grows past half the panel width. Options → Settings Center →
 Terminal & environment → Command line prompt replaces that with a format string
 of your own:
 
+In the built-in prompt, f4 also shows the current Git branch in braces when the
+active local directory is inside a Git worktree. This works without enabling a
+custom format; virtual filesystems and directories outside a worktree show no
+branch label.
+
     UsePromptFormat = 1
     PromptFormat = $u@$n:$p$#
 

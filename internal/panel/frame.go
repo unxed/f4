@@ -1387,6 +1387,12 @@ func (pf *PanelsFrame) BuildPrompt() []vtui.CharInfo {
 			vfsTitle = tp.GetTitle()
 		}
 	}
+	gitLabel := ""
+	if path != "" && vfsTitle == "" && !promptFormatEnabled(vfsTitle) {
+		if branch := promptGitBranch(path); branch != "" {
+			gitLabel = "{" + branch + "}"
+		}
+	}
 
 	usr, _ := user.Current()
 	username := "user"
@@ -1459,7 +1465,15 @@ func (pf *PanelsFrame) BuildPrompt() []vtui.CharInfo {
 		userHostStr = vtui.TruncateMiddle(userHostStr, maxUserHost)
 	}
 
-	maxPathLen := maxPromptLen - runewidth.StringWidth(userHostStr) - runewidth.StringWidth(sepStr) - runewidth.StringWidth(suffixStr)
+	maxGitLabelWidth := maxPromptLen - runewidth.StringWidth(userHostStr) - runewidth.StringWidth(sepStr) - runewidth.StringWidth(suffixStr) - 10
+	if maxGitLabelWidth < 0 {
+		maxGitLabelWidth = 0
+	}
+	if runewidth.StringWidth(gitLabel) > maxGitLabelWidth {
+		gitLabel = vtui.TruncateMiddle(gitLabel, maxGitLabelWidth)
+	}
+
+	maxPathLen := maxPromptLen - runewidth.StringWidth(userHostStr) - runewidth.StringWidth(sepStr) - runewidth.StringWidth(gitLabel) - runewidth.StringWidth(suffixStr)
 	if maxPathLen < 10 {
 		maxPathLen = 10
 	}
@@ -1469,7 +1483,7 @@ func (pf *PanelsFrame) BuildPrompt() []vtui.CharInfo {
 	}
 
 	if pf.SearchFirstMode() && pf.ShowPanels && !pf.CommandLineFocused {
-		plainPrompt := userHostStr + sepStr + displayPath + suffixStr
+		plainPrompt := userHostStr + sepStr + displayPath + gitLabel + suffixStr
 		return vtui.StringToCharInfo(plainPrompt, vtui.Palette[theme.ColCommandLineInactivePrompt])
 	}
 
@@ -1484,6 +1498,7 @@ func (pf *PanelsFrame) BuildPrompt() []vtui.CharInfo {
 	prompt = append(prompt, vtui.StringToCharInfo(userHostStr, userAttr)...)
 	prompt = append(prompt, vtui.StringToCharInfo(sepStr, baseAttr)...)
 	prompt = append(prompt, vtui.StringToCharInfo(displayPath, pathAttr)...)
+	prompt = append(prompt, vtui.StringToCharInfo(gitLabel, baseAttr)...)
 	prompt = append(prompt, vtui.StringToCharInfo(suffixStr, baseAttr)...)
 
 	return prompt
