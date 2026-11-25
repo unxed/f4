@@ -6,6 +6,7 @@ import (
 
 	"github.com/unxed/f4/internal/keymap"
 	"github.com/unxed/f4/internal/terminal"
+	"github.com/unxed/f4/internal/viewer"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -52,6 +53,11 @@ type GrabberFrame struct {
 	restoreKeyBar func()
 }
 
+var pendingViewerMouseSelection struct {
+	frame *viewer.ViewerView
+	x, y  int16
+}
+
 // NewGrabberFrame constructs an empty grabber. The screen snapshot is
 // taken on the first Show(scr) pass — that's the earliest moment we
 // see the ScreenBuf with the pre-grabber render already applied by
@@ -86,18 +92,36 @@ func OpenGrabber() {
 	vtui.FrameManager.Redraw()
 }
 
-// handleForcedMouseSelectionEvent turns Shift+left-click into a screen
-// grabber gesture. A plain left-click must keep its normal meaning (including
-// moving a window), while Ctrl/Alt combinations remain available to their
-// existing handlers.
+// handleForcedMouseSelectionEvent turns Shift+left-click anywhere, or an
+// unmodified left-click in the text viewer, into a screen grabber gesture.
+// Other plain left-clicks keep their normal meaning (including moving a
+// window), while Ctrl/Alt combinations remain available to their handlers.
 //
 // The first press is consumed by FrameManager.EventFilter before regular
 // frame dispatch, so the new grabber has to receive that same press after its
 // initial snapshot. Later motion/release events are routed through the normal
 // FrameManager mouse-capture path.
 func handleForcedMouseSelectionEvent(e *vtinput.InputEvent) bool {
-	if e == nil || e.Type != vtinput.MouseEventType || !e.KeyDown ||
-		e.MouseEventFlags&vtinput.MouseMoved != 0 ||
+	if e == nil || e.Type != vtinput.MouseEventType {
+		return false
+	}
+	if pendingViewerMouseSelection.frame != nil {
+		pending := pendingViewerMouseSelection
+		if !e.KeyDown || e.ButtonState&vtinput.FromLeft1stButtonPressed == 0 {
+			pendingViewerMouseSelection.frame = nil
+		} else if e.MouseEventFlags&vtinput.MouseMoved != 0 &&
+			vtui.FrameManager != nil && vtui.FrameManager.Screen() != nil &&
+			vtui.FrameManager.GetTopFrame() == pending.frame {
+			pendingViewerMouseSelection.frame = nil
+			press := *e
+			press.MouseX, press.MouseY = pending.x, pending.y
+			press.MouseEventFlags = 0
+			press.ButtonState = vtinput.FromLeft1stButtonPressed
+			openGrabberForMouseSelection(&press, e)
+			return true
+		}
+	}
+	if !e.KeyDown || e.MouseEventFlags&vtinput.MouseMoved != 0 ||
 		e.ButtonState != vtinput.FromLeft1stButtonPressed {
 		return false
 	}
@@ -108,27 +132,55 @@ func handleForcedMouseSelectionEvent(e *vtinput.InputEvent) bool {
 	if keyBarContainsMouse(e) {
 		return false
 	}
+	if vtui.FrameManager == nil || vtui.FrameManager.Screen() == nil {
+		return false
+	}
 
 	const modifierMask = vtinput.LeftCtrlPressed | vtinput.RightCtrlPressed |
 		vtinput.LeftAltPressed | vtinput.RightAltPressed | vtinput.ShiftPressed
-	if e.ControlKeyState&modifierMask != vtinput.ShiftPressed {
-		return false
+	mods := e.ControlKeyState & modifierMask
+	shiftSelection := mods == vtinput.ShiftPressed
+	if mods == 0 {
+		if vv, ok := vtui.FrameManager.GetTopFrame().(*viewer.ViewerView); ok && viewerTextAreaAtMouse(vv, e) {
+			pendingViewerMouseSelection.frame = vv
+			pendingViewerMouseSelection.x, pendingViewerMouseSelection.y = e.MouseX, e.MouseY
+		}
 	}
-	if vtui.FrameManager == nil || vtui.FrameManager.Screen() == nil {
+	if !shiftSelection {
 		return false
 	}
 	if _, alreadyOpen := vtui.FrameManager.GetTopFrame().(*GrabberFrame); alreadyOpen {
 		return false
 	}
 
+	openGrabberForMouseSelection(e, nil)
+	return true
+}
+
+func openGrabberForMouseSelection(press, motion *vtinput.InputEvent) {
 	grabber := NewGrabberFrame()
 	vtui.FrameManager.Push(grabber)
 	// Push only changes the frame stack. Snapshot and handle the press now so
 	// the first drag motion cannot arrive before the selection has an anchor.
 	grabber.Show(vtui.FrameManager.Screen())
-	grabber.ProcessMouse(e)
+	grabber.ProcessMouse(press)
+	if motion != nil {
+		grabber.ProcessMouse(motion)
+	}
 	vtui.FrameManager.Redraw()
-	return true
+}
+
+// viewerTextAreaAtMouse limits the no-modifier shortcut to the viewer's text
+// viewport. Its title bar, scrollbar, and other frames retain their own mouse
+// gestures; Shift+drag remains the explicit whole-screen selection gesture.
+func viewerTextAreaAtMouse(frame vtui.Frame, e *vtinput.InputEvent) bool {
+	vv, ok := frame.(*viewer.ViewerView)
+	if !ok || vv.HexMode || vv.DecodeMode || e == nil {
+		return false
+	}
+	x1, y1, x2, y2 := vv.GetPosition()
+	return int(e.MouseX) >= x1 && int(e.MouseX) < x2 &&
+		int(e.MouseY) > y1 && int(e.MouseY) <= y2
 }
 
 // suppressUnderlyingKeyBar keeps the full-screen grabber in charge of every

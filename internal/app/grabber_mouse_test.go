@@ -1,9 +1,10 @@
 package app
 
 import (
-	"github.com/unxed/f4/internal/paneltest"
 	"testing"
 
+	"github.com/unxed/f4/internal/paneltest"
+	"github.com/unxed/f4/internal/viewer"
 	"github.com/unxed/vtinput"
 	"github.com/unxed/vtui"
 )
@@ -75,6 +76,34 @@ func TestForcedMouseSelectionLeavesOtherMouseGesturesAlone(t *testing.T) {
 				t.Fatal("unexpected grabber opened")
 			}
 		})
+	}
+}
+
+func TestViewerTextAreaAllowsUnmodifiedSelectionGesture(t *testing.T) {
+	vv := &viewer.ViewerView{}
+	vv.SetPosition(10, 4, 50, 20)
+
+	for _, tt := range []struct {
+		name string
+		x, y int16
+		want bool
+	}{
+		{name: "text", x: 11, y: 5, want: true},
+		{name: "title bar", x: 11, y: 4},
+		{name: "scrollbar", x: 50, y: 5},
+		{name: "outside", x: 51, y: 5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := mouseEvent(tt.x, tt.y, vtinput.FromLeft1stButtonPressed, false, true)
+			if got := viewerTextAreaAtMouse(vv, e); got != tt.want {
+				t.Fatalf("viewerTextAreaAtMouse(%d,%d) = %t, want %t", tt.x, tt.y, got, tt.want)
+			}
+		})
+	}
+
+	vv.HexMode = true
+	if viewerTextAreaAtMouse(vv, mouseEvent(11, 5, vtinput.FromLeft1stButtonPressed, false, true)) {
+		t.Fatal("hex viewer should keep the plain mouse gesture")
 	}
 }
 
