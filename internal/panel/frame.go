@@ -3586,6 +3586,14 @@ func (pf *PanelsFrame) processKey(e *vtinput.InputEvent) bool {
 
 	// Ctrl+J, the line feed a terminal driver shows for Ctrl+Enter-like input (K-74)
 	if e.VirtualKeyCode == vtinput.VK_J && ctrl && !alt && !shift && e.KeyDown {
+		if fsp := pf.GetActivePanel(); fsp != nil {
+			if opener, ok := fsp.Vfs.(interface{ OpenInRegedit() error }); ok {
+				if err := opener.OpenInRegedit(); err != nil {
+					vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+				}
+				return true
+			}
+		}
 		pf.InsertSelectedFileName()
 		return true
 	}

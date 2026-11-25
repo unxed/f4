@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,6 +60,41 @@ func NewRegistryVFS() *RegistryVFS {
 }
 
 func (v *RegistryVFS) GetPath() string { return v.currentPath }
+
+// OpenInRegedit starts Regedit at the key currently shown by this panel.
+func (v *RegistryVFS) OpenInRegedit() error {
+	lastKey, err := regeditKeyPath(v.currentPath)
+	if err != nil {
+		return err
+	}
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Applets\Regedit`, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("opening Regedit settings: %w", err)
+	}
+	if err := key.SetStringValue("LastKey", lastKey); err != nil {
+		_ = key.Close()
+		return fmt.Errorf("selecting registry key in Regedit: %w", err)
+	}
+	if err := key.Close(); err != nil {
+		return fmt.Errorf("closing Regedit settings: %w", err)
+	}
+	cmd := exec.Command("regedit.exe")
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting Regedit: %w", err)
+	}
+	return cmd.Process.Release()
+}
+
+func regeditKeyPath(path string) (string, error) {
+	segments, err := registryPathSegments(path)
+	if err != nil {
+		return "", err
+	}
+	if len(segments) == 0 {
+		return "", os.ErrInvalid
+	}
+	return `Computer\` + strings.Join(segments, `\`), nil
+}
 
 func (v *RegistryVFS) IsAbs(p string) bool {
 	return strings.HasPrefix(p, registryVFSRoot)

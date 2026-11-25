@@ -76,6 +76,19 @@ func TestRegistryVFSPathRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRegeditKeyPathUsesCurrentRegistryKey(t *testing.T) {
+	got, err := regeditKeyPath("registry://HKEY_CURRENT_USER/Software/Example%20App")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `Computer\HKEY_CURRENT_USER\Software\Example App`; got != want {
+		t.Fatalf("regeditKeyPath() = %q, want %q", got, want)
+	}
+	if _, err := regeditKeyPath(registryVFSRoot); !errors.Is(err, os.ErrInvalid) {
+		t.Fatalf("regeditKeyPath(root) error = %v, want %v", err, os.ErrInvalid)
+	}
+}
+
 func TestRegistryVFSListsHivesAndIsReadOnly(t *testing.T) {
 	ctx := context.Background()
 	v := NewRegistryVFS()
