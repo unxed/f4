@@ -75,6 +75,11 @@ Knowingly left behind (each needs one reinstall by hand):
 
 ## Is there anything to install
 
+On Linux, the updater checks whether pacman owns the running executable before
+contacting the release API. A pacman-managed build is left to pacman or the AUR
+helper that installed it; the built-in updater refuses to replace it, because
+doing so would leave the package manager's recorded files out of sync.
+
 The running binary is asked first (`Check`). On the nightly channel it
 compares its own commit and that commit's time, which `f4 -v` prints, with
 the `Commit:` and `Built on:` the nightly's notes give (`nightlyNeedsUpdate`):

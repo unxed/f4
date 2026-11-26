@@ -139,6 +139,15 @@ type Candidate struct {
 // Check asks GitHub what cfg.Channel offers and whether that is newer than the
 // running build. Shared by the dialog and by --update.
 func Check(ctx context.Context, cfg Settings, b Build) (Candidate, error) {
+	if exe, err := Executable(); err == nil && exe != "" {
+		if manager, packageName := packageManagerOwner(exe); manager != "" {
+			return Candidate{}, fmt.Errorf(
+				"this executable is managed by %s package %q; update it with %s or the AUR helper you used instead of the built-in updater",
+				manager, packageName, manager,
+			)
+		}
+	}
+
 	url := APIURL + "/latest"
 	if cfg.Channel == ChannelNightly {
 		url = APIURL + "/tags/nightly"
