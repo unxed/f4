@@ -69,7 +69,7 @@ func ProcessesUsingFile(path string) ([]FileProcess, error) {
 	if result != 0 {
 		return nil, fmt.Errorf("start Restart Manager session: %w", syscall.Errno(result))
 	}
-	defer rmEndSession.Call(uintptr(session))
+	defer func() { _, _, _ = rmEndSession.Call(uintptr(session)) }()
 
 	fileNames := []*uint16{fileName}
 	result, _, _ = rmRegisterResources.Call(
