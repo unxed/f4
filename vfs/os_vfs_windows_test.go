@@ -13,11 +13,8 @@ func TestOSVFS_WindowsPathLogic(t *testing.T) {
 
 	// Navigating to another drive via drive-relative path
 	// In f4, we expect this to resolve correctly if the path contains a volume name
-	err := v.SetPath("T:\\Data")
-	if err != nil {
-		// T: might not exist on the test machine, but we can check the logic
-		// if we mock the FS. For now, testing the internal resolution logic.
-	}
+	// T: might not exist on the test machine; this call is only a setup probe.
+	_ = v.SetPath("T:\\Data")
 
 	// Test internal target calculation logic from SetPath
 	path := "T:Folder"
