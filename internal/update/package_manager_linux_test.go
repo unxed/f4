@@ -14,7 +14,10 @@ func TestPacmanPackageOwner(t *testing.T) {
 	binDir := t.TempDir()
 	pacman := filepath.Join(binDir, "pacman")
 	script := "#!/bin/sh\n[ \"$1\" = -Qqo ] || exit 2\n[ \"$2\" = /usr/bin/f4 ] || exit 2\nprintf 'f4-bin\\n'\n"
-	if err := os.WriteFile(pacman, []byte(script), 0o700); err != nil {
+	if err := os.WriteFile(pacman, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(pacman, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir)
