@@ -54,6 +54,20 @@ func TestViewerBackendPreservesBackgroundReadError(t *testing.T) {
 	}
 }
 
+func TestReplaceFirstCacheKeepsWindowAdjacentToNextRead(t *testing.T) {
+	const window = int64(256 * 1024)
+	// The viewer has already moved beyond its initial window. A read at the end
+	// of the second window requests the next overlapping window; retain the
+	// second cache so the current page remains readable during the redraw.
+	if !replaceFirstCache(0, int(window), 192*1024, int(window), 384*1024, int(window)) {
+		t.Fatal("next window should replace the stale first cache")
+	}
+	// Moving backwards should retain the earlier window instead.
+	if replaceFirstCache(0, int(window), 192*1024, int(window), -64*1024, int(window)) {
+		t.Fatal("backward read should replace the farther second cache")
+	}
+}
+
 var _ vfs.ReadAtCloser = (*failingViewerFile)(nil)
 
 func TestViewerBackend_ReadAndFindLineStart(t *testing.T) {

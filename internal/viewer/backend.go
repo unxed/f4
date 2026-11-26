@@ -138,6 +138,26 @@ func (b *ViewerBackend) Refresh(ctx context.Context) bool {
 	return true
 }
 
+// replaceFirstCache reports whether a new window is farther from the first
+// cached window than from the second. Keep the nearer window: it is the one
+// most likely to contain the beginning of the page currently being drawn.
+// Replacing the second window unconditionally can evict that page while a long
+// line is being scanned, making the next redraw request the old window again.
+func replaceFirstCache(off1 int64, len1 int, off2 int64, len2 int, nextOff int64, nextLen int) bool {
+	gap := func(off int64, length int) int64 {
+		end := off + int64(length)
+		nextEnd := nextOff + int64(nextLen)
+		if end <= nextOff {
+			return nextOff - end
+		}
+		if nextEnd <= off {
+			return off - nextEnd
+		}
+		return 0
+	}
+	return gap(off1, len1) > gap(off2, len2)
+}
+
 func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -210,6 +230,12 @@ func (b *ViewerBackend) ReadAt(offset int64, length int) ([]byte, error) {
 				if b.ctx.Err() == nil {
 					if err == nil || err == io.EOF {
 						if b.cacheData == nil {
+							b.cacheOff = fetchOff
+							b.cacheData = cached
+						} else if b.cacheData2 == nil {
+							b.cacheOff2 = fetchOff
+							b.cacheData2 = cached
+						} else if replaceFirstCache(b.cacheOff, len(b.cacheData), b.cacheOff2, len(b.cacheData2), fetchOff, len(cached)) {
 							b.cacheOff = fetchOff
 							b.cacheData = cached
 						} else {
