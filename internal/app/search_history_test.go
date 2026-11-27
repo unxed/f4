@@ -303,7 +303,8 @@ func TestMkDirDialog_OpensOnLastFolderSelectedAndFiltersHistory(t *testing.T) {
 	defer vtui.FrameManager.Pop()
 
 	actionMkDir(pf)
-	dlg := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	frame := vtui.FrameManager.GetTopFrame()
+	dlg := frame.(vtui.Container)
 	defer vtui.FrameManager.Pop()
 
 	edit := findHistoryEdit(t, dlg, history.NewFolderHistoryID)
@@ -327,7 +328,7 @@ func TestMkDirDialog_OpensOnLastFolderSelectedAndFiltersHistory(t *testing.T) {
 	if got := edit.GetText(); got != "b" {
 		t.Errorf("typing a new folder name gave %q, want %q", got, "b")
 	}
-	if vtui.FrameManager.GetTopFrame() == dlg {
+	if vtui.FrameManager.GetTopFrame() == frame {
 		t.Fatal("typing a matching prefix did not open filtered history")
 	}
 	closeHistoryAbove(dlg)
