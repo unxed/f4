@@ -57,6 +57,8 @@ is applied to the filename only; the trailing space stays outside the quotes.
 No leading space is inserted, so an already typed path prefix stays attached
 to the filename. While Fast Find is active, `Ctrl+Enter` still finds the next
 match instead of inserting a filename.
+When the cursor is on the parent (`..`) entry, it inserts the current directory
+path (with a trailing separator) rather than the parent directory.
 
 On a POSIX shell the filename gets a `./` prefix when it needs one (f4#2235):
 an executable file typed where a command goes (at the start of the line, after

@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -47,6 +48,22 @@ func TestCtrlJInsertsTheNameOfTheFileUnderTheCursor(t *testing.T) {
 	}
 	if got := f.pf.CmdLine.Edit.GetText(); got != "ls "+wantName+" " {
 		t.Fatalf("command line after Ctrl+J: %q, want the quoted name of the active file and a space", got)
+	}
+}
+
+func TestCtrlEnterOnParentEntryInsertsCurrentDirectoryPath(t *testing.T) {
+	f := namesFixture(t)
+	currentDir := filepath.Join(t.TempDir(), "current folder")
+	f.fsp.Vfs = vfs.NewOSVFS(currentDir)
+	f.fsp.Entries = []*FileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
+	f.fsp.CursorIdx = 0
+	f.pf.CmdLine.Edit.SetText("cd ")
+
+	pressKey(f.pf, ctrlKey(vtinput.VK_RETURN, false))
+
+	want := "cd " + quoteDroppedPath(pathWithTrailingSeparator(f.fsp.Vfs.GetPath())) + " "
+	if got := f.pf.CmdLine.Edit.GetText(); got != want {
+		t.Fatalf("command line after Ctrl+Enter on ..: %q, want current-directory path %q", got, want)
 	}
 }
 

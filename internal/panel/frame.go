@@ -733,17 +733,27 @@ func (pf *PanelsFrame) insertFileNameOf(fsp *FileSystemPanel) bool {
 	if name == "" {
 		return false
 	}
-	if !terminal.WindowsShellSyntax() {
-		name = pf.dotSlashName(fsp, name)
-	}
-	// Escape spaces and special characters for shell commands.
-	if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
-		if terminal.WindowsShellSyntax() {
-			if !strings.HasPrefix(name, "\"") {
-				name = "\"" + name + "\""
+	if name == ".." {
+		path := CurrentPanelEntryPath(fsp)
+		if path == "" {
+			return false
+		}
+		// Far treats the parent entry as the current directory for path
+		// insertion. Keep a separator so the user can continue the path.
+		name = quoteDroppedPath(pathWithTrailingSeparator(path))
+	} else {
+		if !terminal.WindowsShellSyntax() {
+			name = pf.dotSlashName(fsp, name)
+		}
+		// Escape spaces and special characters for shell commands.
+		if strings.ContainsAny(name, " &|;<>()$`\\\"'") {
+			if terminal.WindowsShellSyntax() {
+				if !strings.HasPrefix(name, "\"") {
+					name = "\"" + name + "\""
+				}
+			} else if !strings.HasPrefix(name, "'") {
+				name = "'" + strings.ReplaceAll(name, "'", "'\\''") + "'"
 			}
-		} else if !strings.HasPrefix(name, "'") {
-			name = "'" + strings.ReplaceAll(name, "'", "'\\''") + "'"
 		}
 	}
 	// Keep the separator outside shell quoting so the next argument can follow.
