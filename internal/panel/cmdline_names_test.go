@@ -50,6 +50,27 @@ func TestCtrlJInsertsTheNameOfTheFileUnderTheCursor(t *testing.T) {
 	}
 }
 
+func TestCtrlEnterOnParentInsertsCurrentDirectory(t *testing.T) {
+	currentDir := t.TempDir()
+	fsp := &FileSystemPanel{
+		Vfs:       vfs.NewOSVFS(currentDir),
+		Entries:   []*FileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}},
+		CursorIdx: 0,
+	}
+	pf := &PanelsFrame{ActiveIdx: 0, CmdLine: cmdline.NewCommandLine(">"), Panels: [2]Panel{fsp}}
+
+	if !pf.InsertSelectedFileName() {
+		t.Fatal("parent entry was not inserted")
+	}
+	want := currentDir + " "
+	if runtime.GOOS == "windows" {
+		want = `"` + currentDir + `" `
+	}
+	if got := pf.CmdLine.Edit.GetText(); got != want {
+		t.Fatalf("command line after Ctrl+Enter on ..: %q, want current directory %q", got, want)
+	}
+}
+
 func TestCtrlShiftEnterInsertsThePassiveNameAndRunsNothing(t *testing.T) {
 	f := namesFixture(t)
 	f.pf.CmdLine.Edit.SetText("true ")

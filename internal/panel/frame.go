@@ -733,6 +733,9 @@ func (pf *PanelsFrame) insertFileNameOf(fsp *FileSystemPanel) bool {
 	if name == "" {
 		return false
 	}
+	if fsp.GetRawSelectedName() == ".." && fsp.Vfs != nil {
+		name = fsp.Vfs.GetPath()
+	}
 	if !terminal.WindowsShellSyntax() {
 		name = pf.dotSlashName(fsp, name)
 	}
