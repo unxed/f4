@@ -733,8 +733,10 @@ func (pf *PanelsFrame) insertFileNameOf(fsp *FileSystemPanel) bool {
 	if name == "" {
 		return false
 	}
-	if name == ".." {
-		path := CurrentPanelEntryPath(fsp)
+	if fsp.GetRawSelectedName() == ".." {
+		// GetSelectedName resolves the parent entry to its target path; use
+		// the raw entry name to distinguish it from an ordinary filename.
+		path := fsp.Vfs.GetPath()
 		if path == "" {
 			return false
 		}
