@@ -30,6 +30,9 @@ func checkHistoryButtonOnly(t *testing.T, edit *vtui.Edit) {
 	if !edit.HistoryButtonOnly {
 		t.Fatal("history field must open its list only on the arrow and the wheel")
 	}
+	if !edit.StrictAutoComplete || !edit.HistorySearchKeepTypedText || edit.NoAutoComplete {
+		t.Fatal("history field must show strict matches while preserving the typed query")
+	}
 	mouse := func(down bool, x, y int, wheel bool) {
 		ev := &vtinput.InputEvent{Type: vtinput.MouseEventType, KeyDown: down,
 			MouseX: testutil.Int16(x), MouseY: testutil.Int16(y)}

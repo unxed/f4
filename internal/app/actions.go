@@ -2306,6 +2306,8 @@ func actionNewFile(pf *panel.PanelsFrame) {
 		// A click in the field only places the cursor; the history opens on the
 		// arrow or the mouse wheel, wherever the pointer is in the dialog (#2124).
 		nameEdit.HistoryButtonOnly = true
+		nameEdit.StrictAutoComplete = true
+		nameEdit.HistorySearchKeepTypedText = true
 		dlg.WheelHistory = true
 	}
 }
@@ -2915,6 +2917,8 @@ func actionCopyMove(pf *panel.PanelsFrame, isMove bool) {
 	// A click in the field only places the cursor; the history opens on the
 	// arrow or the mouse wheel, wherever the pointer is in the dialog (#2124).
 	editDest.HistoryButtonOnly = true
+	editDest.StrictAutoComplete = true
+	editDest.HistorySearchKeepTypedText = true
 	dlg.WheelHistory = editDest
 	dlg.AddItem(editDest)
 
@@ -3991,15 +3995,14 @@ func actionMkDir(pf *panel.PanelsFrame) {
 
 	editName := vtui.NewEdit(0, 0, 10, "")
 	editName.PathHintsEnabled = true
-	// Keep history available through its explicit menu and navigation keys, but
-	// do not let a matching old name intercept Enter while typing a new one.
-	editName.NoAutoComplete = true
 	// The field opens on the last folder created, selected, as in Far: Enter
 	// takes it again, the first character typed replaces it (#2124).
 	history.AttachHistoryUseLast(editName, history.NewFolderHistoryID)
 	// A click in the field only places the cursor; the history opens on the
 	// arrow or the mouse wheel, wherever the pointer is in the dialog (#2124).
 	editName.HistoryButtonOnly = true
+	editName.StrictAutoComplete = true
+	editName.HistorySearchKeepTypedText = true
 	dlg.Edit = editName
 	lblPrompt := vtui.NewLabel(0, 0, i18n.Msg("MakeFolder.Prompt"), editName)
 	dlg.AddItem(lblPrompt)

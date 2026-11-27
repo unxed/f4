@@ -290,7 +290,7 @@ func TestAssocEditor_SharesMaskHistory(t *testing.T) {
 	}
 }
 
-func TestMkDirDialog_OpensOnLastFolderSelectedWithoutAutoComplete(t *testing.T) {
+func TestMkDirDialog_OpensOnLastFolderSelectedAndFiltersHistory(t *testing.T) {
 	vtui.FrameManager.Init(vtui.NewSilentScreenBuf())
 	theme.SetDefaultF4Palette()
 	store := useStubHistory(t)
@@ -303,7 +303,8 @@ func TestMkDirDialog_OpensOnLastFolderSelectedWithoutAutoComplete(t *testing.T) 
 	defer vtui.FrameManager.Pop()
 
 	actionMkDir(pf)
-	dlg := vtui.FrameManager.GetTopFrame().(vtui.Container)
+	frame := vtui.FrameManager.GetTopFrame()
+	dlg := frame.(vtui.Container)
 	defer vtui.FrameManager.Pop()
 
 	edit := findHistoryEdit(t, dlg, history.NewFolderHistoryID)
@@ -313,23 +314,24 @@ func TestMkDirDialog_OpensOnLastFolderSelectedWithoutAutoComplete(t *testing.T) 
 		t.Errorf("folder name field is %q, want the last folder %q", got, "build")
 	}
 
-	if !edit.NoAutoComplete {
-		t.Fatal("folder name field must not open history completion while typing")
+	if !edit.StrictAutoComplete || !edit.HistorySearchKeepTypedText || edit.NoAutoComplete {
+		t.Fatal("folder name field must filter history while preserving the typed query")
 	}
 	if !edit.ProcessKey(&vtinput.InputEvent{
 		Type:           vtinput.KeyEventType,
 		KeyDown:        true,
-		Char:           't',
-		VirtualKeyCode: vtinput.VK_T,
+		Char:           'b',
+		VirtualKeyCode: vtinput.VK_B,
 	}) {
 		t.Fatal("typing a folder name was not handled")
 	}
-	if got := edit.GetText(); got != "t" {
-		t.Errorf("typing a new folder name gave %q, want %q", got, "t")
+	if got := edit.GetText(); got != "b" {
+		t.Errorf("typing a new folder name gave %q, want %q", got, "b")
 	}
-	if top, ok := vtui.FrameManager.GetTopFrame().(vtui.Container); !ok || top != dlg {
-		t.Fatalf("typing opened %T above the folder dialog", vtui.FrameManager.GetTopFrame())
+	if vtui.FrameManager.GetTopFrame() == frame {
+		t.Fatal("typing a matching prefix did not open filtered history")
 	}
+	closeHistoryAbove(frame)
 
 	if len(edit.History) != 1 || edit.History[0] != "build" {
 		t.Errorf("folder history is not available for explicit selection: %v", edit.History)
