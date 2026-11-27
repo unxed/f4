@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/unxed/f4/vfs"
+	"github.com/unxed/f4/internal/cmdline"
 	"github.com/unxed/vtinput"
 )
 
