@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -54,6 +55,9 @@ func TestCtrlJInsertsTheNameOfTheFileUnderTheCursor(t *testing.T) {
 func TestCtrlEnterOnParentEntryInsertsCurrentDirectoryPath(t *testing.T) {
 	f := namesFixture(t)
 	currentDir := filepath.Join(t.TempDir(), "current folder")
+	if err := os.Mkdir(currentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	f.fsp.Vfs = vfs.NewOSVFS(currentDir)
 	f.fsp.Entries = []*FileEntry{{VFSItem: vfs.VFSItem{Name: "..", IsDir: true}}}
 	f.fsp.CursorIdx = 0
