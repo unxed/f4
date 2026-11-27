@@ -331,7 +331,7 @@ func TestMkDirDialog_OpensOnLastFolderSelectedAndFiltersHistory(t *testing.T) {
 	if vtui.FrameManager.GetTopFrame() == frame {
 		t.Fatal("typing a matching prefix did not open filtered history")
 	}
-	closeHistoryAbove(dlg)
+	closeHistoryAbove(frame)
 
 	if len(edit.History) != 1 || edit.History[0] != "build" {
 		t.Errorf("folder history is not available for explicit selection: %v", edit.History)
