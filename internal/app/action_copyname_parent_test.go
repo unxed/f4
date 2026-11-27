@@ -1,13 +1,13 @@
 package app
 
 import (
-	"github.com/unxed/f4/internal/panel"
-	"github.com/unxed/f4/internal/paneltest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/unxed/f4/internal/panel"
+	"github.com/unxed/f4/internal/paneltest"
 	"github.com/unxed/f4/internal/terminal"
 	"github.com/unxed/f4/vfs"
 	"github.com/unxed/vtui"
@@ -27,6 +27,16 @@ func waitForCopyNameClipboard(t *testing.T, want string) string {
 	}
 	terminal.WaitForAsyncClipboard()
 	return vtui.GetClipboard()
+}
+
+type regeditActionVFS struct {
+	vfs.VFS
+	opened bool
+}
+
+func (v *regeditActionVFS) OpenInRegedit() error {
+	v.opened = true
+	return nil
 }
 
 // seedPanelForCopyName wires up a panel.PanelsFrame whose active panel points at
@@ -177,6 +187,23 @@ func TestAction_PanelInsertFileName_AppendsSpaceWithoutLeadingSeparator(t *testi
 	want += "a.txt "
 	if got := p.CmdLine.Edit.GetText(); got != want {
 		t.Errorf("repeated insertion = %q, want %q", got, want)
+	}
+}
+
+func TestAction_PanelInsertFileName_OpensRegeditOnRegistryPanel(t *testing.T) {
+	p := seedPanelForCopyName(t, t.TempDir())
+	registry := &regeditActionVFS{}
+	p.GetActivePanel().Vfs = registry
+	p.CmdLine.Edit.SetText("unchanged")
+
+	if !RunAction("Panel.InsertFileName") {
+		t.Fatal("Panel.InsertFileName did not run")
+	}
+	if !registry.opened {
+		t.Fatal("Ctrl+J action did not open Regedit for the registry panel")
+	}
+	if got := p.CmdLine.Edit.GetText(); got != "unchanged" {
+		t.Errorf("command line = %q, want unchanged", got)
 	}
 }
 

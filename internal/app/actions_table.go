@@ -2880,6 +2880,14 @@ func init() {
 		DefaultKeys:  []string{"CtrlEnter:NoTerminalApp", "CtrlJ:NoTerminalApp"},
 		DefaultAreas: []string{"Terminal"},
 		Handler: withPF(func(pf *panel.PanelsFrame) {
+			if fsp := pf.GetActivePanel(); fsp != nil {
+				if opener, ok := fsp.Vfs.(interface{ OpenInRegedit() error }); ok {
+					if err := opener.OpenInRegedit(); err != nil {
+						vtui.ShowMessage(" Error ", err.Error(), []string{"&Ok"})
+					}
+					return
+				}
+			}
 			pf.InsertSelectedFileName()
 		}),
 	})
